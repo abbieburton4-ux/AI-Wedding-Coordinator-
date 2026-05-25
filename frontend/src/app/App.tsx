@@ -3,9 +3,11 @@ import { Layout } from "./design-system/Layout";
 import { Landing } from "./views/Landing";
 import { Experience } from "./views/Experience";
 
+const basename = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
+
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <Layout>
         <Routes>
           <Route path="/" element={<Landing />} />

@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import fs from 'fs'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
@@ -16,13 +17,34 @@ function figmaAssetResolver() {
   }
 }
 
+// SPA fallback for GitHub Pages: copy dist/index.html → dist/404.html
+// so deep links like /VenueFlow/experience resolve to the SPA entry.
+function gitHubPagesSpaFallback() {
+  return {
+    name: 'github-pages-spa-fallback',
+    apply: 'build' as const,
+    closeBundle() {
+      const dist = path.resolve(__dirname, 'dist')
+      const src = path.join(dist, 'index.html')
+      const dest = path.join(dist, '404.html')
+      if (fs.existsSync(src)) fs.copyFileSync(src, dest)
+    },
+  }
+}
+
+// Project page on GitHub Pages: https://alanmaizon.github.io/VenueFlow/
+// Use VITE_BASE=/ for local dev or other hosts.
+const base = process.env.VITE_BASE ?? '/VenueFlow/'
+
 export default defineConfig({
+  base,
   plugins: [
     figmaAssetResolver(),
     // The React and Tailwind plugins are both required for Make, even if
     // Tailwind is not being actively used – do not remove them
     react(),
     tailwindcss(),
+    gitHubPagesSpaFallback(),
   ],
   resolve: {
     alias: {
