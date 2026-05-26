@@ -11,7 +11,7 @@ Schema (Postgres types)
 
 - id: UUID PRIMARY KEY
 - agent_id: TEXT  -- identifier for the agent (eg. `planner-v1`)
-- event_id: UUID NULLABLE REFERENCES event(id)
+- wedding_id: UUID NULLABLE REFERENCES wedding(id)
 - booking_id: UUID NULLABLE REFERENCES booking(id)
 - user_id: UUID NULLABLE REFERENCES "user"(id)  -- actor who triggered or received decision
 - timestamp: TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
@@ -26,7 +26,7 @@ Schema (Postgres types)
 - created_at: TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 
 Indexes & constraints
-- INDEX on (event_id), (booking_id), (user_id), (agent_id), (timestamp DESC)
+- INDEX on (wedding_id), (booking_id), (user_id), (agent_id), (timestamp DESC)
 - CONSTRAINT ensure `decision_type` is from a known enum set (validate in app)
 
 Implementation notes
@@ -46,12 +46,12 @@ CSV Export requirements
 
 CSV column order (header)
 
-id,agent_id,event_id,booking_id,user_id,timestamp,decision_type,input_payload,output_payload,confidence_score,external_api_calls,follow_up_actions,request_id,latency_ms,created_at
+id,agent_id,wedding_id,booking_id,user_id,timestamp,decision_type,input_payload,output_payload,confidence_score,external_api_calls,follow_up_actions,request_id,latency_ms,created_at
 
 Description of columns
 - id: UUID of the log row
 - agent_id: logical agent name/version
-- event_id: linked event (if any)
+- wedding_id: linked wedding (if any)
 - booking_id: linked booking (if any)
 - user_id: user involved (couple/planner/venue_admin)
 - timestamp: when the decision was logged (ISO 8601)
@@ -67,7 +67,7 @@ Description of columns
 
 CSV example (single header + one example row)
 
-"id","agent_id","event_id","booking_id","user_id","timestamp","decision_type","input_payload","output_payload","confidence_score","external_api_calls","follow_up_actions","request_id","latency_ms","created_at"
+"id","agent_id","wedding_id","booking_id","user_id","timestamp","decision_type","input_payload","output_payload","confidence_score","external_api_calls","follow_up_actions","request_id","latency_ms","created_at"
 
 "8b2f1a6e-4c9f-4b3a-9f0d-12a3b456cdef","planner-v1","d4a9a9e4-1234-4d5b-9c8e-abcdef012345","6f7b8c9d-2345-4e6f-9a0b-abcdef678901","a12b34c5-6789-4d0e-9abc-0123456789ab","2026-05-24T13:02:10+01:00","generate_quote","{""user_message"":""Hi, we want June 18th for 120 guests"",""parsed_slots"":{""date"":""2026-06-18"",""guests"":120}}","{""quote_id"":""q_20260524_0001"",""line_items"": [{""item"":""Venue hire"",""amount"":2500}],""total_amount"":2500,""currency"":""EUR"",""rationale"":""Used peak-season pricing + 120 guests""}","0.9400","[{""service"":""stripe"",""endpoint"":""/charges"",""status"":""skipped""}]","[]","req-9f8e7d6c","235","2026-05-24T13:02:11+01:00"
 

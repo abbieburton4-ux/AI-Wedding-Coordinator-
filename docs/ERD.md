@@ -20,6 +20,10 @@ erDiagram
     string planner_user_id FK
     string venue_id FK
     date wedding_date
+    date wedding_date_start
+    date wedding_date_end
+    string region
+    string ceremony_type
     int guest_count_estimate
     number budget_total
     string currency
@@ -239,7 +243,7 @@ erDiagram
 
 ### Core wedding object
 
-- **Wedding** — the central object. `couple_user_id` required; `planner_user_id` optional (set when a planner manages it). `venue_id` is a denormalized convenience FK to the chosen venue — it mirrors the Booking with `venue_id IS NOT NULL AND status='booked'`. `status` ∈ `{intake, planning, booked, completed, cancelled}` (intake = pre-payment, planning = post-coordinator-fee, booked = venue locked).
+- **Wedding** — the central object. `couple_user_id` required; `planner_user_id` optional (set when a planner manages it). `venue_id` is a denormalized convenience FK to the chosen venue — it mirrors the Booking with `venue_id IS NOT NULL AND status='booked'`. `status` ∈ `{intake, planning, booked, completed, cancelled}` (intake = pre-payment, planning = post-coordinator-fee, booked = venue locked). `wedding_date` is nullable; if not set, planning uses the date range defined by `wedding_date_start` and `wedding_date_end`. `region` specifies the target wedding location. `ceremony_type` determines the cultural budgeting and timeline template.
 - **BudgetLine** — one row per category per wedding (`venue, catering, florals, photography, videography, music, dj, officiant, stationery, hair_makeup, transport, cake, other`). `spent_amount` is recomputed from accepted Quotes + SupplierPayments.
 - **TimelineItem** — `kind` ∈ `{planning, day_of}`. Planning items have a future `due_at`; day-of items use the wedding date + time-of-day. One table to keep the agent's "draft + update timeline" decisions uniform.
 - **Guest** — RSVP + seating. `table_number` is set by the agent's seating-assign decision and can be overridden by the couple/planner.

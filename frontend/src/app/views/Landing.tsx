@@ -86,21 +86,21 @@ export function Landing() {
         </div>
         <div className="flex-1">
           <SectionHeading
-            subtitle="Silver Packages"
+            subtitle="AI Coordination Packages"
             title="We plan your day"
             italic="to perfection"
             className="mb-8"
           />
           <p className="text-muted-foreground font-light leading-relaxed max-w-md mb-10 text-[15px]">
-            Three thoughtfully tailored services — choose the level of support that fits
+            Three thoughtfully tailored options — choose the level of AI coordinator assistance that fits
             your vision and timeline.
           </p>
 
           <div className="flex flex-col gap-6 mb-12 max-w-md">
             {[
-              { name: "Full Planning", desc: "Our most comprehensive service", price: "$8k" },
-              { name: "Month & Design", desc: "For the design-focused couple", price: "$5k" },
-              { name: "Day-of Coordination", desc: "Relax and enjoy your day", price: "$3k" },
+              { name: "Elite AI Coordinator", desc: "Complete end-to-end management & priority support", price: "€999" },
+              { name: "Premium AI Coordinator", desc: "Enhanced review, budget checks & negotiation", price: "€599" },
+              { name: "Essential AI Coordinator", desc: "Basic AI sourcing, budget & timeline planning", price: "€299" },
             ].map((pkg) => (
               <div
                 key={pkg.name}
