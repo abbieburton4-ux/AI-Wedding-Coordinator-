@@ -369,7 +369,122 @@ def test_venue_matcher_leinster_selection_includes_meath_venues(mock_client):
 
 
 # ==========================================
-# 7. TEST PENDING-LOG ORPHAN INVARIANT
+# 7. TEST QUOTE_EXTRACT PARENT CHAIN
+# ==========================================
+
+def _set_matcher_response(mock_client, vendor_id="venue_castle_leslie"):
+    """Mock helper: set Gemini's next response to a minimal valid matcher result."""
+    mock_client.models.generate_content.return_value = MockResponse(json.dumps({
+        "shortlist": [{
+            "vendor_id": vendor_id,
+            "rank": 1,
+            "matching_rationale": "Test rationale",
+            "draft_inquiry_email": "Test email",
+        }],
+        "rationale_summary": "Test match",
+        "confidence_score": 0.9,
+    }))
+
+
+def _set_extractor_response(mock_client):
+    """Mock helper: set Gemini's next response to a minimal valid quote extraction."""
+    mock_client.models.generate_content.return_value = MockResponse(json.dumps({
+        "is_available": True,
+        "line_items": [{"item": "Hire", "description": "Venue hire", "amount": 5000.0}],
+        "total_amount": 5000.0,
+        "currency": "EUR",
+        "rationale_text": "Quote extracted from test email",
+        "confidence_score": 0.95,
+    }))
+
+
+def _booking_id_for(wedding_id):
+    bookings = db.get_bookings(wedding_id)
+    assert bookings, f"No bookings found for {wedding_id}"
+    return bookings[0]["id"]
+
+
+def test_quote_extract_chains_to_inquiry_send(mock_client):
+    """Full 3-level chain: matcher → inquiry_send → quote_extract. The
+    quote_extract log's parent_decision_id must point at the inquiry_send,
+    not the matcher, because inquiry_send is the direct trigger for the
+    supplier reply we just parsed."""
+    # 1. Matcher creates the booking, with sourced_by_agent_id = matcher log id.
+    _set_matcher_response(mock_client)
+    matcher_res = agents.run_venue_matcher("wedding_intake_test", user_id="planner_1")
+    matcher_log_id = matcher_res["log_id"]
+    booking_id = _booking_id_for("wedding_intake_test")
+
+    # 2. Simulate the UI's inquiry-send action.
+    inquiry_send_id = str(uuid.uuid4())
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO agent_decision_logs
+            (id, agent_id, wedding_id, booking_id, parent_decision_id,
+             trigger, decision_type, status, rationale_summary)
+        VALUES (?, 'system', 'wedding_intake_test', ?, ?,
+                'couple_action', 'inquiry_send', 'success', 'sent inquiry')
+    """, (inquiry_send_id, booking_id, matcher_log_id))
+    conn.commit()
+    conn.close()
+
+    # 3. Quote extractor parses the supplier reply.
+    _set_extractor_response(mock_client)
+    extract_res = agents.run_quote_extractor(booking_id, "Test email", user_id="planner_1")
+
+    # 4. Verify parent chain: quote_draft → inquiry_send → venue_match
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT parent_decision_id FROM agent_decision_logs WHERE id = ?",
+        (extract_res["log_id"],),
+    )
+    quote_parent = cursor.fetchone()[0]
+    cursor.execute(
+        "SELECT parent_decision_id FROM agent_decision_logs WHERE id = ?",
+        (inquiry_send_id,),
+    )
+    inquiry_parent = cursor.fetchone()[0]
+    conn.close()
+
+    assert quote_parent == inquiry_send_id, (
+        f"quote_draft should chain to inquiry_send. Got parent={quote_parent}, "
+        f"expected={inquiry_send_id}"
+    )
+    assert inquiry_parent == matcher_log_id, "inquiry_send should chain to matcher"
+
+
+def test_quote_extract_falls_back_to_matcher_when_no_inquiry_send(mock_client):
+    """If quote_extract runs without an intervening inquiry_send log (e.g.,
+    the supplier replied before the UI marked the inquiry as sent), parent
+    falls back to the matcher decision via booking.sourced_by_agent_id."""
+    _set_matcher_response(mock_client)
+    matcher_res = agents.run_venue_matcher("wedding_intake_test", user_id="planner_1")
+    matcher_log_id = matcher_res["log_id"]
+    booking_id = _booking_id_for("wedding_intake_test")
+
+    # No inquiry_send. Straight to quote extraction.
+    _set_extractor_response(mock_client)
+    extract_res = agents.run_quote_extractor(booking_id, "Test email", user_id="planner_1")
+
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT parent_decision_id FROM agent_decision_logs WHERE id = ?",
+        (extract_res["log_id"],),
+    )
+    parent = cursor.fetchone()[0]
+    conn.close()
+
+    assert parent == matcher_log_id, (
+        f"With no inquiry_send, parent should fall back to matcher log "
+        f"({matcher_log_id}). Got {parent}."
+    )
+
+
+# ==========================================
+# 8. TEST PENDING-LOG ORPHAN INVARIANT
 # ==========================================
 
 def test_intake_planner_no_orphan_pending_on_missing_wedding(mock_client):

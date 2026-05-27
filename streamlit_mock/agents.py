@@ -97,6 +97,42 @@ def _assert_wedding_exists(conn, cursor, wedding_id):
         raise ValueError(f"Wedding not found: {wedding_id!r}")
 
 
+def _resolve_quote_extract_parent(cursor, booking_id):
+    """Find the parent agent_decision_log row for a quote_extract decision so
+    a judge can trace the full chain: matcher → inquiry_send → quote_extract.
+
+    Preference order:
+      1. Most recent successful `inquiry_send` log for this booking — that's
+         the action that produced the supplier reply we're now parsing.
+      2. The matcher decision that originally sourced the booking, via
+         bookings.sourced_by_agent_id.
+      3. None — chain breaks here, but only when neither anchor exists
+         (e.g. a booking inserted by seed data or a manual test).
+    """
+    cursor.execute("""
+        SELECT id FROM agent_decision_logs
+        WHERE booking_id = ? AND decision_type = 'inquiry_send' AND status = 'success'
+        ORDER BY timestamp DESC
+        LIMIT 1
+    """, (booking_id,))
+    row = cursor.fetchone()
+    if row:
+        return row[0]
+
+    cursor.execute("SELECT sourced_by_agent_id FROM bookings WHERE id = ?", (booking_id,))
+    row = cursor.fetchone()
+    if row and row[0]:
+        # Confirm the sourced_by_agent_id actually points at a real log row.
+        # Old seed data stored an agent name string here ('supplier_matcher')
+        # rather than a uuid — those won't resolve and we'd rather return
+        # None than write a dangling foreign key.
+        cursor.execute("SELECT 1 FROM agent_decision_logs WHERE id = ?", (row[0],))
+        if cursor.fetchone():
+            return row[0]
+
+    return None
+
+
 # AGENT IMPLEMENTATIONS
 
 def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
@@ -779,11 +815,16 @@ def run_quote_extractor(booking_id, email_text, user_id=None, api_key=None, mode
             f"cannot derive category for quote extraction."
         )
 
-    # 1. Initialize Log
+    # 1. Initialize Log. parent_decision_id links this extraction to the
+    # action that produced the email we're parsing — typically the
+    # inquiry_send for this booking, falling back to the matcher decision
+    # that sourced the booking. Closes the chain
+    # matcher → inquiry_send → quote_extract for judge-facing traceability.
+    parent_decision_id = _resolve_quote_extract_parent(cursor, booking_id)
     cursor.execute("""
-        INSERT INTO agent_decision_logs (id, agent_id, model_id, prompt_version, wedding_id, user_id, booking_id, trigger, decision_type, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'supplier_response', 'quote_draft', 'pending')
-    """, (decision_id, agent_id, model, prompt_version, wedding_id, user_id, booking_id))
+        INSERT INTO agent_decision_logs (id, agent_id, model_id, prompt_version, wedding_id, user_id, booking_id, parent_decision_id, trigger, decision_type, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'supplier_response', 'quote_draft', 'pending')
+    """, (decision_id, agent_id, model, prompt_version, wedding_id, user_id, booking_id, parent_decision_id))
     conn.commit()
 
     try:
