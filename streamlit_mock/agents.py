@@ -11,26 +11,14 @@ import db
 
 # Pydantic schemas for Structured Outputs
 
-# Canonical budget category enum. Keep in sync with the BudgetLineDraft.category
-# Field description and the comment on db.budget_lines.category. supplier_matcher
-# queries suppliers WHERE category = ?, so any drift here breaks downstream
-# lookups silently.
-ALLOWED_BUDGET_CATEGORIES = {
-    "venue", "catering", "florals", "photography", "videography", "music",
-    "dj", "officiant", "stationery", "hair_makeup", "transport", "cake", "other"
-}
-
-# Subset of budget categories that have suppliers (excludes 'venue' — handled by
-# venue_matcher — and 'other' — catch-all bucket with no sourcing flow).
-# Sorted tuple for stable iteration in UI dropdowns.
-SUPPLIER_CATEGORIES = tuple(sorted(ALLOWED_BUDGET_CATEGORIES - {"venue", "other"}))
-
-
-def _normalize_category(raw):
-    """Lowercase + strip a category label so 'Venue', ' venue ', 'VENUE' all
-    match the lowercase whitelist. Returns '' for None/missing, which never
-    matches ALLOWED_BUDGET_CATEGORIES and gets blocked downstream."""
-    return (raw or "").strip().lower()
+# Re-export shared category constants so existing callers (app.py imports
+# agents.SUPPLIER_CATEGORIES) keep working. New code should import from
+# constants.py directly.
+from constants import (
+    ALLOWED_BUDGET_CATEGORIES,
+    SUPPLIER_CATEGORIES,
+    normalize_category as _normalize_category,
+)
 
 class BudgetLineDraft(BaseModel):
     category: str = Field(description=f"Must be one of: {', '.join(sorted(ALLOWED_BUDGET_CATEGORIES))}")
