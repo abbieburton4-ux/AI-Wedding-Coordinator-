@@ -118,6 +118,19 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - **Merge via squash** for small features; merge commit for multi-commit refactors.
 - **Do not push directly to `main`** during pilot week (the week of any milestone date — see `runway.md`). Open a PR and self-review.
 
+### Large refactors split by subject
+
+Refactors that touch >100 lines or >2 unrelated concerns should land as multiple commits, one per subject. The motivation is `git bisect`: if a regression turns up later, a single 273-line commit forces you to unpick it line-by-line; four 70-line commits each scoped to one agent (or one page, one table, one prompt) let `bisect` isolate the bad change in O(log n).
+
+Concrete rule of thumb:
+
+- One commit per agent function when refactoring the agent layer.
+- One commit per UI tab when refactoring the Streamlit app.
+- One commit per schema entity when changing the DB.
+- Doc updates that accompany code changes go in the same commit (so the doc stays in sync at every history point).
+
+If a refactor genuinely is atomic — moving a single function to a new module, renaming one constant everywhere — one commit is fine. The signal is "could a reviewer understand this in 5 minutes." If not, split.
+
 ---
 
 ## Docs Discipline
