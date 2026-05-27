@@ -33,7 +33,7 @@ def _normalize_category(raw):
     return (raw or "").strip().lower()
 
 class BudgetLineDraft(BaseModel):
-    category: str = Field(description="Must be one of: venue, catering, florals, photography, videography, music, dj, officiant, stationery, hair_makeup, transport, cake, other")
+    category: str = Field(description=f"Must be one of: {', '.join(sorted(ALLOWED_BUDGET_CATEGORIES))}")
     allocated_amount: float = Field(description="Amount allocated in EUR")
     rationale: str = Field(description="Brief explanation of why this amount was allocated")
 

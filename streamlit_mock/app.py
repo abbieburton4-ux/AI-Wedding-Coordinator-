@@ -800,13 +800,13 @@ with tab5:
                 st.markdown("**Input Payload:**")
                 try:
                     st.json(json.loads(log_detail["input_payload"]))
-                except:
+                except (json.JSONDecodeError, TypeError):
                     st.text(log_detail["input_payload"])
             with l_col2:
                 st.markdown("**Output Payload:**")
                 try:
                     st.json(json.loads(log_detail["output_payload"]))
-                except:
+                except (json.JSONDecodeError, TypeError):
                     st.text(log_detail["output_payload"])
     else:
         st.info("No agent actions recorded yet. Run some onboarding or sourcing steps first.")
