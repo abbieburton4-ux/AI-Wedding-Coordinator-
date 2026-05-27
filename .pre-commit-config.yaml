@@ -1,0 +1,18 @@
+# Pre-commit hooks for VenueFlow.
+#
+# Install:
+#   brew install gitleaks pre-commit
+#   pre-commit install
+#
+# Run manually:
+#   pre-commit run --all-files
+#
+# See docs/secrets.md for the full secret-handling runbook.
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        name: detect hardcoded secrets
+        description: Scan staged changes for API keys, tokens, credentials.

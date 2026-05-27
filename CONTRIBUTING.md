@@ -80,7 +80,7 @@ Agents live in [streamlit_mock/agents.py](streamlit_mock/agents.py). The shape:
 - **TypeScript:** match the surrounding file. No linter wired up; `tsc --noEmit` works from `frontend/`.
 - **No comments** unless the *why* is non-obvious. Don't restate what the code does. Don't reference the current task or PR.
 - **No new dependencies** without a 1-line justification in the commit message. The pilot app's transitive deps are already heavy.
-- **Never commit secrets.** `GEMINI_API_KEY`, Stripe keys, planner email lists — all out of repo. Use environment variables or `.env.local` (already `.gitignore`d).
+- **Never commit secrets.** `GEMINI_API_KEY`, Stripe keys, planner email lists — all out of repo. Use environment variables or `.env.local` (already `.gitignore`d). See [docs/secrets.md](docs/secrets.md) for the per-service runbook and [streamlit_mock/.env.example](streamlit_mock/.env.example) for the template to copy. A pre-commit `gitleaks` hook ships with the repo; install once with `brew install gitleaks pre-commit && pre-commit install` and it blocks accidental secrets at commit time. Do **not** disable it with `--no-verify`.
 
 ---
 
