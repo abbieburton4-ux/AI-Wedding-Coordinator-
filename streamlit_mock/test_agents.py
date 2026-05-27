@@ -374,11 +374,10 @@ def test_venue_matcher_leinster_selection_includes_meath_venues(mock_client):
 
 def test_intake_planner_no_orphan_pending_on_missing_wedding(mock_client):
     """A missing wedding_id must not leave orphan 'pending' rows in the
-    audit trail — the invariant commit 874e42ca promised. The agent may
-    either never create a log row (FK constraint on agent_decision_logs.
-    wedding_id blocks the INSERT) or create one and update it to 'error';
-    both satisfy the audit invariant. Only orphan 'pending' is disallowed."""
-    with pytest.raises(Exception):
+    audit trail — the invariant commit 874e42ca promised. After B1, the
+    agent raises ValueError before opening the pending log, so no row is
+    created at all. Either mechanism satisfies the audit invariant."""
+    with pytest.raises(ValueError):
         agents.run_intake_planner("does-not-exist", user_id="couple_1")
 
     conn = db.get_connection()
@@ -391,3 +390,27 @@ def test_intake_planner_no_orphan_pending_on_missing_wedding(mock_client):
         f"Audit trail polluted: {len(pending_rows)} 'pending' rows remain after a failed "
         f"run. Commit 874e42ca's invariant says no agent decision should sit in 'pending'."
     )
+
+
+def test_agents_raise_value_error_on_missing_wedding(mock_client):
+    """B1: intake_planner, venue_matcher, and supplier_matcher must all
+    raise ValueError immediately when wedding_id doesn't exist — before any
+    pending log row is opened. Distinguishes 'bad caller' from 'Gemini
+    failure' so the caller can decide whether to retry."""
+    bogus_id = "wedding-does-not-exist"
+
+    with pytest.raises(ValueError, match="Wedding not found"):
+        agents.run_intake_planner(bogus_id, user_id="couple_1")
+    with pytest.raises(ValueError, match="Wedding not found"):
+        agents.run_venue_matcher(bogus_id, user_id="planner_1")
+    with pytest.raises(ValueError, match="Wedding not found"):
+        agents.run_supplier_matcher(bogus_id, "photography", user_id="planner_1")
+
+    # Zero log rows for the bogus id — the FK didn't even get a chance to
+    # reject anything because we never tried to INSERT.
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM agent_decision_logs WHERE wedding_id = ?", (bogus_id,))
+    count = cursor.fetchone()[0]
+    conn.close()
+    assert count == 0, f"Expected 0 log rows for missing wedding, got {count}"

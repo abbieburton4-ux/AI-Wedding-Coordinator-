@@ -85,6 +85,18 @@ def get_prompt_version(system_instruction: str) -> str:
     return f"v1.0-{sha}"
 
 
+def _assert_wedding_exists(conn, cursor, wedding_id):
+    """Raise ValueError immediately if the wedding doesn't exist, before any
+    audit log row is opened. Mirrors the pattern quote_extractor uses for
+    bookings — no FK surprise on the pending-log INSERT, no orphan log rows,
+    a clear ValueError that the caller can handle distinctly from a Gemini
+    failure."""
+    cursor.execute("SELECT 1 FROM weddings WHERE id = ?", (wedding_id,))
+    if cursor.fetchone() is None:
+        conn.close()
+        raise ValueError(f"Wedding not found: {wedding_id!r}")
+
+
 # AGENT IMPLEMENTATIONS
 
 def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
@@ -125,6 +137,9 @@ def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
     # 1. Initialize Log
     conn = db.get_connection()
     cursor = conn.cursor()
+    # B1: validate wedding exists before opening the pending log row, so a
+    # bogus wedding_id raises ValueError cleanly instead of an FK violation.
+    _assert_wedding_exists(conn, cursor, wedding_id)
     cursor.execute("""
         INSERT INTO agent_decision_logs (id, agent_id, model_id, prompt_version, wedding_id, user_id, trigger, decision_type, status)
         VALUES (?, ?, ?, ?, ?, ?, 'couple_action', 'timeline_generate', 'pending')
@@ -345,6 +360,7 @@ def run_venue_matcher(wedding_id, user_id=None, api_key=None, model_name=None):
     
     conn = db.get_connection()
     cursor = conn.cursor()
+    _assert_wedding_exists(conn, cursor, wedding_id)
     cursor.execute("""
         INSERT INTO agent_decision_logs (id, agent_id, model_id, prompt_version, wedding_id, user_id, trigger, decision_type, status)
         VALUES (?, ?, ?, ?, ?, ?, 'couple_action', 'venue_match', 'pending')
@@ -544,6 +560,7 @@ def run_supplier_matcher(wedding_id, category, user_id=None, api_key=None, model
     
     conn = db.get_connection()
     cursor = conn.cursor()
+    _assert_wedding_exists(conn, cursor, wedding_id)
     cursor.execute("""
         INSERT INTO agent_decision_logs (id, agent_id, model_id, prompt_version, wedding_id, user_id, trigger, decision_type, status)
         VALUES (?, ?, ?, ?, ?, ?, 'couple_action', 'supplier_match', 'pending')
