@@ -25,6 +25,13 @@ ALLOWED_BUDGET_CATEGORIES = {
 # Sorted tuple for stable iteration in UI dropdowns.
 SUPPLIER_CATEGORIES = tuple(sorted(ALLOWED_BUDGET_CATEGORIES - {"venue", "other"}))
 
+
+def _normalize_category(raw):
+    """Lowercase + strip a category label so 'Venue', ' venue ', 'VENUE' all
+    match the lowercase whitelist. Returns '' for None/missing, which never
+    matches ALLOWED_BUDGET_CATEGORIES and gets blocked downstream."""
+    return (raw or "").strip().lower()
+
 class BudgetLineDraft(BaseModel):
     category: str = Field(description="Must be one of: venue, catering, florals, photography, videography, music, dj, officiant, stationery, hair_makeup, transport, cake, other")
     allocated_amount: float = Field(description="Amount allocated in EUR")
@@ -212,9 +219,11 @@ def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
         # 2b. Validate every budget category against the whitelist. If the LLM
         # invents a non-canonical category, block the whole run so downstream
         # supplier_matcher lookups (WHERE category = ?) don't silently miss.
+        # Normalize first so 'Venue' / 'VENUE' / ' venue ' all match.
         invalid_categories = sorted({
-            line.get("category") for line in result_dict.get("budget_lines", [])
-            if line.get("category") not in ALLOWED_BUDGET_CATEGORIES
+            _normalize_category(line.get("category")) or repr(line.get("category"))
+            for line in result_dict.get("budget_lines", [])
+            if _normalize_category(line.get("category")) not in ALLOWED_BUDGET_CATEGORIES
         })
         if invalid_categories:
             guardrail_message = (
@@ -245,12 +254,15 @@ def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
         # 3. Success Path — Mutate Domain Entities in a Single DB Transaction
         cursor.execute("UPDATE weddings SET status = 'planning' WHERE id = ?", (wedding_id,))
 
-        # Seed Budget Lines
+        # Seed Budget Lines. Normalize the category so downstream
+        # `WHERE category = ?` queries (supplier_matcher, quote_extractor)
+        # match regardless of LLM casing variance.
         budget_lines_to_insert = []
         for line in result_dict.get("budget_lines", []):
             line_id = f"bl_{uuid.uuid4().hex[:10]}"
             budget_lines_to_insert.append((
-                line_id, wedding_id, line["category"], line["allocated_amount"], 0.0
+                line_id, wedding_id, _normalize_category(line["category"]),
+                line["allocated_amount"], 0.0
             ))
         cursor.executemany("""
             INSERT INTO budget_lines (id, wedding_id, category, allocated_amount, spent_amount)
