@@ -379,13 +379,42 @@ with tab2:
                     if not api_key:
                         st.error("Configure Gemini API Key first.")
                     else:
-                        with st.spinner("Venue Matcher analyzing candidates and drafting emails..."):
-                            res = agents.run_venue_matcher(active_wedding_id, user_id=st.session_state.current_user_id, api_key=api_key)
+                        # Live-stream the agent's reasoning instead of hiding 10–20s
+                        # of work behind a spinner. Each on_step callback writes a
+                        # line into the open st.status block; st.status flushes
+                        # the UI between writes so the user watches the AI work.
+                        captured_steps = []
+                        with st.status(
+                            "AI coordinator working on your shortlist...",
+                            expanded=True,
+                        ) as status:
+                            def on_step(msg):
+                                captured_steps.append(msg)
+                                st.write(msg)
+
+                            res = agents.run_venue_matcher(
+                                active_wedding_id,
+                                user_id=st.session_state.current_user_id,
+                                api_key=api_key,
+                                on_step=on_step,
+                            )
+
                             if res["status"] == "blocked":
-                                st.warning(f"⚠️ Venue Matcher Blocked: {res['warning']}")
+                                status.update(
+                                    label=f"Blocked: {res['warning'][:70]}",
+                                    state="error",
+                                )
                             else:
-                                st.success(f"Matched venues successfully!")
-                                st.rerun()
+                                status.update(
+                                    label=f"Matched {len(res['shortlist'])} venues for you",
+                                    state="complete",
+                                )
+
+                        # Persist the reasoning trail so it's visible after the
+                        # rerun that refreshes the shortlist below.
+                        st.session_state[f"matcher_steps_{active_wedding_id}"] = captured_steps
+                        if res["status"] == "success":
+                            st.rerun()
                             
                 st.markdown("<br/>", unsafe_allow_html=True)
                 
@@ -406,6 +435,16 @@ with tab2:
                 
             with s_col2:
                 st.markdown("<h4>Shortlisted & Sourced Recommendations</h4>", unsafe_allow_html=True)
+
+                # Reasoning trail from the most recent matcher run — preserved
+                # across the st.rerun() that follows a successful match, so the
+                # couple can re-read what the AI did to produce their shortlist.
+                steps_key = f"matcher_steps_{active_wedding_id}"
+                if steps_key in st.session_state and st.session_state[steps_key]:
+                    with st.expander("How the AI built this shortlist", expanded=False):
+                        for step in st.session_state[steps_key]:
+                            st.markdown(f"- {step}")
+
                 bookings = db.get_bookings(active_wedding_id)
                 
                 if bookings:
