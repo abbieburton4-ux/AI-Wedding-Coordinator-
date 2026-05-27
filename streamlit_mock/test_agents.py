@@ -589,7 +589,86 @@ def test_resolve_quote_accept_parent_finds_latest_quote_draft():
 
 
 # ==========================================
-# 9. TEST PENDING-LOG ORPHAN INVARIANT
+# 9. TEST LIVE-REASONING on_step CALLBACK
+# ==========================================
+
+def test_venue_matcher_emits_progress_steps_on_success(mock_client, capsys):
+    """The on_step callback must fire at every major checkpoint with messages
+    that contain real values from the wedding profile + decision-log metadata.
+    Streamlit consumes the same callback to render the live status block."""
+    mock_response_data = {
+        "shortlist": [
+            {
+                "vendor_id": "venue_castle_leslie",
+                "rank": 1,
+                "matching_rationale": "Connacht fallback - exclusive country house",
+                "draft_inquiry_email": "Dear Castle Leslie...",
+            }
+        ],
+        "rationale_summary": "Picked Castle Leslie",
+        "confidence_score": 0.87,
+    }
+    mock_client.models.generate_content.return_value = MockResponse(
+        json.dumps(mock_response_data), prompt_tokens=1200, output_tokens=2847,
+    )
+
+    captured = []
+    res = agents.run_venue_matcher(
+        "wedding_intake_test",
+        user_id="planner_1",
+        on_step=lambda msg: captured.append(msg),
+    )
+    assert res["status"] == "success"
+
+    # Print the actual narration the UI would render — visible in -s mode.
+    print("\n--- Live-reasoning trail (what the user sees) ---")
+    for i, line in enumerate(captured, 1):
+        print(f"  {i}. {line}")
+    print("--- end ---\n")
+
+    # Contract: at least the 5 deterministic checkpoints + 1 final log-write line.
+    assert len(captured) >= 5, f"Expected ≥5 steps, got {len(captured)}: {captured}"
+
+    joined = " | ".join(captured).lower()
+    assert "wedding profile" in joined, "missing profile-load step"
+    assert "filtered" in joined and "guests" in joined, "missing capacity-filter step"
+    assert "sligo" in joined, "wedding_intake_test region (Sligo) must surface in narration"
+    assert "asking gemini" in joined, "missing pre-LLM step"
+    assert "tokens" in joined and "confidence" in joined, "missing post-LLM stats step"
+    assert "logged decision" in joined, "missing audit-log confirmation step"
+
+
+def test_venue_matcher_emits_blocked_step_on_hallucination(mock_client):
+    """When the LLM hallucinates a venue_id, the on_step callback must surface
+    a 'Blocked' message so the user sees WHY the run stopped — not just that
+    it did. This is the security-theatre moment that builds trust."""
+    mock_response_data = {
+        "shortlist": [
+            {"vendor_id": "venue_castle_leslie", "rank": 1,
+             "matching_rationale": "ok", "draft_inquiry_email": "..."},
+            {"vendor_id": "venue_imaginary_palace", "rank": 2,
+             "matching_rationale": "fake", "draft_inquiry_email": "..."},
+        ],
+        "rationale_summary": "Mixed real and imaginary",
+        "confidence_score": 0.5,
+    }
+    mock_client.models.generate_content.return_value = MockResponse(json.dumps(mock_response_data))
+
+    captured = []
+    res = agents.run_venue_matcher(
+        "wedding_intake_test",
+        user_id="planner_1",
+        on_step=lambda msg: captured.append(msg),
+    )
+    assert res["status"] == "blocked"
+
+    blocked_line = next((line for line in captured if "blocked" in line.lower()), None)
+    assert blocked_line is not None, f"Expected a 'Blocked' step. Got: {captured}"
+    assert "venue_imaginary_palace" in blocked_line, "The hallucinated id must be named in the narration"
+
+
+# ==========================================
+# 10. TEST PENDING-LOG ORPHAN INVARIANT
 # ==========================================
 
 def test_intake_planner_no_orphan_pending_on_missing_wedding(mock_client):
