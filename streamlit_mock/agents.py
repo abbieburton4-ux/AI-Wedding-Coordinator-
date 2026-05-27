@@ -447,14 +447,22 @@ def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
         raise e
 
 
-def run_venue_matcher(wedding_id, user_id=None, api_key=None, model_name=None):
+def run_venue_matcher(wedding_id, user_id=None, api_key=None, model_name=None, on_step=None):
     """
     Matches available venues against the wedding profile and creates shortlisted bookings.
+
+    on_step: optional callable(message: str) invoked between major steps for
+             live UI progress display. No effect on result; existing callers
+             that omit it get current behavior.
     """
     agent_id = "venue_matcher"
     model = model_name or model_for(agent_id)
     decision_id = str(uuid.uuid4())
     start_time = time.time()
+
+    def _step(msg):
+        if on_step:
+            on_step(msg)
     
     system_instruction = (
         "You are an expert Irish wedding coordinator agent called venue_matcher. Your job is to match the couple's "
@@ -491,17 +499,19 @@ def run_venue_matcher(wedding_id, user_id=None, api_key=None, model_name=None):
         venue_budget_row = cursor.fetchone()
         venue_budget = dict(venue_budget_row)["allocated_amount"] if venue_budget_row else wedding["budget_total"] * 0.4
 
+        guest_count = wedding["guest_count_estimate"]
+        preferred_region = wedding["region"]
+        _step(f"Reading wedding profile · {guest_count} guests · {preferred_region} · €{venue_budget:,.0f} venue budget")
+
         venues_list = db.get_all_venues()
 
         # Pre-filter venues by capacity constraints
-        guest_count = wedding["guest_count_estimate"]
-        preferred_region = wedding["region"]
-
         venues_by_capacity = [
             v for v in venues_list
             if (v["capacity_min"] is None or v["capacity_min"] <= guest_count) and
                (v["capacity_max"] is None or v["capacity_max"] >= guest_count)
         ]
+        _step(f"Filtered {len(venues_list)} venues to {len(venues_by_capacity)} that fit {guest_count} guests")
 
         # Prioritize the preferred region. region_matches honors the
         # province→county hierarchy so a "Leinster" selection picks up
@@ -510,10 +520,16 @@ def run_venue_matcher(wedding_id, user_id=None, api_key=None, model_name=None):
 
         if len(venues_in_region) >= 3:
             filtered_venues = venues_in_region
+            _step(f"Prioritising {preferred_region} · {len(venues_in_region)} venues match your region")
         else:
             # Include capacity-matching venues from other regions as backup candidates
             other_venues = [v for v in venues_by_capacity if not region_matches(v["region"], preferred_region)]
+            fallback_count = min(3 - len(venues_in_region), len(other_venues))
             filtered_venues = venues_in_region + other_venues[:(3 - len(venues_in_region))]
+            _step(
+                f"Prioritising {preferred_region} · {len(venues_in_region)} venues match your region · "
+                f"pulling {fallback_count} fallback from adjacent counties"
+            )
 
         # Build Context. venues_matching_region_count surfaces the pre-filter
         # signal: when it's 0, the candidate list is a fallback from adjacent
@@ -543,7 +559,8 @@ def run_venue_matcher(wedding_id, user_id=None, api_key=None, model_name=None):
 
         client = get_client(api_key)
         prompt = f"Match venues for the following couple profile and options:\n{json.dumps(input_payload, indent=2)}"
-        
+
+        _step(f"Asking Gemini ({model}) to rank candidates and draft your inquiry emails...")
         response = client.models.generate_content(
             model=model,
             contents=prompt,
@@ -554,25 +571,32 @@ def run_venue_matcher(wedding_id, user_id=None, api_key=None, model_name=None):
                 temperature=0.2
             )
         )
-        
+
         result_dict = json.loads(response.text)
-        
+
         latency = int((time.time() - start_time) * 1000)
         tokens_in = response.usage_metadata.prompt_token_count if response.usage_metadata else 0
         tokens_out = response.usage_metadata.candidates_token_count if response.usage_metadata else 0
-        
+
+        shortlist_count = len(result_dict.get("shortlist", []))
+        confidence = result_dict.get("confidence_score") or 0
+        _step(
+            f"Received {shortlist_count} ranked matches in {latency/1000:.1f}s · "
+            f"{tokens_out:,} tokens · confidence {confidence:.0%}"
+        )
+
         external_api_calls = [{
             "provider": "google",
             "model": model,
             "latency_ms": latency,
             "tokens": {"input": tokens_in, "output": tokens_out}
         }]
-        
+
         # Pre-validate vendor_id ∈ filtered_venues (to prevent DB crash on hallucinations)
         valid_venue_ids = {v["id"] for v in filtered_venues}
         bookings_to_insert = []
         hallucinated_ids = []
-        
+
         for match in result_dict.get("shortlist", []):
             v_id = match["vendor_id"]
             if v_id in valid_venue_ids:
@@ -585,8 +609,9 @@ def run_venue_matcher(wedding_id, user_id=None, api_key=None, model_name=None):
                     ))
             else:
                 hallucinated_ids.append(v_id)
-                
+
         if hallucinated_ids:
+            _step(f"Blocked: vendor IDs not in candidate list — protecting you from AI fabrication ({', '.join(hallucinated_ids)})")
             # Guardrail Blocked Path
             cursor.execute("""
                 UPDATE agent_decision_logs 
@@ -614,11 +639,11 @@ def run_venue_matcher(wedding_id, user_id=None, api_key=None, model_name=None):
             INSERT INTO bookings (id, wedding_id, venue_id, status, sourced_by_agent_id)
             VALUES (?, ?, ?, ?, ?)
         """, bookings_to_insert)
-        
+
         # Write success log
         cursor.execute("""
-            UPDATE agent_decision_logs 
-            SET status = 'success', rationale_summary = ?, 
+            UPDATE agent_decision_logs
+            SET status = 'success', rationale_summary = ?,
                 input_payload = ?, output_payload = ?, confidence_score = ?,
                 latency_ms = ?, tokens_input = ?, tokens_output = ?, external_api_calls = ?
             WHERE id = ?
@@ -631,7 +656,9 @@ def run_venue_matcher(wedding_id, user_id=None, api_key=None, model_name=None):
             json.dumps(external_api_calls),
             decision_id
         ))
-        
+
+        _step(f"Logged decision `{decision_id[:8]}` with full audit trail · {len(bookings_to_insert)} bookings created")
+
         conn.commit()
         conn.close()
         return {"status": "success", "shortlist": result_dict.get("shortlist"), "summary": result_dict.get("rationale_summary"), "log_id": decision_id}
