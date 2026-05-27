@@ -11,6 +11,15 @@ import db
 
 # Pydantic schemas for Structured Outputs
 
+# Canonical budget category enum. Keep in sync with the BudgetLineDraft.category
+# Field description and the comment on db.budget_lines.category. supplier_matcher
+# queries suppliers WHERE category = ?, so any drift here breaks downstream
+# lookups silently.
+ALLOWED_BUDGET_CATEGORIES = {
+    "venue", "catering", "florals", "photography", "videography", "music",
+    "dj", "officiant", "stationery", "hair_makeup", "transport", "cake", "other"
+}
+
 class BudgetLineDraft(BaseModel):
     category: str = Field(description="Must be one of: venue, catering, florals, photography, videography, music, dj, officiant, stationery, hair_makeup, transport, cake, other")
     allocated_amount: float = Field(description="Amount allocated in EUR")
@@ -195,9 +204,42 @@ def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
             conn.close()
             return {"status": "blocked", "warning": result_dict.get("guardrail_warning"), "log_id": decision_id}
         
+        # 2b. Validate every budget category against the whitelist. If the LLM
+        # invents a non-canonical category, block the whole run so downstream
+        # supplier_matcher lookups (WHERE category = ?) don't silently miss.
+        invalid_categories = sorted({
+            line.get("category") for line in result_dict.get("budget_lines", [])
+            if line.get("category") not in ALLOWED_BUDGET_CATEGORIES
+        })
+        if invalid_categories:
+            guardrail_message = (
+                f"Invalid budget categories produced by intake_planner: {invalid_categories}. "
+                f"Allowed categories: {sorted(ALLOWED_BUDGET_CATEGORIES)}."
+            )
+            cursor.execute("""
+                UPDATE agent_decision_logs
+                SET status = 'blocked_by_guardrail', error_kind = 'category_whitelist',
+                    error_message = ?, rationale_summary = ?,
+                    input_payload = ?, output_payload = ?, confidence_score = ?,
+                    latency_ms = ?, tokens_input = ?, tokens_output = ?, external_api_calls = ?
+                WHERE id = ?
+            """, (
+                guardrail_message,
+                "Intake plan rejected: budget contains non-canonical category labels.",
+                json.dumps(input_payload),
+                response.text,
+                result_dict.get("confidence_score"),
+                latency, tokens_in, tokens_out,
+                json.dumps(external_api_calls),
+                decision_id
+            ))
+            conn.commit()
+            conn.close()
+            return {"status": "blocked", "warning": guardrail_message, "log_id": decision_id}
+
         # 3. Success Path — Mutate Domain Entities in a Single DB Transaction
         cursor.execute("UPDATE weddings SET status = 'planning' WHERE id = ?", (wedding_id,))
-        
+
         # Seed Budget Lines
         budget_lines_to_insert = []
         for line in result_dict.get("budget_lines", []):
