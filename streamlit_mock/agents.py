@@ -215,14 +215,21 @@ def _resolve_quote_extract_parent(cursor, booking_id):
 
 # AGENT IMPLEMENTATIONS
 
-def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
+def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None, on_step=None):
     """
     Analyzes wedding profile, runs budget realism guardrail, and seeds timeline/budget.
+
+    on_step: optional callable(message: str) for live UI progress display.
+             See run_venue_matcher for the contract.
     """
     agent_id = "intake_planner"
     model = model_name or model_for(agent_id)
     decision_id = str(uuid.uuid4())
     start_time = time.time()
+
+    def _step(msg):
+        if on_step:
+            on_step(msg)
     
     system_instruction = (
         "You are an expert Irish wedding coordinator. Your job is to draft a comprehensive budget allocation "
@@ -269,6 +276,12 @@ def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
         cursor.execute("SELECT * FROM users WHERE id = ?", (wedding["couple_user_id"],))
         couple = dict(cursor.fetchone())
 
+        _step(
+            f"Reading intake · {couple['name']} · {wedding['guest_count_estimate']} guests · "
+            f"{wedding['region']} · {wedding['ceremony_type']} · "
+            f"€{wedding['budget_total']:,.0f}"
+        )
+
         # Build Context
         input_payload = {
             "wedding_id": wedding["id"],
@@ -287,7 +300,8 @@ def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
         # Call LLM
         client = get_client(api_key)
         prompt = f"Create a wedding plan for the following profile:\n{json.dumps(input_payload, indent=2)}"
-        
+
+        _step(f"Asking Gemini ({model}) to validate budget realism and draft your planning timeline...")
         response = client.models.generate_content(
             model=model,
             contents=prompt,
@@ -300,20 +314,26 @@ def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
         )
         
         result_dict = json.loads(response.text)
-        
+
         latency = int((time.time() - start_time) * 1000)
         tokens_in = response.usage_metadata.prompt_token_count if response.usage_metadata else 0
         tokens_out = response.usage_metadata.candidates_token_count if response.usage_metadata else 0
-        
+        confidence = result_dict.get("confidence_score") or 0
+        _step(
+            f"Gemini responded in {latency/1000:.1f}s · {tokens_out:,} tokens · "
+            f"confidence {confidence:.0%}"
+        )
+
         external_api_calls = [{
             "provider": "google",
             "model": model,
             "latency_ms": latency,
             "tokens": {"input": tokens_in, "output": tokens_out}
         }]
-        
+
         # 2. Check Guardrails
         if not result_dict.get("is_budget_realistic", True):
+            _step(f"Budget realism check failed · {(result_dict.get('guardrail_warning') or '')[:140]}")
             # Guardrail Blocked Path
             cursor.execute("""
                 UPDATE agent_decision_logs 
@@ -346,6 +366,7 @@ def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
             if _normalize_category(line.get("category")) not in ALLOWED_BUDGET_CATEGORIES
         })
         if invalid_categories:
+            _step(f"Category whitelist check failed · rejected {invalid_categories}")
             guardrail_message = (
                 f"Invalid budget categories produced by intake_planner: {invalid_categories}. "
                 f"Allowed categories: {sorted(ALLOWED_BUDGET_CATEGORIES)}."
@@ -412,11 +433,22 @@ def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
             INSERT INTO timeline_items (id, wedding_id, kind, title, description, due_at, status, generated_by_agent_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, timeline_items_to_insert)
-        
+
+        total_allocated = sum(line[3] for line in budget_lines_to_insert)
+        coverage_pct = (total_allocated / wedding["budget_total"] * 100) if wedding["budget_total"] else 0
+        earliest = min(
+            (item[5] for item in timeline_items_to_insert), default=None
+        )
+        _step(
+            f"Drafted {len(budget_lines_to_insert)} budget categories totalling €{total_allocated:,.0f} "
+            f"({coverage_pct:.0f}% of your budget) · {len(timeline_items_to_insert)} planning milestones"
+            + (f" · earliest due {earliest}" if earliest else "")
+        )
+
         # Update Log
         cursor.execute("""
-            UPDATE agent_decision_logs 
-            SET status = 'success', rationale_summary = ?, 
+            UPDATE agent_decision_logs
+            SET status = 'success', rationale_summary = ?,
                 input_payload = ?, output_payload = ?, confidence_score = ?,
                 latency_ms = ?, tokens_input = ?, tokens_output = ?, external_api_calls = ?
             WHERE id = ?
@@ -429,7 +461,9 @@ def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
             json.dumps(external_api_calls),
             decision_id
         ))
-        
+
+        _step(f"Logged decision `{decision_id[:8]}` with full audit trail")
+
         conn.commit()
         conn.close()
         return {"status": "success", "summary": result_dict.get("rationale_summary"), "log_id": decision_id}
