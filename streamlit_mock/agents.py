@@ -375,11 +375,14 @@ def run_venue_matcher(wedding_id, user_id=None, api_key=None, model_name=None):
             other_venues = [v for v in venues_by_capacity if v["region"].lower() != preferred_region.lower()]
             filtered_venues = venues_in_region + other_venues[:(3 - len(venues_in_region))]
 
-        # Build Context
+        # Build Context. venues_matching_region_count surfaces the pre-filter
+        # signal: when it's 0, the candidate list is a fallback from adjacent
+        # regions and the rationale_summary must say so.
         input_payload = {
             "wedding_profile": {
                 "guest_count": guest_count,
                 "region_preference": preferred_region,
+                "venues_matching_region_count": len(venues_in_region),
                 "allocated_venue_budget": venue_budget,
                 "style_notes": wedding["style_notes"],
                 "ceremony_type": wedding["ceremony_type"]

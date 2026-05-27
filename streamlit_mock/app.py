@@ -208,7 +208,7 @@ with tab1:
             budget_total = st.number_input("Total Wedding Budget (€)", min_value=1000, value=30000, step=1000)
             guest_count = st.number_input("Estimated Guest Count", min_value=10, value=100, step=10)
             
-            region = st.selectbox("Preferred Region in Ireland", ["Sligo", "Dublin", "Galway", "Kerry", "Leinster"])
+            region = st.selectbox("Preferred Region in Ireland", ["Sligo", "Dublin", "Galway", "Kerry", "Clare", "Monaghan", "Meath", "Leinster"])
             ceremony_type = st.selectbox("Ceremony/Tradition Type", [
                 "Civil/Humanist", "Irish Catholic", "Hindu", "Muslim", "Multi-cultural"
             ])
@@ -322,7 +322,7 @@ with tab1:
                 if lines:
                     df_lines = pd.DataFrame(lines)
                     fig = px.pie(df_lines, values="allocated_amount", names="category", hole=0.4,
-                                 color_discrete_sequence=px.colors.sequential.Gold)
+                                 color_discrete_sequence=px.colors.sequential.YlOrBr)
                     fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=250)
                     st.plotly_chart(fig, use_container_width=True)
                     st.dataframe(df_lines[["category", "allocated_amount"]], hide_index=True)
