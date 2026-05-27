@@ -323,7 +323,7 @@ def seed_data(cursor):
             "venue_castle_leslie",
             "Castle Leslie Estate",
             "Glaslough, Co. Monaghan",
-            "Leinster",  # Culturally grouped or Sligo-bordering
+            "Monaghan",
             "country_house",
             70, 260, 1, 1,
             json.dumps({"email": "events@castleleslie.com", "phone": "+3534788100", "website": "https://www.castleleslie.com"}),
@@ -333,7 +333,7 @@ def seed_data(cursor):
             "venue_hotel_doolin",
             "Hotel Doolin",
             "Doolin, Co. Clare",
-            "Kerry",  # Coastal cluster
+            "Clare",
             "hotel",
             60, 300, 1, 1,
             json.dumps({"email": "weddings@hoteldoolin.ie", "phone": "+353657074111", "website": "https://www.hoteldoolin.ie"}),
@@ -353,7 +353,7 @@ def seed_data(cursor):
             "venue_millhouse",
             "The Millhouse Slane",
             "Slane, Co. Meath",
-            "Dublin",
+            "Meath",
             "farm",
             80, 200, 1, 1,
             json.dumps({"email": "information@themillhouse.ie", "phone": "+353419820878", "website": "https://www.themillhouse.ie"}),
