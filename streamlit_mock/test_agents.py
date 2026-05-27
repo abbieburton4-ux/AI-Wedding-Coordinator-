@@ -484,7 +484,112 @@ def test_quote_extract_falls_back_to_matcher_when_no_inquiry_send(mock_client):
 
 
 # ==========================================
-# 8. TEST PENDING-LOG ORPHAN INVARIANT
+# 8. TEST USER-ACTION LOG HELPERS
+# ==========================================
+
+def test_log_user_action_writes_a_row_with_expected_fields():
+    """Sanity check: log_user_action inserts exactly the fields the caller
+    provides, with agent_id='system' and an empty external_api_calls."""
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    log_id = agents.log_user_action(
+        cursor,
+        wedding_id="wedding_intake_test",
+        decision_type="inquiry_send",
+        rationale_summary="Sent inquiry to Castle Leslie.",
+        booking_id=None,
+        parent_decision_id=None,
+        user_id="planner_1",
+    )
+    conn.commit()
+    cursor.execute("SELECT * FROM agent_decision_logs WHERE id = ?", (log_id,))
+    row = dict(cursor.fetchone())
+    conn.close()
+
+    assert row["agent_id"] == "system"
+    assert row["decision_type"] == "inquiry_send"
+    assert row["status"] == "success"
+    assert row["user_id"] == "planner_1"
+    assert row["rationale_summary"] == "Sent inquiry to Castle Leslie."
+    assert row["external_api_calls"] == "[]"
+
+
+def test_log_user_override_marks_parent_and_inserts_child():
+    """log_user_override updates the parent's overridden_by_user_id AND
+    inserts a dedicated override_option child log. Both writes happen in
+    a single helper call so the audit pair stays consistent."""
+    # Set up a parent agent decision via a direct INSERT (we're testing
+    # the helper, not the agent flow).
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    parent_id = str(uuid.uuid4())
+    cursor.execute("""
+        INSERT INTO agent_decision_logs
+            (id, agent_id, wedding_id, trigger, decision_type, status, rationale_summary)
+        VALUES (?, 'venue_matcher', 'wedding_intake_test', 'couple_action',
+                'venue_match', 'success', 'Matched venues')
+    """, (parent_id,))
+    conn.commit()
+
+    child_id = agents.log_user_override(
+        cursor,
+        parent_decision_id=parent_id,
+        overridden_by_user_id="planner_1",
+        wedding_id="wedding_intake_test",
+        rationale_summary="Declined Castle Leslie - too expensive.",
+    )
+    conn.commit()
+
+    # Parent now has overridden_by_user_id set
+    cursor.execute("SELECT overridden_by_user_id FROM agent_decision_logs WHERE id = ?", (parent_id,))
+    assert cursor.fetchone()[0] == "planner_1"
+
+    # Child exists with parent link
+    cursor.execute("""
+        SELECT decision_type, parent_decision_id, overridden_by_user_id
+        FROM agent_decision_logs WHERE id = ?
+    """, (child_id,))
+    child = cursor.fetchone()
+    conn.close()
+    assert child[0] == "override_option"
+    assert child[1] == parent_id
+    assert child[2] == "planner_1"
+
+
+def test_resolve_quote_accept_parent_finds_latest_quote_draft():
+    """_resolve_quote_accept_parent picks the most recent successful
+    quote_draft for the booking — closes the 4-level chain
+    matcher → inquiry_send → quote_draft → quote_accept."""
+    conn = db.get_connection()
+    cursor = conn.cursor()
+
+    # Insert two quote_draft logs for the same booking, then check we
+    # get the latest one.
+    older = str(uuid.uuid4())
+    newer = str(uuid.uuid4())
+    cursor.execute("""
+        INSERT INTO agent_decision_logs (id, agent_id, wedding_id, booking_id,
+            trigger, decision_type, status, rationale_summary, timestamp)
+        VALUES (?, 'quote_extractor', 'wedding_planning_test', 'booking_photo_test',
+                'supplier_response', 'quote_draft', 'success', 'first quote',
+                '2026-05-20 10:00:00')
+    """, (older,))
+    cursor.execute("""
+        INSERT INTO agent_decision_logs (id, agent_id, wedding_id, booking_id,
+            trigger, decision_type, status, rationale_summary, timestamp)
+        VALUES (?, 'quote_extractor', 'wedding_planning_test', 'booking_photo_test',
+                'supplier_response', 'quote_draft', 'success', 'second quote',
+                '2026-05-21 14:00:00')
+    """, (newer,))
+    conn.commit()
+
+    resolved = agents._resolve_quote_accept_parent(cursor, "booking_photo_test")
+    conn.close()
+    assert resolved == newer, "Should pick the newer quote_draft for chaining"
+
+
+# ==========================================
+# 9. TEST PENDING-LOG ORPHAN INVARIANT
 # ==========================================
 
 def test_intake_planner_no_orphan_pending_on_missing_wedding(mock_client):

@@ -97,6 +97,86 @@ def _assert_wedding_exists(conn, cursor, wedding_id):
         raise ValueError(f"Wedding not found: {wedding_id!r}")
 
 
+def log_user_action(
+    cursor,
+    *,
+    wedding_id,
+    decision_type,
+    rationale_summary,
+    booking_id=None,
+    parent_decision_id=None,
+    user_id=None,
+    trigger="couple_action",
+    status="success",
+    overridden_by_user_id=None,
+):
+    """Write a non-LLM audit log row for a user/system action (inquiry_send,
+    quote_accept, etc.). Returns the new log row's id.
+
+    Caller owns the surrounding transaction — this helper does not commit.
+    That lets the caller bundle related domain mutations (booking status
+    flip, payment row, etc.) and the audit row in one atomic write."""
+    log_id = str(uuid.uuid4())
+    cursor.execute("""
+        INSERT INTO agent_decision_logs (
+            id, agent_id, wedding_id, user_id, booking_id, parent_decision_id,
+            trigger, decision_type, status, rationale_summary,
+            overridden_by_user_id, external_api_calls
+        )
+        VALUES (?, 'system', ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]')
+    """, (
+        log_id, wedding_id, user_id, booking_id, parent_decision_id,
+        trigger, decision_type, status, rationale_summary,
+        overridden_by_user_id,
+    ))
+    return log_id
+
+
+def log_user_override(
+    cursor,
+    *,
+    parent_decision_id,
+    overridden_by_user_id,
+    wedding_id,
+    rationale_summary,
+    booking_id=None,
+):
+    """Record a user override of an AI decision: marks the parent log row
+    as overridden AND inserts an override_option child log. Two writes in
+    one helper so the audit pair stays consistent — every override has
+    both an overridden_by_user_id on the parent and a dedicated row
+    capturing the reason."""
+    cursor.execute(
+        "UPDATE agent_decision_logs SET overridden_by_user_id = ? WHERE id = ?",
+        (overridden_by_user_id, parent_decision_id),
+    )
+    return log_user_action(
+        cursor,
+        wedding_id=wedding_id,
+        booking_id=booking_id,
+        decision_type="override_option",
+        rationale_summary=rationale_summary,
+        parent_decision_id=parent_decision_id,
+        user_id=overridden_by_user_id,
+        overridden_by_user_id=overridden_by_user_id,
+    )
+
+
+def _resolve_quote_accept_parent(cursor, booking_id):
+    """Find the quote_draft log row whose output the user is now accepting.
+    Mirrors _resolve_quote_extract_parent: prefers the most recent successful
+    quote_draft for this booking. Returns None if none exists (e.g. caller
+    accepted a manually-inserted quote)."""
+    cursor.execute("""
+        SELECT id FROM agent_decision_logs
+        WHERE booking_id = ? AND decision_type = 'quote_draft' AND status = 'success'
+        ORDER BY timestamp DESC
+        LIMIT 1
+    """, (booking_id,))
+    row = cursor.fetchone()
+    return row[0] if row else None
+
+
 def _resolve_quote_extract_parent(cursor, booking_id):
     """Find the parent agent_decision_log row for a quote_extract decision so
     a judge can trace the full chain: matcher → inquiry_send → quote_extract.
