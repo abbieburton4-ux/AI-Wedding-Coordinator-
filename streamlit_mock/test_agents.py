@@ -227,3 +227,88 @@ def test_agent_error_rollback(mock_client):
     assert len(lines) == 0
     timeline = db.get_timeline_items("wedding_intake_test")
     assert len(timeline) == 0
+
+
+# ==========================================
+# 5. TEST CATEGORY WHITELIST GUARDRAIL
+# ==========================================
+
+def test_intake_planner_blocks_invalid_categories(mock_client):
+    """A budget_line with a non-canonical category should block the run and
+    leave no budget_lines behind. Covers commit 1bb2b3ce."""
+    mock_response_data = {
+        "is_budget_realistic": True,
+        "guardrail_warning": "",
+        "budget_lines": [
+            {"category": "venue", "allocated_amount": 12000.0, "rationale": "Venue rental"},
+            {"category": "decor", "allocated_amount": 3000.0, "rationale": "Decorations"},
+        ],
+        "timeline_items": [],
+        "rationale_summary": "Plan including decor line",
+        "confidence_score": 0.85,
+    }
+    mock_client.models.generate_content.return_value = MockResponse(json.dumps(mock_response_data))
+
+    res = agents.run_intake_planner("wedding_intake_test", user_id="couple_1")
+
+    assert res["status"] == "blocked"
+    assert "decor" in res["warning"]
+
+    logs = db.get_agent_logs("wedding_intake_test")
+    assert len(logs) == 1
+    assert logs[0]["status"] == "blocked_by_guardrail"
+    assert logs[0]["error_kind"] == "category_whitelist"
+
+    # No budget_lines should have been inserted — guardrail runs before mutation.
+    assert db.get_budget_lines("wedding_intake_test") == []
+
+
+def test_intake_planner_normalizes_category_case(mock_client):
+    """A capitalized category like 'Venue' should be normalized to 'venue' and
+    accepted, not falsely blocked by the whitelist. Covers commit 61f34bb2."""
+    mock_response_data = {
+        "is_budget_realistic": True,
+        "guardrail_warning": "",
+        "budget_lines": [
+            {"category": "Venue", "allocated_amount": 12000.0, "rationale": "Capitalized"},
+            {"category": "  Florals  ", "allocated_amount": 2000.0, "rationale": "Padded"},
+        ],
+        "timeline_items": [],
+        "rationale_summary": "Mixed-case categories",
+        "confidence_score": 0.9,
+    }
+    mock_client.models.generate_content.return_value = MockResponse(json.dumps(mock_response_data))
+
+    res = agents.run_intake_planner("wedding_intake_test", user_id="couple_1")
+
+    assert res["status"] == "success", "Capitalized/padded canonical categories must not be blocked"
+
+    # Inserted categories must be normalized so downstream WHERE category = ? matches.
+    lines = db.get_budget_lines("wedding_intake_test")
+    stored_categories = sorted(line["category"] for line in lines)
+    assert stored_categories == ["florals", "venue"]
+
+
+# ==========================================
+# 6. TEST PENDING-LOG ORPHAN INVARIANT
+# ==========================================
+
+def test_intake_planner_no_orphan_pending_on_missing_wedding(mock_client):
+    """A missing wedding_id must not leave orphan 'pending' rows in the
+    audit trail — the invariant commit 874e42ca promised. The agent may
+    either never create a log row (FK constraint on agent_decision_logs.
+    wedding_id blocks the INSERT) or create one and update it to 'error';
+    both satisfy the audit invariant. Only orphan 'pending' is disallowed."""
+    with pytest.raises(Exception):
+        agents.run_intake_planner("does-not-exist", user_id="couple_1")
+
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, wedding_id FROM agent_decision_logs WHERE status = 'pending'")
+    pending_rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    assert pending_rows == [], (
+        f"Audit trail polluted: {len(pending_rows)} 'pending' rows remain after a failed "
+        f"run. Commit 874e42ca's invariant says no agent decision should sit in 'pending'."
+    )
