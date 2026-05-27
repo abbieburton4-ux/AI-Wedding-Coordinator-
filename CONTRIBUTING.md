@@ -128,6 +128,7 @@ Docs in `docs/` are load-bearing for the submission. When you change code that c
 - Schema change → update [docs/ERD.md](docs/ERD.md)
 - Pivot or scope change → update [docs/strategic-memo.md](docs/strategic-memo.md) (add a dated addendum, don't rewrite history)
 - Milestone shift → update [docs/runway.md](docs/runway.md) and re-run `scripts/build_tracker.py` to refresh `runway-tracker.xlsx`
+- Known-but-unfixed gap → append to [docs/backlog.md](docs/backlog.md) with a B-number, location, why-deferred, and fix-shape. Also drop a `# TODO(name, YYYY-MM-DD):` at the code site for in-flight items. Friday review pass reconciles `grep -rn TODO` against the backlog.
 
 ---
 
