@@ -20,6 +20,11 @@ ALLOWED_BUDGET_CATEGORIES = {
     "dj", "officiant", "stationery", "hair_makeup", "transport", "cake", "other"
 }
 
+# Subset of budget categories that have suppliers (excludes 'venue' — handled by
+# venue_matcher — and 'other' — catch-all bucket with no sourcing flow).
+# Sorted tuple for stable iteration in UI dropdowns.
+SUPPLIER_CATEGORIES = tuple(sorted(ALLOWED_BUDGET_CATEGORIES - {"venue", "other"}))
+
 class BudgetLineDraft(BaseModel):
     category: str = Field(description="Must be one of: venue, catering, florals, photography, videography, music, dj, officiant, stationery, hair_makeup, transport, cake, other")
     allocated_amount: float = Field(description="Amount allocated in EUR")

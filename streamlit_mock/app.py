@@ -390,7 +390,7 @@ with tab2:
                 st.markdown("<br/>", unsafe_allow_html=True)
                 
                 # Match Supplier
-                supplier_cat = st.selectbox("Select Supplier Category", ["photography", "florals", "music", "catering"])
+                supplier_cat = st.selectbox("Select Supplier Category", list(agents.SUPPLIER_CATEGORIES))
                 if st.button(f"Run {supplier_cat.capitalize()} Matcher Agent", use_container_width=True):
                     if not api_key:
                         st.error("Configure Gemini API Key first.")
