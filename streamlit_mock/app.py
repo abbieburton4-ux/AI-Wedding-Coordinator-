@@ -433,33 +433,35 @@ with tab2:
                                     sc1, sc2 = st.columns([1, 1])
                                     with sc1:
                                         if st.button("Simulate Sending Inquiry", key=f"send_{bk['id']}"):
-                                            # Update status
                                             db.update_booking_status(bk["id"], "inquired")
-                                            # Log transition
                                             conn = db.get_connection()
                                             cursor = conn.cursor()
-                                            cursor.execute("""
-                                                INSERT INTO agent_decision_logs (id, agent_id, wedding_id, user_id, booking_id, parent_decision_id, trigger, decision_type, status, rationale_summary, external_api_calls)
-                                                VALUES (?, 'system', ?, ?, ?, ?, 'couple_action', 'inquiry_send', 'success', ?, '[]')
-                                            """, (str(uuid.uuid4()), active_wedding_id, st.session_state.current_user_id, bk["id"], matching_log["id"], f"Sent inquiry email to {vendor_name}."))
+                                            agents.log_user_action(
+                                                cursor,
+                                                wedding_id=active_wedding_id,
+                                                booking_id=bk["id"],
+                                                decision_type="inquiry_send",
+                                                rationale_summary=f"Sent inquiry email to {vendor_name}.",
+                                                parent_decision_id=matching_log["id"],
+                                                user_id=st.session_state.current_user_id,
+                                            )
                                             conn.commit()
                                             conn.close()
                                             st.success("Inquiry marked as sent!")
                                             st.rerun()
                                     with sc2:
-                                        # Human override
                                         if st.button("Decline & Override Option", key=f"dec_{bk['id']}"):
                                             db.update_booking_status(bk["id"], "declined")
                                             conn = db.get_connection()
                                             cursor = conn.cursor()
-                                            
-                                            # Set overridden on parent
-                                            cursor.execute("UPDATE agent_decision_logs SET overridden_by_user_id = ? WHERE id = ?", (st.session_state.current_user_id, matching_log["id"]))
-                                            
-                                            cursor.execute("""
-                                                INSERT INTO agent_decision_logs (id, agent_id, wedding_id, user_id, booking_id, parent_decision_id, trigger, decision_type, status, rationale_summary, overridden_by_user_id, external_api_calls)
-                                                VALUES (?, 'system', ?, ?, ?, ?, 'couple_action', 'override_option', 'success', ?, ?, '[]')
-                                            """, (str(uuid.uuid4()), active_wedding_id, st.session_state.current_user_id, bk["id"], matching_log["id"], f"Declined AI recommended vendor {vendor_name}.", st.session_state.current_user_id))
+                                            agents.log_user_override(
+                                                cursor,
+                                                parent_decision_id=matching_log["id"],
+                                                overridden_by_user_id=st.session_state.current_user_id,
+                                                wedding_id=active_wedding_id,
+                                                booking_id=bk["id"],
+                                                rationale_summary=f"Declined AI recommended vendor {vendor_name}.",
+                                            )
                                             conn.commit()
                                             conn.close()
                                             st.warning("Recommendation declined.")
@@ -631,11 +633,18 @@ with tab3:
                                 if active_bk_data["venue_id"]:
                                     cursor.execute("UPDATE weddings SET venue_id = ?, status = 'booked' WHERE id = ?", (active_bk_data["venue_id"], active_wedding_id))
                                     
-                                # Insert Audit Log for Override check & book
-                                cursor.execute("""
-                                    INSERT INTO agent_decision_logs (id, agent_id, wedding_id, user_id, booking_id, trigger, decision_type, status, rationale_summary, external_api_calls)
-                                    VALUES (?, 'system', ?, ?, ?, 'couple_action', 'quote_accept', 'success', ?, '[]')
-                                """, (str(uuid.uuid4()), active_wedding_id, st.session_state.current_user_id, sel_bk_id, f"Accepted quote for {qt['total_amount']}. Paid deposit €{deposit_amount:,.2f}."))
+                                # Audit log: quote_accept chains to the quote_draft that
+                                # produced this quote, completing the matcher → inquiry_send
+                                # → quote_draft → quote_accept chain.
+                                agents.log_user_action(
+                                    cursor,
+                                    wedding_id=active_wedding_id,
+                                    booking_id=sel_bk_id,
+                                    decision_type="quote_accept",
+                                    rationale_summary=f"Accepted quote for {qt['total_amount']}. Paid deposit €{deposit_amount:,.2f}.",
+                                    parent_decision_id=agents._resolve_quote_accept_parent(cursor, sel_bk_id),
+                                    user_id=st.session_state.current_user_id,
+                                )
                                 
                                 conn.commit()
                                 conn.close()
