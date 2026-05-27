@@ -762,8 +762,22 @@ def run_quote_extractor(booking_id, email_text, user_id=None, api_key=None, mode
     booking = dict(cursor.fetchone())
 
     wedding_id = booking["wedding_id"]
-    category = booking["supplier_category"] if booking["supplier_id"] else "venue"
-    vendor_name = booking["supplier_name"] if booking["supplier_id"] else booking["venue_name"]
+    # B2: derive category explicitly. The DB CHECK constraint enforces
+    # (venue_id XOR supplier_id) today, but if a future booking type
+    # bypasses that we want a loud failure rather than a silent route
+    # into the wrong budget line.
+    if booking["supplier_id"]:
+        category = booking["supplier_category"]
+        vendor_name = booking["supplier_name"]
+    elif booking["venue_id"]:
+        category = "venue"
+        vendor_name = booking["venue_name"]
+    else:
+        conn.close()
+        raise ValueError(
+            f"Booking {booking_id!r} has neither supplier_id nor venue_id; "
+            f"cannot derive category for quote extraction."
+        )
 
     # 1. Initialize Log
     cursor.execute("""
