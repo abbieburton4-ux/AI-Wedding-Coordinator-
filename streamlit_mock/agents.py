@@ -120,30 +120,30 @@ def run_intake_planner(wedding_id, user_id=None, api_key=None, model_name=None):
         VALUES (?, ?, ?, ?, ?, ?, 'couple_action', 'timeline_generate', 'pending')
     """, (decision_id, agent_id, model, prompt_version, wedding_id, user_id))
     conn.commit()
-    
-    # Get Wedding details
-    cursor.execute("SELECT * FROM weddings WHERE id = ?", (wedding_id,))
-    wedding = dict(cursor.fetchone())
-    cursor.execute("SELECT * FROM users WHERE id = ?", (wedding["couple_user_id"],))
-    couple = dict(cursor.fetchone())
-    
-    # Build Context
-    input_payload = {
-        "wedding_id": wedding["id"],
-        "couple_name": couple["name"],
-        "budget_total": wedding["budget_total"],
-        "currency": wedding["currency"],
-        "guest_count": wedding["guest_count_estimate"],
-        "region": wedding["region"],
-        "ceremony_type": wedding["ceremony_type"],
-        "style_notes": wedding["style_notes"],
-        "wedding_date": wedding["wedding_date"],
-        "wedding_date_start": wedding["wedding_date_start"],
-        "wedding_date_end": wedding["wedding_date_end"]
-    }
-    
-    # Call LLM
+
     try:
+        # Get Wedding details
+        cursor.execute("SELECT * FROM weddings WHERE id = ?", (wedding_id,))
+        wedding = dict(cursor.fetchone())
+        cursor.execute("SELECT * FROM users WHERE id = ?", (wedding["couple_user_id"],))
+        couple = dict(cursor.fetchone())
+
+        # Build Context
+        input_payload = {
+            "wedding_id": wedding["id"],
+            "couple_name": couple["name"],
+            "budget_total": wedding["budget_total"],
+            "currency": wedding["currency"],
+            "guest_count": wedding["guest_count_estimate"],
+            "region": wedding["region"],
+            "ceremony_type": wedding["ceremony_type"],
+            "style_notes": wedding["style_notes"],
+            "wedding_date": wedding["wedding_date"],
+            "wedding_date_start": wedding["wedding_date_start"],
+            "wedding_date_end": wedding["wedding_date_end"]
+        }
+
+        # Call LLM
         client = get_client(api_key)
         prompt = f"Create a wedding plan for the following profile:\n{json.dumps(input_payload, indent=2)}"
         
@@ -302,60 +302,60 @@ def run_venue_matcher(wedding_id, user_id=None, api_key=None, model_name=None):
         VALUES (?, ?, ?, ?, ?, ?, 'couple_action', 'venue_match', 'pending')
     """, (decision_id, agent_id, model, prompt_version, wedding_id, user_id))
     conn.commit()
-    
-    # Gather wedding and venues context
-    cursor.execute("SELECT * FROM weddings WHERE id = ?", (wedding_id,))
-    wedding = dict(cursor.fetchone())
-    cursor.execute("SELECT * FROM budget_lines WHERE wedding_id = ? AND category = 'venue'", (wedding_id,))
-    venue_budget_row = cursor.fetchone()
-    venue_budget = dict(venue_budget_row)["allocated_amount"] if venue_budget_row else wedding["budget_total"] * 0.4
-    
-    venues_list = db.get_all_venues()
-    
-    # Pre-filter venues by capacity constraints
-    guest_count = wedding["guest_count_estimate"]
-    preferred_region = wedding["region"]
-    
-    venues_by_capacity = [
-        v for v in venues_list 
-        if (v["capacity_min"] is None or v["capacity_min"] <= guest_count) and 
-           (v["capacity_max"] is None or v["capacity_max"] >= guest_count)
-    ]
-    
-    # Prioritize the preferred region
-    venues_in_region = [v for v in venues_by_capacity if v["region"].lower() == preferred_region.lower()]
-    
-    if len(venues_in_region) >= 3:
-        filtered_venues = venues_in_region
-    else:
-        # Include capacity-matching venues from other regions as backup candidates
-        other_venues = [v for v in venues_by_capacity if v["region"].lower() != preferred_region.lower()]
-        filtered_venues = venues_in_region + other_venues[:(3 - len(venues_in_region))]
-    
-    # Build Context
-    input_payload = {
-        "wedding_profile": {
-            "guest_count": guest_count,
-            "region_preference": preferred_region,
-            "allocated_venue_budget": venue_budget,
-            "style_notes": wedding["style_notes"],
-            "ceremony_type": wedding["ceremony_type"]
-        },
-        "available_venues": [
-            {
-                "id": v["id"],
-                "name": v["name"],
-                "address": v["address"],
-                "region": v["region"],
-                "type": v["venue_type"],
-                "capacity": {"min": v["capacity_min"], "max": v["capacity_max"]},
-                "accommodation": v["on_site_accommodation"],
-                "pricing": json.loads(v["pricing_summary"]) if v["pricing_summary"] else {}
-            } for v in filtered_venues
-        ]
-    }
-    
+
     try:
+        # Gather wedding and venues context
+        cursor.execute("SELECT * FROM weddings WHERE id = ?", (wedding_id,))
+        wedding = dict(cursor.fetchone())
+        cursor.execute("SELECT * FROM budget_lines WHERE wedding_id = ? AND category = 'venue'", (wedding_id,))
+        venue_budget_row = cursor.fetchone()
+        venue_budget = dict(venue_budget_row)["allocated_amount"] if venue_budget_row else wedding["budget_total"] * 0.4
+
+        venues_list = db.get_all_venues()
+
+        # Pre-filter venues by capacity constraints
+        guest_count = wedding["guest_count_estimate"]
+        preferred_region = wedding["region"]
+
+        venues_by_capacity = [
+            v for v in venues_list
+            if (v["capacity_min"] is None or v["capacity_min"] <= guest_count) and
+               (v["capacity_max"] is None or v["capacity_max"] >= guest_count)
+        ]
+
+        # Prioritize the preferred region
+        venues_in_region = [v for v in venues_by_capacity if v["region"].lower() == preferred_region.lower()]
+
+        if len(venues_in_region) >= 3:
+            filtered_venues = venues_in_region
+        else:
+            # Include capacity-matching venues from other regions as backup candidates
+            other_venues = [v for v in venues_by_capacity if v["region"].lower() != preferred_region.lower()]
+            filtered_venues = venues_in_region + other_venues[:(3 - len(venues_in_region))]
+
+        # Build Context
+        input_payload = {
+            "wedding_profile": {
+                "guest_count": guest_count,
+                "region_preference": preferred_region,
+                "allocated_venue_budget": venue_budget,
+                "style_notes": wedding["style_notes"],
+                "ceremony_type": wedding["ceremony_type"]
+            },
+            "available_venues": [
+                {
+                    "id": v["id"],
+                    "name": v["name"],
+                    "address": v["address"],
+                    "region": v["region"],
+                    "type": v["venue_type"],
+                    "capacity": {"min": v["capacity_min"], "max": v["capacity_max"]},
+                    "accommodation": v["on_site_accommodation"],
+                    "pricing": json.loads(v["pricing_summary"]) if v["pricing_summary"] else {}
+                } for v in filtered_venues
+            ]
+        }
+
         client = get_client(api_key)
         prompt = f"Match venues for the following couple profile and options:\n{json.dumps(input_payload, indent=2)}"
         
@@ -496,49 +496,49 @@ def run_supplier_matcher(wedding_id, category, user_id=None, api_key=None, model
         VALUES (?, ?, ?, ?, ?, ?, 'couple_action', 'supplier_match', 'pending')
     """, (decision_id, agent_id, model, prompt_version, wedding_id, user_id))
     conn.commit()
-    
-    # Gather wedding and suppliers context
-    cursor.execute("SELECT * FROM weddings WHERE id = ?", (wedding_id,))
-    wedding = dict(cursor.fetchone())
-    cursor.execute("SELECT * FROM budget_lines WHERE wedding_id = ? AND category = ?", (wedding_id, category))
-    budget_row = cursor.fetchone()
-    allocated_budget = dict(budget_row)["allocated_amount"] if budget_row else wedding["budget_total"] * 0.1
-    
-    cursor.execute("SELECT * FROM suppliers WHERE category = ?", (category,))
-    suppliers_list = [dict(r) for r in cursor.fetchall()]
-    
-    # Pre-filter suppliers by region preference
-    preferred_region = wedding["region"]
-    suppliers_in_region = [s for s in suppliers_list if s["location"].lower() == preferred_region.lower()]
-    
-    if len(suppliers_in_region) >= 3:
-        filtered_suppliers = suppliers_in_region
-    else:
-        # Include other regions as backup options
-        other_suppliers = [s for s in suppliers_list if s["location"].lower() != preferred_region.lower()]
-        filtered_suppliers = suppliers_in_region + other_suppliers[:(3 - len(suppliers_in_region))]
-    
-    # Build Context
-    input_payload = {
-        "category": category,
-        "wedding_profile": {
-            "guest_count": wedding["guest_count_estimate"],
-            "region_preference": preferred_region,
-            "allocated_budget": allocated_budget,
-            "style_notes": wedding["style_notes"]
-        },
-        "available_suppliers": [
-            {
-                "id": s["id"],
-                "name": s["name"],
-                "location": s["location"],
-                "pricing": json.loads(s["pricing_summary"]) if s["pricing_summary"] else {},
-                "attributes": json.loads(s["attributes"]) if s["attributes"] else {}
-            } for s in filtered_suppliers
-        ]
-    }
-    
+
     try:
+        # Gather wedding and suppliers context
+        cursor.execute("SELECT * FROM weddings WHERE id = ?", (wedding_id,))
+        wedding = dict(cursor.fetchone())
+        cursor.execute("SELECT * FROM budget_lines WHERE wedding_id = ? AND category = ?", (wedding_id, category))
+        budget_row = cursor.fetchone()
+        allocated_budget = dict(budget_row)["allocated_amount"] if budget_row else wedding["budget_total"] * 0.1
+
+        cursor.execute("SELECT * FROM suppliers WHERE category = ?", (category,))
+        suppliers_list = [dict(r) for r in cursor.fetchall()]
+
+        # Pre-filter suppliers by region preference
+        preferred_region = wedding["region"]
+        suppliers_in_region = [s for s in suppliers_list if s["location"].lower() == preferred_region.lower()]
+
+        if len(suppliers_in_region) >= 3:
+            filtered_suppliers = suppliers_in_region
+        else:
+            # Include other regions as backup options
+            other_suppliers = [s for s in suppliers_list if s["location"].lower() != preferred_region.lower()]
+            filtered_suppliers = suppliers_in_region + other_suppliers[:(3 - len(suppliers_in_region))]
+
+        # Build Context
+        input_payload = {
+            "category": category,
+            "wedding_profile": {
+                "guest_count": wedding["guest_count_estimate"],
+                "region_preference": preferred_region,
+                "allocated_budget": allocated_budget,
+                "style_notes": wedding["style_notes"]
+            },
+            "available_suppliers": [
+                {
+                    "id": s["id"],
+                    "name": s["name"],
+                    "location": s["location"],
+                    "pricing": json.loads(s["pricing_summary"]) if s["pricing_summary"] else {},
+                    "attributes": json.loads(s["attributes"]) if s["attributes"] else {}
+                } for s in filtered_suppliers
+            ]
+        }
+
         client = get_client(api_key)
         prompt = f"Match suppliers for the following couple profile and options:\n{json.dumps(input_payload, indent=2)}"
         
@@ -674,8 +674,9 @@ def run_quote_extractor(booking_id, email_text, user_id=None, api_key=None, mode
     
     conn = db.get_connection()
     cursor = conn.cursor()
-    
-    # Find Booking details to get wedding and supplier information
+
+    # Find Booking details to get wedding and supplier information.
+    # Run before the pending log INSERT so a missing booking does not leave a stuck row.
     cursor.execute("""
         SELECT b.*, w.id as wedding_id, w.budget_total,
                s.name as supplier_name, s.category as supplier_category,
@@ -687,32 +688,32 @@ def run_quote_extractor(booking_id, email_text, user_id=None, api_key=None, mode
         WHERE b.id = ?
     """, (booking_id,))
     booking = dict(cursor.fetchone())
-    
+
     wedding_id = booking["wedding_id"]
     category = booking["supplier_category"] if booking["supplier_id"] else "venue"
     vendor_name = booking["supplier_name"] if booking["supplier_id"] else booking["venue_name"]
-    
+
     # 1. Initialize Log
     cursor.execute("""
         INSERT INTO agent_decision_logs (id, agent_id, model_id, prompt_version, wedding_id, user_id, booking_id, trigger, decision_type, status)
         VALUES (?, ?, ?, ?, ?, ?, ?, 'supplier_response', 'quote_draft', 'pending')
     """, (decision_id, agent_id, model, prompt_version, wedding_id, user_id, booking_id))
     conn.commit()
-    
-    # Get budget line allocated for this category
-    cursor.execute("SELECT * FROM budget_lines WHERE wedding_id = ? AND category = ?", (wedding_id, category))
-    budget_row = cursor.fetchone()
-    allocated_amount = dict(budget_row)["allocated_amount"] if budget_row else 0.0
-    
-    input_payload = {
-        "booking_id": booking_id,
-        "vendor_name": vendor_name,
-        "category": category,
-        "allocated_budget": allocated_amount,
-        "email_text": email_text
-    }
-    
+
     try:
+        # Get budget line allocated for this category
+        cursor.execute("SELECT * FROM budget_lines WHERE wedding_id = ? AND category = ?", (wedding_id, category))
+        budget_row = cursor.fetchone()
+        allocated_amount = dict(budget_row)["allocated_amount"] if budget_row else 0.0
+
+        input_payload = {
+            "booking_id": booking_id,
+            "vendor_name": vendor_name,
+            "category": category,
+            "allocated_budget": allocated_amount,
+            "email_text": email_text
+        }
+
         client = get_client(api_key)
         
         response = client.models.generate_content(
