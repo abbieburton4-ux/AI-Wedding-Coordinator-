@@ -17,6 +17,7 @@ import db
 from constants import (
     ALLOWED_BUDGET_CATEGORIES,
     SUPPLIER_CATEGORIES,
+    region_matches,
     normalize_category as _normalize_category,
 )
 
@@ -370,14 +371,16 @@ def run_venue_matcher(wedding_id, user_id=None, api_key=None, model_name=None):
                (v["capacity_max"] is None or v["capacity_max"] >= guest_count)
         ]
 
-        # Prioritize the preferred region
-        venues_in_region = [v for v in venues_by_capacity if v["region"].lower() == preferred_region.lower()]
+        # Prioritize the preferred region. region_matches honors the
+        # province→county hierarchy so a "Leinster" selection picks up
+        # venues seeded as "Meath", "Offaly", etc. and vice versa.
+        venues_in_region = [v for v in venues_by_capacity if region_matches(v["region"], preferred_region)]
 
         if len(venues_in_region) >= 3:
             filtered_venues = venues_in_region
         else:
             # Include capacity-matching venues from other regions as backup candidates
-            other_venues = [v for v in venues_by_capacity if v["region"].lower() != preferred_region.lower()]
+            other_venues = [v for v in venues_by_capacity if not region_matches(v["region"], preferred_region)]
             filtered_venues = venues_in_region + other_venues[:(3 - len(venues_in_region))]
 
         # Build Context. venues_matching_region_count surfaces the pre-filter
@@ -558,15 +561,17 @@ def run_supplier_matcher(wedding_id, category, user_id=None, api_key=None, model
         cursor.execute("SELECT * FROM suppliers WHERE category = ?", (category,))
         suppliers_list = [dict(r) for r in cursor.fetchall()]
 
-        # Pre-filter suppliers by region preference
+        # Pre-filter suppliers by region preference. Suppliers store their
+        # geography in `location`, which currently uses the same county/province
+        # vocabulary as venues, so region_matches works identically.
         preferred_region = wedding["region"]
-        suppliers_in_region = [s for s in suppliers_list if s["location"].lower() == preferred_region.lower()]
+        suppliers_in_region = [s for s in suppliers_list if region_matches(s["location"], preferred_region)]
 
         if len(suppliers_in_region) >= 3:
             filtered_suppliers = suppliers_in_region
         else:
             # Include other regions as backup options
-            other_suppliers = [s for s in suppliers_list if s["location"].lower() != preferred_region.lower()]
+            other_suppliers = [s for s in suppliers_list if not region_matches(s["location"], preferred_region)]
             filtered_suppliers = suppliers_in_region + other_suppliers[:(3 - len(suppliers_in_region))]
 
         # Build Context

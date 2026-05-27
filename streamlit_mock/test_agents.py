@@ -5,6 +5,7 @@ import uuid
 from unittest.mock import patch, MagicMock
 import db
 import agents
+import constants
 
 # Helpers for mocking Gemini response objects
 
@@ -290,7 +291,85 @@ def test_intake_planner_normalizes_category_case(mock_client):
 
 
 # ==========================================
-# 6. TEST PENDING-LOG ORPHAN INVARIANT
+# 6. TEST IRISH REGION HIERARCHY (B4)
+# ==========================================
+
+def test_region_matches_handles_province_and_county():
+    """B4: region_matches must accept county↔province in both directions and
+    return False for cross-province pairs."""
+    rm = constants.region_matches
+
+    # Exact county match
+    assert rm("Sligo", "Sligo")
+
+    # Province → constituent county (both directions)
+    assert rm("Meath", "Leinster")
+    assert rm("Leinster", "Meath")
+    assert rm("Sligo", "Connacht")
+    assert rm("Connacht", "Sligo")
+    assert rm("Clare", "Munster")
+    assert rm("Monaghan", "Ulster")
+
+    # Province → province (same)
+    assert rm("Leinster", "Leinster")
+
+    # Cross-province: no match
+    assert not rm("Sligo", "Leinster")     # Sligo is Connacht
+    assert not rm("Clare", "Connacht")     # Clare is Munster
+    assert not rm("Monaghan", "Leinster")  # Monaghan is Ulster
+
+    # County to unrelated county
+    assert not rm("Sligo", "Meath")
+
+
+def test_venue_matcher_leinster_selection_includes_meath_venues(mock_client):
+    """B4: a couple picking 'Leinster' province should see Millhouse Slane
+    (Meath) in the pre-LLM candidate list, not just venues seeded literally
+    as 'Leinster'."""
+    # Set up a Leinster wedding
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO weddings (id, couple_user_id, status, budget_total, currency, region, ceremony_type, guest_count_estimate)
+        VALUES ('wedding_leinster', 'couple_1', 'planning', 30000.0, 'EUR', 'Leinster', 'Civil/Humanist', 100);
+    """)
+    conn.commit()
+    conn.close()
+
+    # Benign LLM response — we're not testing the LLM, we're testing the
+    # input_payload constructed by the pre-filter.
+    mock_response_data = {
+        "shortlist": [{
+            "vendor_id": "venue_millhouse",
+            "rank": 1,
+            "matching_rationale": "Meath venue for Leinster wedding",
+            "draft_inquiry_email": "Dear Millhouse...",
+        }],
+        "rationale_summary": "Picked Millhouse",
+        "confidence_score": 0.9,
+    }
+    mock_client.models.generate_content.return_value = MockResponse(json.dumps(mock_response_data))
+
+    agents.run_venue_matcher("wedding_leinster", user_id="planner_1")
+
+    # Inspect what was sent to Gemini
+    prompt_sent = mock_client.models.generate_content.call_args.kwargs["contents"]
+    payload = json.loads(prompt_sent.split("\n", 1)[1])
+    venue_names = {v["name"] for v in payload["available_venues"]}
+    venue_regions = {v["region"] for v in payload["available_venues"]}
+
+    # Millhouse Slane (Meath) and Tullamore GAA (Leinster) should both be
+    # in the in-region candidates because expand_region("Leinster") covers
+    # Meath, Offaly, etc.
+    assert "The Millhouse Slane" in venue_names, f"Got {venue_names}"
+    assert "Tullamore GAA Clubhouse Hall" in venue_names
+
+    # And the region-match count reflects the hierarchy (>= 2)
+    assert payload["wedding_profile"]["venues_matching_region_count"] >= 2
+
+
+# ==========================================
+# 7. TEST PENDING-LOG ORPHAN INVARIANT
 # ==========================================
 
 def test_intake_planner_no_orphan_pending_on_missing_wedding(mock_client):
