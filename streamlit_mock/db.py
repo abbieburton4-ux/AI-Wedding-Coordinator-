@@ -492,6 +492,101 @@ def seed_data(cursor):
             json.dumps({"email": "declan@kerrydj.ie", "phone": "+353856667777"}),
             json.dumps({"package_price": 600, "currency": "EUR", "note": "Professional DJ. High-quality sound & lights, playing from 10 PM to 2 AM."}),
             json.dumps({"styles": ["all-genres", "90s-classic", "charts"]})
+        ),
+        # Videography
+        (
+            "sup_frame_vow",
+            "Frame & Vow Films",
+            "videography",
+            "Dublin",
+            json.dumps({"email": "hello@frameandvow.ie", "phone": "+353871234980", "website": "https://frameandvow.ie"}),
+            json.dumps({"package_price": 2800, "currency": "EUR", "note": "Full-day cinematic coverage. Highlight film (4–6 min) + extended 30-min feature. Two shooters, drone where permitted."}),
+            json.dumps({"styles": ["cinematic", "documentary", "highlight-film"]})
+        ),
+        (
+            "sup_westcoast_films",
+            "West Coast Wedding Films",
+            "videography",
+            "Galway",
+            json.dumps({"email": "studio@westcoastfilms.ie", "phone": "+353918774410", "website": "https://westcoastfilms.ie"}),
+            json.dumps({"package_price": 1950, "currency": "EUR", "note": "Single shooter, 8-hour coverage, 5-minute highlight reel. Atlantic-coast couples a speciality."}),
+            json.dumps({"styles": ["natural-light", "coastal", "story-driven"]})
+        ),
+        # Cake
+        (
+            "sup_cake_studio_dublin",
+            "The Cake Studio Dublin",
+            "cake",
+            "Dublin",
+            json.dumps({"email": "orders@cakestudio.ie", "phone": "+353015321119", "website": "https://cakestudio.ie"}),
+            json.dumps({"package_price": 480, "currency": "EUR", "note": "Standard 3-tier wedding cake serving up to 100 guests. Buttercream or fondant finish. Includes delivery within Dublin."}),
+            json.dumps({"styles": ["modern", "buttercream", "floral-detail"]})
+        ),
+        (
+            "sup_sligo_sugarcraft",
+            "Sligo Sugarcraft",
+            "cake",
+            "Sligo",
+            json.dumps({"email": "bake@sligosugarcraft.ie", "phone": "+353719144782"}),
+            json.dumps({"package_price": 350, "currency": "EUR", "note": "Traditional 3-tier fruit/sponge cake combinations. Serves 80–100. Local delivery within 30km of Sligo Town included."}),
+            json.dumps({"styles": ["traditional", "rustic", "fruit-cake"]})
+        ),
+        # Hair & Makeup
+        (
+            "sup_bridal_beauty_dublin",
+            "Bridal Beauty Dublin",
+            "hair_makeup",
+            "Dublin",
+            json.dumps({"email": "bookings@bridalbeautydublin.ie", "phone": "+353876655443", "website": "https://bridalbeautydublin.ie"}),
+            json.dumps({"package_price": 700, "currency": "EUR", "note": "Bride + 3 bridesmaids hair & makeup, on-location, includes trial. Additional members at €120 each."}),
+            json.dumps({"styles": ["classic-bridal", "soft-glam", "airbrush"]})
+        ),
+        (
+            "sup_coastal_bridal",
+            "Coastal Bridal Hair & Makeup",
+            "hair_makeup",
+            "Kerry",
+            json.dumps({"email": "info@coastalbridal.ie", "phone": "+353858123322"}),
+            json.dumps({"package_price": 550, "currency": "EUR", "note": "Bride + 3 bridesmaids hair & makeup, on-location across Kerry/Cork. Trial included. Additional members at €100 each."}),
+            json.dumps({"styles": ["natural", "boho", "romantic"]})
+        ),
+        # Transport
+        (
+            "sup_heritage_cars",
+            "Heritage Wedding Cars Ireland",
+            "transport",
+            "Dublin",
+            json.dumps({"email": "bookings@heritagecars.ie", "phone": "+353018822177", "website": "https://heritagecars.ie"}),
+            json.dumps({"package_price": 650, "currency": "EUR", "note": "Vintage Rolls-Royce or Bentley, white-glove chauffeur, ribbons, up to 3 hours of service within Dublin/Wicklow."}),
+            json.dumps({"styles": ["vintage", "classic", "luxury"]})
+        ),
+        (
+            "sup_galway_vintage_cars",
+            "Galway Vintage Wedding Cars",
+            "transport",
+            "Galway",
+            json.dumps({"email": "drive@galwayvintagecars.ie", "phone": "+353919335521"}),
+            json.dumps({"package_price": 520, "currency": "EUR", "note": "1960s Mercedes or VW Beetle convertible. 3 hours service across Galway and Clare. Ribbons and bottle of bubbly included."}),
+            json.dumps({"styles": ["retro", "convertible", "playful"]})
+        ),
+        # Stationery
+        (
+            "sup_sligo_letterpress",
+            "Sligo Letterpress Co.",
+            "stationery",
+            "Sligo",
+            json.dumps({"email": "press@sligoletterpress.ie", "phone": "+353719012244"}),
+            json.dumps({"package_price": 450, "currency": "EUR", "note": "100 hand-pressed invitation suites (invite, RSVP, details card), plus day-of menus and table numbers. Custom artwork at extra cost."}),
+            json.dumps({"styles": ["letterpress", "minimal", "earthy"]})
+        ),
+        (
+            "sup_paper_daisy",
+            "Paper Daisy Stationery",
+            "stationery",
+            "Kerry",
+            json.dumps({"email": "studio@paperdaisy.ie", "phone": "+353864477901", "website": "https://paperdaisy.ie"}),
+            json.dumps({"package_price": 380, "currency": "EUR", "note": "100 digitally printed invitation suites with watercolour florals. Full day-of stationery (signage, menus, place cards) add-on €220."}),
+            json.dumps({"styles": ["watercolour", "floral", "romantic"]})
         )
     ]
     cursor.executemany("INSERT INTO suppliers (id, name, category, location, contact_info, pricing_summary, attributes) VALUES (?, ?, ?, ?, ?, ?, ?)", suppliers)
