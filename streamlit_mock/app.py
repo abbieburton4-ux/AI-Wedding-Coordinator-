@@ -698,7 +698,7 @@ with tab4:
             status_counts = df_metrics["status"].value_counts().reset_index()
             status_counts.columns = ["Status", "Count"]
             fig_status = px.pie(status_counts, values="Count", names="Status", hole=0.4,
-                                color_discrete_sequence=px.colors.sequential.Gold)
+                                color_discrete_sequence=px.colors.sequential.YlOrBr)
             fig_status.update_layout(margin=dict(t=30, b=0, l=0, r=0), height=250)
             st.plotly_chart(fig_status, use_container_width=True)
             
