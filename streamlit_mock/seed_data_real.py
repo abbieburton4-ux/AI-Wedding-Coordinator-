@@ -248,12 +248,33 @@ suppliers = [
      json.dumps({"package_price": 2200, "currency": "EUR", "note": "Trad-meets-modern; scalable 3–4 piece, ceremony to party.", "_indicative": True}),
      json.dumps({"styles": ["trad", "folk", "modern", "party"]})),
 
-    # ---- MUSIC: CEREMONY TRAD ----
-    ("sup_sligo_trad_trio", "Sligo Trad Ceremony Trio", "music", "Sligo",
-     json.dumps({"website": None, "email": None, "phone": None, "_verify": True, "_template": True,
-                 "note": "Generic trad-trio slot — verify a specific act (e.g. via weddingbandlist.com Sligo)."}),
-     json.dumps({"package_price": 750, "currency": "EUR", "note": "Fiddle/harp/pipes for ceremony + drinks reception.", "_indicative": True}),
-     json.dumps({"styles": ["traditional", "celtic", "instrumental"]})),
+    # ---- MUSIC: CEREMONY / RECEPTION + ENTERTAINMENT ----
+    # Audionetworks group (Bray, Co. Wicklow). All brands reach the same office:
+    # info@audionetworks.ie / +35312013660. Replaces the old trad-trio template.
+    ("sup_drinks_reception_music", "Drinks Reception Music", "music", "Wicklow",
+     json.dumps({"website": "https://www.drinksreceptionmusic.ie", "email": "info@audionetworks.ie", "phone": "+35312013660", "_method": "published_email", "_checked": "2026-05-28", "note": "Audionetworks group, Bray Co. Wicklow."}),
+     json.dumps({"package_price": 750, "currency": "EUR", "note": "Ceremony + drinks-reception musicians (trad, classical, acoustic).", "_indicative": True}),
+     json.dumps({"styles": ["ceremony", "drinks-reception", "acoustic", "trad-or-classical"]})),
+
+    ("sup_silent_disco", "Silent Disco Ireland", "music", "Wicklow",
+     json.dumps({"website": "https://www.silentdiscoireland.ie", "email": "info@audionetworks.ie", "phone": "+35312013660", "_method": "published_email", "_checked": "2026-05-28", "note": "Audionetworks group, Bray Co. Wicklow."}),
+     json.dumps({"package_price": 500, "currency": "EUR", "note": "Silent-disco headphone hire + DJs; late-night add-on.", "_indicative": True}),
+     json.dumps({"styles": ["silent-disco", "late-night", "entertainment"]})),
+
+    ("sup_singing_waiters", "Singing Waiters Ireland", "music", "Wicklow",
+     json.dumps({"website": "https://www.singingwaitersireland.ie", "email": "info@audionetworks.ie", "phone": "+35312013660", "_method": "published_email", "_checked": "2026-05-28", "note": "Audionetworks group, Bray Co. Wicklow."}),
+     json.dumps({"package_price": 900, "currency": "EUR", "note": "Surprise singing-waiters act during the meal.", "_indicative": True}),
+     json.dumps({"styles": ["surprise-act", "vocal", "entertainment"]})),
+
+    ("sup_ama_music", "AMA Music Agency", "music", "Wicklow",
+     json.dumps({"website": "https://www.amamusicagency.ie", "email": "info@audionetworks.ie", "phone": "+35312013660", "_method": "published_email", "_checked": "2026-05-28", "note": "Audionetworks group, Bray Co. Wicklow."}),
+     json.dumps({"package_price": 2500, "currency": "EUR", "note": "Live-music booking agency (bands, ensembles).", "_indicative": True}),
+     json.dumps({"styles": ["agency", "live-music", "bands"]})),
+
+    ("sup_audionetworks", "Audionetworks", "music", "Wicklow",
+     json.dumps({"website": "https://audionetworks.ie", "email": "info@audionetworks.ie", "phone": "+35312013660", "_method": "published_email", "_checked": "2026-05-28", "note": "Parent entertainment agency, Bray Co. Wicklow."}),
+     json.dumps({"package_price": 2500, "currency": "EUR", "note": "Full-service entertainment agency (bands, DJs, ensembles).", "_indicative": True}),
+     json.dumps({"styles": ["agency", "full-entertainment", "bands-djs"]})),
 
     # ---- FLORALS (real) ----
     ("sup_jill_wild", "Wild / Jill Wild Flowersmith", "florals", "Cork",
@@ -309,12 +330,11 @@ suppliers = [
      json.dumps({"package_price": 450, "currency": "EUR", "note": "Humanist / secular legal ceremonies.", "_indicative": True}),
      json.dumps({"styles": ["humanist", "secular", "personal"]})),
 
-    # ---- DJ ----
-    ("sup_dj_template_kerry", "Kerry Wedding DJ", "dj", "Kerry",
-     json.dumps({"website": None, "email": None, "phone": None, "_verify": True, "_template": True,
-                 "note": "Generic DJ slot — verify a specific act via weddingbandlist.com / weddingdates.ie Kerry."}),
-     json.dumps({"package_price": 600, "currency": "EUR", "note": "Pro DJ, sound + lights, 10pm–2am.", "_indicative": True}),
-     json.dumps({"styles": ["all-genres", "charts", "party"]})),
+    # ---- DJ ---- (Audionetworks group; replaces the old DJ template)
+    ("sup_saxanddj", "Sax & DJ", "dj", "Wicklow",
+     json.dumps({"website": "https://saxanddj.ie", "email": "info@audionetworks.ie", "phone": "+35312013660", "_method": "published_email", "_checked": "2026-05-28", "note": "Audionetworks group, Bray Co. Wicklow."}),
+     json.dumps({"package_price": 850, "currency": "EUR", "note": "Live sax + DJ combo; sound + lights, 10pm–2am.", "_indicative": True}),
+     json.dumps({"styles": ["sax+dj", "live-electronic", "party"]})),
 
     # ---- CAKE ----
     ("sup_cake_template_dublin", "Dublin Wedding Cake Studio", "cake", "Dublin",
