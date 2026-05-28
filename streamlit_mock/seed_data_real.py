@@ -46,19 +46,19 @@ venues = [
     # ---- LUXURY CASTLE / COUNTRY HOUSE (top tier) ----
     ("venue_adare_manor", "Adare Manor", "Adare, Co. Limerick", "Limerick",
      "country_house", 100, 350, 1, 1,
-     json.dumps({"website": "https://www.adaremanor.com", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.adaremanor.com", "email": None, "phone": "+35361605200", "enquiry_url": "https://www.adaremanor.com/weddings/weddings-enquiry/", "_method": "contact_form", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 250, "currency": "EUR", "min_spend": None,
                  "note": "5-star resort, 840 acres, Grand Ballroom to 350, Michelin restaurant. Ultra-luxury tier.", "_indicative": True})),
 
     ("venue_ashford_castle", "Ashford Castle", "Cong, Co. Mayo", "Mayo",
      "country_house", 20, 120, 1, 1,
-     json.dumps({"website": "https://www.ashfordcastle.com", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.ashfordcastle.com", "email": None, "phone": "+353949546003", "enquiry_url": "https://www.ashfordcastle.com/weddings/", "_method": "contact_form", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 240, "currency": "EUR", "min_spend": None,
                  "note": "13th-century castle hotel on Lough Corrib. Crown-jewel luxury; intimate-to-mid weddings.", "_indicative": True})),
 
     ("venue_dromoland_castle", "Dromoland Castle", "Newmarket-on-Fergus, Co. Clare", "Clare",
      "country_house", 50, 250, 1, 1,
-     json.dumps({"website": "https://www.dromoland.ie", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.dromoland.ie", "email": "sales@dromoland.ie", "phone": "+35361368144", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 200, "currency": "EUR", "min_spend": None,
                  "note": "16th-century castle estate, 450 acres, golf. High-luxury.", "_indicative": True})),
 
@@ -70,7 +70,7 @@ venues = [
 
     ("venue_castle_leslie", "Castle Leslie Estate", "Glaslough, Co. Monaghan", "Monaghan",
      "country_house", 70, 260, 1, 1,
-     json.dumps({"website": "https://www.castleleslie.com", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.castleleslie.com", "email": "events@castleleslie.com", "phone": "+3534788100", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": 5000, "average_cost_per_head": 120, "currency": "EUR", "min_spend": 18000,
                  "note": "19th-century castle, lakes & woodlands. Peak season ~150 guest min.", "_indicative": True})),
 
