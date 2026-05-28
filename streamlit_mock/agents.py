@@ -922,15 +922,22 @@ def run_supplier_matcher(wedding_id, category, user_id=None, api_key=None, model
         raise e
 
 
-def run_quote_extractor(booking_id, email_text, user_id=None, api_key=None, model_name=None):
+def run_quote_extractor(booking_id, email_text, user_id=None, api_key=None, model_name=None, on_step=None):
     """
     Parses a vendor email reply, extracts structured quote line items, total, and availability.
     Also transitions booking status and flags budget alerts if quote exceeds budget.
+
+    on_step: optional callable(message: str) for live UI progress display.
+             See run_venue_matcher for the contract.
     """
     agent_id = "quote_extractor"
     model = model_name or model_for(agent_id)
     decision_id = str(uuid.uuid4())
     start_time = time.time()
+
+    def _step(msg):
+        if on_step:
+            on_step(msg)
     
     system_instruction = (
         "You are a helpful Irish wedding coordinator agent called quote_extractor. Your job is to extract structured "
@@ -1000,6 +1007,11 @@ def run_quote_extractor(booking_id, email_text, user_id=None, api_key=None, mode
         budget_row = cursor.fetchone()
         allocated_amount = dict(budget_row)["allocated_amount"] if budget_row else 0.0
 
+        _step(
+            f"Reading reply from {vendor_name} ({category}) · "
+            f"{len(email_text):,} chars · €{allocated_amount:,.0f} allocated"
+        )
+
         input_payload = {
             "booking_id": booking_id,
             "vendor_name": vendor_name,
@@ -1009,7 +1021,8 @@ def run_quote_extractor(booking_id, email_text, user_id=None, api_key=None, mode
         }
 
         client = get_client(api_key)
-        
+
+        _step(f"Asking Gemini ({model}) to extract line items, total, and availability...")
         response = client.models.generate_content(
             model=model,
             contents=email_text,
@@ -1022,37 +1035,52 @@ def run_quote_extractor(booking_id, email_text, user_id=None, api_key=None, mode
         )
         
         result_dict = json.loads(response.text)
-        
+
         latency = int((time.time() - start_time) * 1000)
         tokens_in = response.usage_metadata.prompt_token_count if response.usage_metadata else 0
         tokens_out = response.usage_metadata.candidates_token_count if response.usage_metadata else 0
-        
+
         external_api_calls = [{
             "provider": "google",
             "model": model,
             "latency_ms": latency,
             "tokens": {"input": tokens_in, "output": tokens_out}
         }]
-        
+
         total_amount = result_dict.get("total_amount", 0.0)
         is_available = result_dict.get("is_available", True)
-        
+        line_items = result_dict.get("line_items", [])
+
+        if is_available:
+            _step(
+                f"Parsed {len(line_items)} line items totalling €{total_amount:,.2f} from {vendor_name} · "
+                f"available on your date"
+            )
+        else:
+            _step(f"{vendor_name} declined: not available on your date · {tokens_out:,} tokens used")
+
         # Write quote details to database
         quote_id = f"q_{uuid.uuid4().hex[:10]}"
-        line_items_json = json.dumps(result_dict.get("line_items", []))
-        
+        line_items_json = json.dumps(line_items)
+
         cursor.execute("""
             INSERT INTO quotes (id, booking_id, line_items, total_amount, currency, status, generated_by_agent_id, rationale_text)
             VALUES (?, ?, ?, ?, ?, 'pending', 'quote_extractor', ?)
         """, (quote_id, booking_id, line_items_json, total_amount, result_dict.get("currency", "EUR"), result_dict.get("rationale_text")))
-        
+
         # Transition Booking Status
         new_booking_status = "quoted" if is_available else "declined"
         cursor.execute("UPDATE bookings SET status = ? WHERE id = ?", (new_booking_status, booking_id))
-        
+
         # 2. Check for Budget Alert (If quote total > allocated budget line)
         budget_alert_log_id = None
         if total_amount > allocated_amount and allocated_amount > 0:
+            over_by = total_amount - allocated_amount
+            over_pct = (over_by / allocated_amount * 100) if allocated_amount else 0
+            _step(
+                f"Budget alert · quote exceeds {category} budget by €{over_by:,.2f} "
+                f"({over_pct:.0f}% over) · chaining budget_monitor decision"
+            )
             budget_alert_log_id = str(uuid.uuid4())
             alert_text = f"Budget alert for category '{category}': quote from {vendor_name} (€{total_amount:,.2f}) exceeds allocated budget (€{allocated_amount:,.2f}) by €{total_amount - allocated_amount:,.2f}."
             cursor.execute("""
@@ -1060,16 +1088,21 @@ def run_quote_extractor(booking_id, email_text, user_id=None, api_key=None, mode
                 VALUES (?, 'budget_monitor', ?, ?, ?, ?, ?, ?, 'parent_decision', 'budget_alert', 'success', ?, ?, ?, ?)
             """, (
                 budget_alert_log_id, model, prompt_version, wedding_id, user_id, booking_id, decision_id,
-                alert_text, 
+                alert_text,
                 json.dumps({"allocated": allocated_amount, "quote_total": total_amount}),
                 json.dumps({"alert_message": alert_text, "category": category}),
                 '[]'
             ))
+        elif is_available and allocated_amount > 0:
+            _step(
+                f"Quote within budget · €{allocated_amount - total_amount:,.2f} remaining in your "
+                f"{category} allocation"
+            )
             
         # Update main quote log
         cursor.execute("""
-            UPDATE agent_decision_logs 
-            SET status = 'success', rationale_summary = ?, 
+            UPDATE agent_decision_logs
+            SET status = 'success', rationale_summary = ?,
                 input_payload = ?, output_payload = ?, confidence_score = ?,
                 latency_ms = ?, tokens_input = ?, tokens_output = ?, external_api_calls = ?
             WHERE id = ?
@@ -1082,7 +1115,12 @@ def run_quote_extractor(booking_id, email_text, user_id=None, api_key=None, mode
             json.dumps(external_api_calls),
             decision_id
         ))
-        
+
+        _step(
+            f"Logged decision `{decision_id[:8]}` with full audit trail · "
+            f"booking status → {new_booking_status}"
+        )
+
         conn.commit()
         conn.close()
         
