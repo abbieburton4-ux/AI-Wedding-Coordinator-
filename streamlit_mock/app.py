@@ -233,70 +233,107 @@ with tab1:
             if not api_key:
                 st.error("Please enter a Gemini API Key in the sidebar first.")
             else:
-                with st.spinner("Processing intake and running agent workflows..."):
-                    try:
+                captured_steps = []
+                wedding_id_for_state = None
+                result = {"status": "init"}
+                try:
+                    with st.status("Setting up your wedding plan...", expanded=True) as status:
                         import hashlib
                         # 1. Compute Idempotency Key to prevent double-click duplicates
                         raw_key = f"{couple_name}_{email}_{budget_total}_{guest_count}_{region}_{ceremony_type}_{wedding_date}_{wedding_date_start}_{wedding_date_end}_{style_notes}"
                         idempotency_key = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
-                        
+
                         conn = db.get_connection()
                         cursor = conn.cursor()
-                        
+
                         # Check if wedding with this key already exists
                         cursor.execute("SELECT id, status, couple_user_id FROM weddings WHERE idempotency_key = ?", (idempotency_key,))
                         existing_wedding = cursor.fetchone()
-                        
+
                         if existing_wedding:
                             wedding_id = existing_wedding[0]
                             wedding_status = existing_wedding[1]
                             user_id = existing_wedding[2]
-                            st.info("Wedding plan already exists. Retrieving existing plan...")
+                            line = "Wedding plan already exists for this profile — retrieving existing plan"
+                            captured_steps.append(line); st.write(line)
                         else:
                             user_id = f"usr_{uuid.uuid4().hex[:8]}"
                             wedding_id = f"wed_{uuid.uuid4().hex[:8]}"
-                            
+
                             cursor.execute("INSERT INTO users (id, role, name, email, phone) VALUES (?, 'couple', ?, ?, ?)", (user_id, couple_name, email, phone))
-                            
+
                             w_date_str = wedding_date.strftime("%Y-%m-%d") if wedding_date else None
                             w_start_str = wedding_date_start.strftime("%Y-%m-%d") if wedding_date_start else None
                             w_end_str = wedding_date_end.strftime("%Y-%m-%d") if wedding_date_end else None
-                            
+
                             cursor.execute("""
                                 INSERT INTO weddings (id, couple_user_id, wedding_date, wedding_date_start, wedding_date_end, region, ceremony_type, guest_count_estimate, budget_total, status, style_notes, idempotency_key)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'intake', ?, ?)
                             """, (wedding_id, user_id, w_date_str, w_start_str, w_end_str, region, ceremony_type, guest_count, budget_total, style_notes, idempotency_key))
                             conn.commit()
                             wedding_status = 'intake'
-                            
+                            line = f"Created account and wedding profile · `{wedding_id}`"
+                            captured_steps.append(line); st.write(line)
+
                         conn.close()
-                        
-                        # Simulate payment success -> status=planning
-                        st.info("Simulating payment of €299.00 coordinator fee succeeded...")
-                        
+                        wedding_id_for_state = wedding_id
+
+                        line = "Payment of €299.00 coordinator fee simulated successfully"
+                        captured_steps.append(line); st.write(line)
+
                         # Only run agent if not already planned (status = 'intake')
                         if wedding_status == 'intake':
-                            result = agents.run_intake_planner(wedding_id, user_id=st.session_state.current_user_id, api_key=api_key)
-                            
+                            def on_step(msg):
+                                captured_steps.append(msg)
+                                st.write(msg)
+
+                            result = agents.run_intake_planner(
+                                wedding_id,
+                                user_id=st.session_state.current_user_id,
+                                api_key=api_key,
+                                on_step=on_step,
+                            )
+
                             if result["status"] == "blocked":
-                                st.error(f"⚠️ **Guardrail Warning**: {result['warning']}")
-                                st.info("The agent blocked plan seeding because the budget is unrealistic. Rationale logged in the audit trail.")
+                                status.update(
+                                    label=f"Plan blocked: {result['warning'][:70]}",
+                                    state="error",
+                                )
                             else:
-                                st.success(f"🎉 Wedding Plan generated successfully!")
-                                st.info(f"Agent Rationale: {result['summary']}")
-                                st.rerun()
+                                status.update(label="Wedding plan ready", state="complete")
                         else:
-                            st.success("🎉 Wedding Plan already generated and planning active!")
-                            st.rerun()
-                            
-                    except Exception as e:
-                        st.error(f"Error executing agent: {e}")
+                            status.update(label="Plan retrieved", state="complete")
+                            result = {"status": "exists", "summary": "Existing plan reused — no new agent run"}
+
+                    # Status block closed. Persist trail for the col2 expander.
+                    if wedding_id_for_state:
+                        st.session_state[f"intake_steps_{wedding_id_for_state}"] = captured_steps
+
+                    if result["status"] == "blocked":
+                        st.info("Adjust your inputs and resubmit, or open Audit Logs to inspect the rationale.")
+                    elif result["status"] == "success":
+                        st.success(f"Agent rationale: {result.get('summary', '')}")
+                        st.rerun()
+                    else:
+                        st.rerun()
+
+                except Exception as e:
+                    st.error(f"Error executing agent: {e}")
                         
     with col2:
         if active_wedding_id:
             w_details = db.get_wedding_details(active_wedding_id)
             st.markdown(f"<h3>Active Wedding: {w_details['couple_name']}</h3>", unsafe_allow_html=True)
-            
+
+            # Reasoning trail from the most recent intake_planner run for this
+            # wedding — preserved across the st.rerun() that follows a successful
+            # plan generation, so the couple can re-read what the AI did.
+            intake_steps_key = f"intake_steps_{active_wedding_id}"
+            if intake_steps_key in st.session_state and st.session_state[intake_steps_key]:
+                with st.expander("How the AI built this plan", expanded=False):
+                    for step in st.session_state[intake_steps_key]:
+                        st.markdown(f"- {step}")
+
             c_date = w_details['wedding_date'] or f"TBD ({w_details['wedding_date_start']} to {w_details['wedding_date_end']})"
             
             # Show summary stats
