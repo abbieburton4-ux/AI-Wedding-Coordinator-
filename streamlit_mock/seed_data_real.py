@@ -64,7 +64,7 @@ venues = [
 
     ("venue_luttrellstown", "Luttrellstown Castle Resort", "Clonsilla, Dublin 15", "Dublin",
      "country_house", 20, 180, 1, 1,
-     json.dumps({"website": "https://www.luttrellstowncastle.com", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.luttrellstowncastle.com", "email": None, "phone": "+35318609600", "enquiry_url": "https://www.luttrellstowncastle.com/weddings/", "_method": "contact_form", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 185, "currency": "EUR", "min_spend": None,
                  "note": "15th-century exclusive-use estate just outside Dublin; 20 intimate to 180 grand.", "_indicative": True})),
 
@@ -76,7 +76,7 @@ venues = [
 
     ("venue_kilkea_castle", "Kilkea Castle", "Castledermot, Co. Kildare", "Kildare",
      "country_house", 40, 270, 1, 1,
-     json.dumps({"website": "https://www.kilkeacastle.ie", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.kilkeacastle.ie", "email": "events@kilkeacastle.ie", "phone": "+353599145600", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 140, "currency": "EUR", "min_spend": None,
                  "note": "800+ yrs hosting; Baronial Hall to 270, Hermione's 120, Restaurant 1180 to 60.", "_indicative": True})),
 
@@ -100,7 +100,7 @@ venues = [
 
     ("venue_virginia_park", "Virginia Park Lodge", "Virginia, Co. Cavan", "Cavan",
      "country_house", 40, 150, 1, 1,
-     json.dumps({"website": "https://www.virginiaparklodge.com", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.virginiaparklodge.com", "email": "info@virginiaparklodge.com", "phone": "+353498546100", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 145, "currency": "EUR", "min_spend": None,
                  "note": "Period hunting lodge on 100 acres; food-led, relaxed-luxury.", "_indicative": True})),
 
@@ -126,32 +126,32 @@ venues = [
     # ---- FARM / BARN / ALTERNATIVE ----
     ("venue_ballymagarvey", "Ballymagarvey Village", "Balrath, Co. Meath", "Meath",
      "farm", 50, 220, 1, 1,
-     json.dumps({"website": "https://www.ballymagarvey.ie", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.ballymagarvey.ie", "email": "info@ballymagarvey.ie", "phone": "+353419825959", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 110, "currency": "EUR", "min_spend": None,
                  "note": "Restored 800-yr 'village' around a courtyard; exclusive use; barn + banqueting hall.", "_indicative": True})),
 
     ("venue_cloughjordan", "Cloughjordan House", "Cloughjordan, Co. Tipperary", "Tipperary",
      "farm", 60, 220, 1, 1,
-     json.dumps({"website": "https://www.cloughjordanhouse.com", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.cloughjordanhouse.com", "email": "info@cloughjordanhouse.com", "phone": "+353879690824", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 100, "currency": "EUR", "min_spend": None,
                  "note": "Family-run country house, farm-to-table, sustainability-led, informal.", "_indicative": True})),
 
     ("venue_mount_druid", "Mount Druid", "Castletown Geoghegan, Co. Westmeath", "Westmeath",
      "farm", 50, 220, 1, 1,
-     json.dumps({"website": "https://mountdruid.ie", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://mountdruid.ie", "email": "hello@mountdruid.ie", "phone": "+353449226679", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 90, "currency": "EUR", "min_spend": None,
                  "note": "Alternative/eco venue, 100 acres; Tin Chapel + Barn + Boathouse; organic, quirky.", "_indicative": True})),
 
     ("venue_millhouse", "The Millhouse Slane", "Slane, Co. Meath", "Meath",
      "farm", 80, 200, 1, 1,
-     json.dumps({"website": "https://www.themillhouse.ie", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.themillhouse.ie", "email": "information@themillhouse.ie", "phone": "+353419820878", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": 3500, "average_cost_per_head": 95, "currency": "EUR", "min_spend": 12000,
                  "note": "Industrial heritage mill on the River Boyne; bohemian atmosphere.", "_indicative": True})),
 
     # ---- RESTAURANT (micro-wedding) ----
     ("venue_aniar", "Aniar Restaurant", "Lower Dominick St, Galway City, Co. Galway", "Galway",
      "restaurant", 10, 45, 2, 0,
-     json.dumps({"website": "https://www.aniarrestaurant.ie", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.aniarrestaurant.ie", "email": "food@aniarrestaurant.ie", "phone": "+35391535947", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": 1000, "average_cost_per_head": 150, "currency": "EUR", "min_spend": 4000,
                  "note": "Michelin-star tasting-menu micro-weddings; max ~45 guests.", "_indicative": True})),
 
