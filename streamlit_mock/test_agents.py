@@ -638,6 +638,93 @@ def test_venue_matcher_emits_progress_steps_on_success(mock_client, capsys):
     assert "logged decision" in joined, "missing audit-log confirmation step"
 
 
+def test_quote_extractor_emits_progress_steps_under_budget(mock_client, capsys):
+    """quote_extractor narrates the reply read, Gemini call, the
+    'within budget' confirmation (since extracted total is below the
+    booking's category allocation), and the audit-log write."""
+    # booking_photo_test → wedding_planning_test, photography category, seeded
+    # budget_line allocates €4,000 to photography. €2,500 quote stays under.
+    mock_response_data = {
+        "is_available": True,
+        "line_items": [
+            {"item": "Full-day coverage", "description": "10h", "amount": 2000.0},
+            {"item": "Edited album", "description": "100 photos", "amount": 500.0},
+        ],
+        "total_amount": 2500.0,
+        "currency": "EUR",
+        "rationale_text": "Standard package, within market rates.",
+        "confidence_score": 0.93,
+    }
+    mock_client.models.generate_content.return_value = MockResponse(
+        json.dumps(mock_response_data), prompt_tokens=600, output_tokens=1100,
+    )
+
+    captured = []
+    res = agents.run_quote_extractor(
+        "booking_photo_test",
+        "Hi Clara, my fee is €2,500 total. Available on your date.",
+        user_id="planner_1",
+        on_step=lambda msg: captured.append(msg),
+    )
+    assert res["status"] == "success"
+    assert not res["budget_warning"]
+
+    print("\n--- quote_extractor live-reasoning trail (under-budget) ---")
+    for i, line in enumerate(captured, 1):
+        print(f"  {i}. {line}")
+    print("--- end ---\n")
+
+    assert len(captured) >= 4
+    joined = " | ".join(captured).lower()
+    assert "reading reply" in joined and "photography" in joined, "step 1 should name vendor + category"
+    assert "asking gemini" in joined, "missing pre-LLM step"
+    assert "parsed" in joined and "line items" in joined and "available" in joined, (
+        "missing post-LLM extraction summary"
+    )
+    assert "within budget" in joined, "under-budget case should surface 'within budget' explicitly"
+    assert "logged decision" in joined and "quoted" in joined, (
+        "missing audit-log step with booking status transition"
+    )
+
+
+def test_quote_extractor_emits_budget_alert_step_on_over_budget(mock_client):
+    """When the extracted total exceeds the booking's category allocation,
+    the on_step callback must surface the over-budget delta and percentage.
+    This is the planner-facing moment that justifies the agent layer's
+    existence — AI did arithmetic against the wedding's budget and flagged
+    a real number."""
+    # €5,000 quote against €4,000 photography allocation → 25% over.
+    mock_response_data = {
+        "is_available": True,
+        "line_items": [
+            {"item": "Luxury package", "description": "All-in", "amount": 5000.0},
+        ],
+        "total_amount": 5000.0,
+        "currency": "EUR",
+        "rationale_text": "Premium tier with album + engagement shoot.",
+        "confidence_score": 0.91,
+    }
+    mock_client.models.generate_content.return_value = MockResponse(json.dumps(mock_response_data))
+
+    captured = []
+    res = agents.run_quote_extractor(
+        "booking_photo_test",
+        "Hi Clara, luxury package is €5,000.",
+        user_id="planner_1",
+        on_step=lambda msg: captured.append(msg),
+    )
+    assert res["status"] == "success"
+    assert res["budget_warning"] is True
+
+    alert_line = next((line for line in captured if "budget alert" in line.lower()), None)
+    assert alert_line is not None, f"Expected a 'Budget alert' step. Got: {captured}"
+    # Surface the actual over-by amount and percentage in the narration.
+    assert "1,000" in alert_line or "exceeds" in alert_line.lower(), (
+        "Budget alert step should name the over-by amount (€1,000 = 25% over €4,000)"
+    )
+    assert "25%" in alert_line or "%" in alert_line, "Should include over-budget percentage"
+
+
 def test_supplier_matcher_emits_progress_steps_on_success(mock_client, capsys):
     """supplier_matcher narrates: category + region + budget, candidate count
     breakdown, Gemini call, response stats, audit-log confirmation. The
