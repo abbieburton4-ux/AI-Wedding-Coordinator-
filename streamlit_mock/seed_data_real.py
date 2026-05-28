@@ -82,19 +82,19 @@ venues = [
 
     ("venue_markree_castle", "Markree Castle", "Collooney, Co. Sligo", "Sligo",
      "country_house", 50, 190, 1, 1,
-     json.dumps({"website": "https://www.markreecastle.ie", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.markreecastle.ie", "email": "info@markreecastle.ie", "phone": "+353719167800", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": 4000, "average_cost_per_head": 110, "currency": "EUR", "min_spend": 14000,
                  "note": "Exclusive-hire Gothic castle, private chapel, gardens.", "_indicative": True})),
 
     ("venue_lough_eske", "Lough Eske Castle", "Donegal Town, Co. Donegal", "Donegal",
      "country_house", 60, 200, 1, 1,
-     json.dumps({"website": "https://www.lougheskecastlehotel.com", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.lougheskecastlehotel.com", "email": "sales@lougheskecastlehotel.com", "phone": "+353749725100", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 110, "currency": "EUR", "min_spend": None,
                  "note": "5-star castle hotel; published packages ~€95–€119pp (120 guests).", "_indicative": True})),
 
     ("venue_tankardstown", "Tankardstown House", "Slane, Co. Meath", "Meath",
      "country_house", 50, 230, 1, 1,
-     json.dumps({"website": "https://www.tankardstown.ie", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.tankardstown.ie", "email": "info@tankardstown.ie", "phone": "+353419824621", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 150, "currency": "EUR", "min_spend": None,
                  "note": "18th-c country house, 40 min from Dublin. Orangery to 230 + walled-garden ceremony.", "_indicative": True})),
 
@@ -105,21 +105,21 @@ venues = [
                  "note": "Period hunting lodge on 100 acres; food-led, relaxed-luxury.", "_indicative": True})),
 
     # ---- HOTELS ----
-    ("venue_marker_hotel", "The Marker Hotel", "Grand Canal Square, Dublin 2", "Dublin",
+    ("venue_marker_hotel", "Anantara The Marker Dublin Hotel", "Grand Canal Square, Docklands, Dublin 2", "Dublin",
      "hotel", 60, 220, 2, 1,
-     json.dumps({"website": "https://www.themarkerhoteldublin.com", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.themarkerhoteldublin.com", "email": "info.themarker@anantara-hotels.com", "phone": "+35316875100", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 125, "currency": "EUR", "min_spend": None,
-                 "note": "5-star design hotel, Docklands. Packages from ~€125pp.", "_indicative": True})),
+                 "note": "5-star design hotel, Docklands (now Anantara-managed). Packages from ~€125pp.", "_indicative": True})),
 
     ("venue_slieve_donard", "Slieve Donard Resort & Spa", "Newcastle, Co. Down", "Down",
      "hotel", 80, 350, 1, 1,
-     json.dumps({"website": "https://www.marineandlawn.com/slieve-donard", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://marineandlawn.com/slievedonard/", "email": "sales@slievedonard.co.uk", "phone": "+442843721066", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 95, "currency": "GBP", "min_spend": None,
                  "note": "NI seaside resort, Mourne Mountains. Published from ~£82pp Sun–Thu.", "_indicative": True})),
 
     ("venue_hotel_doolin", "Hotel Doolin", "Doolin, Co. Clare", "Clare",
      "hotel", 60, 300, 1, 1,
-     json.dumps({"website": "https://www.hoteldoolin.ie", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.hoteldoolin.ie", "email": "info@hoteldoolin.ie", "phone": "+353657074111", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": 3000, "average_cost_per_head": 85, "currency": "EUR", "min_spend": 10000,
                  "note": "Eco-friendly, barn-style, near Cliffs of Moher; strong local seafood menu.", "_indicative": True})),
 
@@ -154,6 +154,39 @@ venues = [
      json.dumps({"website": "https://www.aniarrestaurant.ie", "email": "food@aniarrestaurant.ie", "phone": "+35391535947", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": 1000, "average_cost_per_head": 150, "currency": "EUR", "min_spend": 4000,
                  "note": "Michelin-star tasting-menu micro-weddings; max ~45 guests.", "_indicative": True})),
+
+    # ---- CO. WICKLOW (contacts founder-verified 2026-05-28) ----
+    # email + phone read off each venue's own site by the founder. website is
+    # the verified email domain root (homepage not independently re-fetched).
+    ("venue_brooklodge", "BrookLodge & Macreddin Village", "Macreddin Village, Co. Wicklow, Y14 A362", "Wicklow",
+     "hotel", 40, 200, 1, 1,
+     json.dumps({"website": "https://www.brooklodge.com", "email": "info@brooklodge.com", "phone": "+35340236444", "_method": "published_email", "_checked": "2026-05-28"}),
+     json.dumps({"rental_fee": None, "average_cost_per_head": 130, "currency": "EUR", "min_spend": None,
+                 "note": "Destination spa resort + village; The Strawberry Tree organic restaurant.", "_indicative": True})),
+
+    ("venue_killruddery", "Killruddery House", "Southern Cross Rd, Bray, Co. Wicklow", "Wicklow",
+     "country_house", 60, 250, 1, 0,
+     json.dumps({"website": "https://www.killruddery.com", "email": "info@killruddery.com", "phone": "+35312863405", "_method": "published_email", "_checked": "2026-05-28"}),
+     json.dumps({"rental_fee": None, "average_cost_per_head": 150, "currency": "EUR", "min_spend": None,
+                 "note": "17th-century estate; formal gardens, Orangery + marquee weddings.", "_indicative": True})),
+
+    ("venue_druids_glen", "Druids Glen Hotel & Golf Resort", "Newtownmountkennedy, Co. Wicklow", "Wicklow",
+     "hotel", 60, 300, 1, 1,
+     json.dumps({"website": "https://www.druidsglenresort.com", "email": "reservations@druidsglenresort.com", "phone": "+35312870800", "_method": "published_email", "_checked": "2026-05-28"}),
+     json.dumps({"rental_fee": None, "average_cost_per_head": 120, "currency": "EUR", "min_spend": None,
+                 "note": "5-star golf resort hotel in the Wicklow hills.", "_indicative": True})),
+
+    ("venue_powerscourt_hotel", "Powerscourt Hotel", "Powerscourt Estate, Enniskerry, Co. Wicklow, A98 DR12", "Wicklow",
+     "hotel", 80, 300, 1, 1,
+     json.dumps({"website": "https://www.powerscourthotel.com", "email": "info@powerscourthotel.com", "phone": "+35312748888", "_method": "published_email", "_checked": "2026-05-28"}),
+     json.dumps({"rental_fee": None, "average_cost_per_head": 175, "currency": "EUR", "min_spend": None,
+                 "note": "5-star Autograph Collection hotel on the Powerscourt Estate; Sugar Loaf views.", "_indicative": True})),
+
+    ("venue_wicklow_heather", "The Wicklow Heather", "Laragh, Glendalough, Co. Wicklow, A98 D983", "Wicklow",
+     "restaurant", 10, 70, 2, 0,
+     json.dumps({"website": "https://www.wicklowheather.ie", "email": "bookings@wicklowheather.ie", "phone": "+35340445157", "_method": "published_email", "_checked": "2026-05-28"}),
+     json.dumps({"rental_fee": None, "average_cost_per_head": 55, "currency": "EUR", "min_spend": None,
+                 "note": "Restaurant near Glendalough; intimate private-dining weddings.", "_indicative": True})),
 
     # ---- BUDGET: GAA CLUB / COMMUNITY HALL ----
     # NOTE: GAA clubs & community halls rarely publish wedding-enquiry contacts.
