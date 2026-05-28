@@ -461,13 +461,40 @@ with tab2:
                     if not api_key:
                         st.error("Configure Gemini API Key first.")
                     else:
-                        with st.spinner(f"Matching {supplier_cat} options..."):
-                            res = agents.run_supplier_matcher(active_wedding_id, supplier_cat, user_id=st.session_state.current_user_id, api_key=api_key)
+                        captured_steps = []
+                        with st.status(
+                            f"AI coordinator sourcing {supplier_cat}...",
+                            expanded=True,
+                        ) as status:
+                            def on_step(msg):
+                                captured_steps.append(msg)
+                                st.write(msg)
+
+                            res = agents.run_supplier_matcher(
+                                active_wedding_id,
+                                supplier_cat,
+                                user_id=st.session_state.current_user_id,
+                                api_key=api_key,
+                                on_step=on_step,
+                            )
+
                             if res["status"] == "blocked":
-                                st.warning(f"⚠️ Supplier Matcher Blocked: {res['warning']}")
+                                status.update(
+                                    label=f"Blocked: {res['warning'][:70]}",
+                                    state="error",
+                                )
                             else:
-                                st.success(f"Matched {supplier_cat} suppliers successfully!")
-                                st.rerun()
+                                status.update(
+                                    label=f"Matched {len(res['shortlist'])} {supplier_cat} suppliers",
+                                    state="complete",
+                                )
+
+                        # Share session-state key with venue_matcher so the right-
+                        # column expander shows the most recent reasoning trail
+                        # regardless of which matcher ran last.
+                        st.session_state[f"matcher_steps_{active_wedding_id}"] = captured_steps
+                        if res["status"] == "success":
+                            st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
                 
             with s_col2:
