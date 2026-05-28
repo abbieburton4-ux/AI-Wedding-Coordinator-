@@ -85,7 +85,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full local dev guide.
 
 ## 8 · The Team
 
-- **Alan Maizon** — founder/product. Distribution, planner outreach, pilot operations, narrative.
+- **Alan** — founder/product. Distribution, planner outreach, pilot operations, narrative.
 - **Atharva** — ML engineer. Agent layer, Gemini integration, guardrails, decision logs.
 
 ## 9 · Documentation
