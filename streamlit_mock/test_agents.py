@@ -638,6 +638,78 @@ def test_venue_matcher_emits_progress_steps_on_success(mock_client, capsys):
     assert "logged decision" in joined, "missing audit-log confirmation step"
 
 
+def test_supplier_matcher_emits_progress_steps_on_success(mock_client, capsys):
+    """supplier_matcher narrates: category + region + budget, candidate count
+    breakdown, Gemini call, response stats, audit-log confirmation. The
+    category appears in step 1 so the user sees the AI registered what
+    they're looking for."""
+    mock_response_data = {
+        "shortlist": [
+            {
+                "vendor_id": "sup_moathill_photo",
+                "rank": 1,
+                "matching_rationale": "Documentary style, Galway-based",
+                "draft_inquiry_email": "Hi Paul...",
+            }
+        ],
+        "rationale_summary": "Picked Moat Hill",
+        "confidence_score": 0.88,
+    }
+    mock_client.models.generate_content.return_value = MockResponse(
+        json.dumps(mock_response_data), prompt_tokens=900, output_tokens=1800,
+    )
+
+    captured = []
+    res = agents.run_supplier_matcher(
+        "wedding_intake_test",
+        "photography",
+        user_id="planner_1",
+        on_step=lambda msg: captured.append(msg),
+    )
+    assert res["status"] == "success"
+
+    print("\n--- supplier_matcher live-reasoning trail ---")
+    for i, line in enumerate(captured, 1):
+        print(f"  {i}. {line}")
+    print("--- end ---\n")
+
+    assert len(captured) >= 5
+    joined = " | ".join(captured).lower()
+    assert "sourcing photography" in joined, "step 1 should name the category"
+    assert "sligo" in joined, "step 1 should name the preferred region"
+    assert "suppliers" in joined and "in sligo" in joined, "step 2 should show the in-region count"
+    assert "asking gemini" in joined, "missing pre-LLM step"
+    assert "tokens" in joined and "confidence" in joined, "missing post-LLM stats"
+    assert "logged decision" in joined, "missing audit-log confirmation"
+
+
+def test_supplier_matcher_emits_blocked_step_on_hallucination(mock_client):
+    """When supplier_matcher detects a hallucinated supplier_id, the on_step
+    callback must name the offending id so the user sees WHY the run stopped."""
+    mock_response_data = {
+        "shortlist": [
+            {"vendor_id": "sup_imaginary_photo", "rank": 1,
+             "matching_rationale": "fake", "draft_inquiry_email": "..."},
+        ],
+        "rationale_summary": "Hallucinated",
+        "confidence_score": 0.4,
+    }
+    mock_client.models.generate_content.return_value = MockResponse(json.dumps(mock_response_data))
+
+    captured = []
+    res = agents.run_supplier_matcher(
+        "wedding_intake_test",
+        "photography",
+        user_id="planner_1",
+        on_step=lambda msg: captured.append(msg),
+    )
+    assert res["status"] == "blocked"
+
+    blocked_line = next((line for line in captured if "blocked" in line.lower()), None)
+    assert blocked_line is not None, f"Expected a 'Blocked' step. Got: {captured}"
+    assert "sup_imaginary_photo" in blocked_line, "Hallucinated id must be named in the narration"
+
+
 def test_intake_planner_emits_progress_steps_on_success(mock_client, capsys):
     """intake_planner narrates: profile read, Gemini call, response stats,
     success summary (budget categories + timeline), audit-log write."""
