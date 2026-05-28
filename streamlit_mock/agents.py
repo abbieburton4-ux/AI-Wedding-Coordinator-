@@ -85,6 +85,51 @@ def get_prompt_version(system_instruction: str) -> str:
     return f"v1.0-{sha}"
 
 
+# Where agent-drafted inquiries actually go during the pilot. Override via env
+# in production. Default routes to a founder-controlled inbox so no real venue
+# is ever emailed by the system until it has explicitly opted in.
+PILOT_INQUIRY_INBOX = os.environ.get("PILOT_INQUIRY_INBOX", "founders@venueflow.ie")
+
+
+def resolve_inquiry_recipient(contact_info, *, pilot_mode=True):
+    """Decide where an agent-drafted inquiry should actually be sent.
+
+    The seed data contains real Irish venues. The agents draft real inquiry
+    emails. The two must not meet during the pilot: a test/QA run must never
+    fire an AI-drafted inquiry about a non-existent wedding into Adare Manor's
+    real weddings inbox. The Irish wedding industry is small and reputational —
+    these venues are the allies a planner-facing product needs.
+
+    Guard rule: in pilot_mode (default), EVERY inquiry routes to the founder
+    inbox regardless of whether we hold a confirmed venue address. "Confirmed
+    real" (the venue publishes an email) is NOT "contactable" (the venue agreed
+    to be in our pilot). A founder reviews each drafted inquiry and forwards it
+    by hand only when there is a real couple with real intent and the venue has
+    opted in.
+
+    Returns (recipient_email, routing_note). recipient_email is always a
+    send-safe address; routing_note explains the decision for the audit log
+    and the UI.
+    """
+    info = contact_info
+    if isinstance(contact_info, str):
+        try:
+            info = json.loads(contact_info)
+        except (json.JSONDecodeError, TypeError):
+            info = {}
+    info = info or {}
+
+    venue_email = info.get("email")
+    confirmed = bool(venue_email) and not info.get("_verify", False)
+
+    if pilot_mode:
+        intended = venue_email if confirmed else "no confirmed address"
+        return PILOT_INQUIRY_INBOX, f"pilot mode → founder inbox (intended: {intended})"
+    if confirmed:
+        return venue_email, "live → confirmed venue email"
+    return PILOT_INQUIRY_INBOX, "live but address unconfirmed → founder inbox for manual handling"
+
+
 def _assert_wedding_exists(conn, cursor, wedding_id):
     """Raise ValueError immediately if the wedding doesn't exist, before any
     audit log row is opened. Mirrors the pattern quote_extractor uses for

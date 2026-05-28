@@ -539,18 +539,31 @@ with tab2:
                                             db.update_booking_status(bk["id"], "inquired")
                                             conn = db.get_connection()
                                             cursor = conn.cursor()
+                                            # Pilot contactability guard: resolve where this
+                                            # inquiry would actually go. Real venues are never
+                                            # emailed by the system until they opt in — the
+                                            # guard routes everything to the founder inbox.
+                                            if is_venue:
+                                                cursor.execute("SELECT contact_info FROM venues WHERE id = ?", (bk["venue_id"],))
+                                            else:
+                                                cursor.execute("SELECT contact_info FROM suppliers WHERE id = ?", (bk["supplier_id"],))
+                                            ci_row = cursor.fetchone()
+                                            recipient, routing_note = agents.resolve_inquiry_recipient(
+                                                ci_row["contact_info"] if ci_row else None
+                                            )
                                             agents.log_user_action(
                                                 cursor,
                                                 wedding_id=active_wedding_id,
                                                 booking_id=bk["id"],
                                                 decision_type="inquiry_send",
-                                                rationale_summary=f"Sent inquiry email to {vendor_name}.",
+                                                rationale_summary=f"Inquiry to {vendor_name} routed to {recipient} — {routing_note}",
                                                 parent_decision_id=matching_log["id"],
                                                 user_id=st.session_state.current_user_id,
                                             )
                                             conn.commit()
                                             conn.close()
-                                            st.success("Inquiry marked as sent!")
+                                            st.success(f"Inquiry queued → {recipient}")
+                                            st.caption(f"Pilot guard: {routing_note}")
                                             st.rerun()
                                     with sc2:
                                         if st.button("Decline & Override Option", key=f"dec_{bk['id']}"):

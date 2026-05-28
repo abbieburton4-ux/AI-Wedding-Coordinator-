@@ -171,17 +171,19 @@ def test_venue_matcher_hallucination_block(mock_client):
 
 def test_matcher_idempotency(mock_client):
     """Verifies that running the venue matcher twice does not insert duplicate booking records."""
-    # Mock valid venue list response
+    # Mock valid venue list response. Markree Castle is in Sligo, so it is
+    # in-region for wedding_intake_test (Sligo) and always survives the
+    # pre-filter regardless of seed size.
     mock_response_data = {
         "shortlist": [
             {
-                "vendor_id": "venue_castle_leslie",
+                "vendor_id": "venue_markree_castle",
                 "rank": 1,
-                "matching_rationale": "Matches Leinster region capacity",
-                "draft_inquiry_email": "Inquiry Leslie"
+                "matching_rationale": "Matches Sligo region + capacity",
+                "draft_inquiry_email": "Inquiry Markree"
             }
         ],
-        "rationale_summary": "Matched Castle Leslie",
+        "rationale_summary": "Matched Markree Castle",
         "confidence_score": 0.95
     }
     mock_client.models.generate_content.return_value = MockResponse(json.dumps(mock_response_data))
@@ -358,11 +360,11 @@ def test_venue_matcher_leinster_selection_includes_meath_venues(mock_client):
     venue_names = {v["name"] for v in payload["available_venues"]}
     venue_regions = {v["region"] for v in payload["available_venues"]}
 
-    # Millhouse Slane (Meath) and Tullamore GAA (Leinster) should both be
-    # in the in-region candidates because expand_region("Leinster") covers
-    # Meath, Offaly, etc.
+    # The Millhouse Slane and Tankardstown House are both in Co. Meath, which
+    # is a constituent county of Leinster. Both must surface for a "Leinster"
+    # selection because expand_region("Leinster") covers Meath, Kildare, etc.
     assert "The Millhouse Slane" in venue_names, f"Got {venue_names}"
-    assert "Tullamore GAA Clubhouse Hall" in venue_names
+    assert "Tankardstown House" in venue_names, f"Got {venue_names}"
 
     # And the region-match count reflects the hierarchy (>= 2)
     assert payload["wedding_profile"]["venues_matching_region_count"] >= 2
@@ -372,8 +374,10 @@ def test_venue_matcher_leinster_selection_includes_meath_venues(mock_client):
 # 7. TEST QUOTE_EXTRACT PARENT CHAIN
 # ==========================================
 
-def _set_matcher_response(mock_client, vendor_id="venue_castle_leslie"):
-    """Mock helper: set Gemini's next response to a minimal valid matcher result."""
+def _set_matcher_response(mock_client, vendor_id="venue_markree_castle"):
+    """Mock helper: set Gemini's next response to a minimal valid matcher result.
+    Defaults to Markree Castle (Sligo) — in-region for wedding_intake_test so it
+    always survives the pre-filter regardless of how many venues are seeded."""
     mock_client.models.generate_content.return_value = MockResponse(json.dumps({
         "shortlist": [{
             "vendor_id": vendor_id,
@@ -599,10 +603,10 @@ def test_venue_matcher_emits_progress_steps_on_success(mock_client, capsys):
     mock_response_data = {
         "shortlist": [
             {
-                "vendor_id": "venue_castle_leslie",
+                "vendor_id": "venue_markree_castle",
                 "rank": 1,
-                "matching_rationale": "Connacht fallback - exclusive country house",
-                "draft_inquiry_email": "Dear Castle Leslie...",
+                "matching_rationale": "In-region Sligo Gothic castle, fits 100 guests",
+                "draft_inquiry_email": "Dear Markree...",
             }
         ],
         "rationale_summary": "Picked Castle Leslie",
@@ -636,6 +640,50 @@ def test_venue_matcher_emits_progress_steps_on_success(mock_client, capsys):
     assert "asking gemini" in joined, "missing pre-LLM step"
     assert "tokens" in joined and "confidence" in joined, "missing post-LLM stats step"
     assert "logged decision" in joined, "missing audit-log confirmation step"
+
+
+# ==========================================
+# PILOT CONTACTABILITY GUARD
+# ==========================================
+
+def test_inquiry_guard_pilot_mode_always_routes_to_founder_inbox():
+    """Pilot guard: even when we hold a CONFIRMED venue email, pilot mode must
+    route to the founder inbox. The system never emails a real venue until it
+    opts in — 'confirmed real' is not 'contactable'."""
+    confirmed = json.dumps({"website": "x", "email": "real@venue.ie"})  # no _verify → confirmed
+    recipient, note = agents.resolve_inquiry_recipient(confirmed)  # pilot_mode defaults True
+    assert recipient == agents.PILOT_INQUIRY_INBOX
+    assert "pilot mode" in note.lower()
+    # The intended real address is surfaced for the audit trail.
+    assert "real@venue.ie" in note
+
+
+def test_inquiry_guard_verify_flag_blocks_populated_email():
+    """The exact failure mode from the seed reconciliation: a populated email
+    flagged _verify:true is NOT confirmed. Even in live mode it must route to
+    the founder inbox, never to the guessed address."""
+    guessed = json.dumps({"website": "x", "email": "weddings@adaremanor.com", "_verify": True})
+    recipient, note = agents.resolve_inquiry_recipient(guessed, pilot_mode=False)
+    assert recipient == agents.PILOT_INQUIRY_INBOX, (
+        "A _verify:true email must never be used as a real recipient"
+    )
+    assert "unconfirmed" in note.lower()
+
+
+def test_inquiry_guard_live_mode_uses_confirmed_email():
+    """In live mode, a confirmed address (present + no _verify) is the recipient."""
+    confirmed = json.dumps({"email": "events@confirmed.ie"})
+    recipient, note = agents.resolve_inquiry_recipient(confirmed, pilot_mode=False)
+    assert recipient == "events@confirmed.ie"
+    assert "confirmed" in note.lower()
+
+
+def test_inquiry_guard_handles_null_and_malformed_contact_info():
+    """None, empty, and unparseable contact_info must not crash — they route
+    to the founder inbox like any other unconfirmed contact."""
+    for bad in (None, "", "{not json", json.dumps({"website": "x"})):
+        recipient, note = agents.resolve_inquiry_recipient(bad)
+        assert recipient == agents.PILOT_INQUIRY_INBOX
 
 
 def test_quote_extractor_emits_progress_steps_under_budget(mock_client, capsys):
@@ -733,10 +781,10 @@ def test_supplier_matcher_emits_progress_steps_on_success(mock_client, capsys):
     mock_response_data = {
         "shortlist": [
             {
-                "vendor_id": "sup_moathill_photo",
+                "vendor_id": "sup_dasha_caffrey",
                 "rank": 1,
-                "matching_rationale": "Documentary style, Galway-based",
-                "draft_inquiry_email": "Hi Paul...",
+                "matching_rationale": "Documentary style, Dublin-based, nationwide",
+                "draft_inquiry_email": "Hi Dasha...",
             }
         ],
         "rationale_summary": "Picked Moat Hill",
