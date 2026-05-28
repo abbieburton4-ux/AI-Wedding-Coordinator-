@@ -4,13 +4,44 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Layout
 
-This repo currently contains only the marketing/landing frontend plus product strategy docs. There is **no backend yet** — the data model in [docs/ERD.md](docs/ERD.md) (Users, Venues, Events, Bookings, Quotes, Contracts, Payments, Suppliers, `AgentDecisionLog`, Availability) describes the planned MVP, not implemented code. Don't reference it as if it exists.
+This repo contains a Vite + React frontend, a FastAPI backend, plus product strategy docs. The data model in [docs/ERD.md](docs/ERD.md) is implemented using SQLModel (supporting SQLite/PostgreSQL) in the backend.
 
-- [frontend/](frontend/) — Vite + React 18 + TypeScript marketing site (Landing + Experience views). Originally exported from a Figma Make file.
-- [docs/](docs/) — [ERD.md](docs/ERD.md) (planned data model), [user-stories.md](docs/user-stories.md) (P0/P1/P2 MVP scope), and [architecture.md](docs/architecture.md) (planned service map, agent layer, key flows).
-- [README.md](README.md) — strategic memo for the Build with Gemini XPRIZE submission. Read this before making product/positioning suggestions; it's load-bearing context, not background reading.
+- [backend/](backend/) — FastAPI backend, agent implementations, database schemas (SQLModel), migrations (Alembic), and unit/integration tests.
+- [frontend/](frontend/) — Vite + React 18 + TypeScript web app (Landing + Experience + Wedding Planning Views).
+- [docs/](docs/) — [ERD.md](docs/ERD.md) (data model), [user-stories.md](docs/user-stories.md) (scope), and [architecture.md](docs/architecture.md) (service map, agent layer, key flows).
+- [README.md](README.md) — strategic memo and guide for the Build with Gemini XPRIZE submission.
 
-## Frontend (all current code lives here)
+## Backend
+
+All commands run from [backend/](backend/):
+
+```bash
+# Setup virtual environment and dependencies
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Run FastAPI server locally
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+
+# Run the verification scripts
+python verify_endpoints.py   # Verify API surface and integration
+python verify_agents.py      # Verify async agents and guardrails
+```
+
+### Stack and conventions
+
+- **FastAPI + SQLModel**: Schema definitions and DB operations live in [backend/app/db/models.py](backend/app/db/models.py). SQLite is used for local development, with PG compatibility.
+- **Google GenAI SDK (`google-genai`)**: Interacts with Gemini models via the client helper in [backend/app/agents/base.py](backend/app/agents/base.py).
+- **Agent Layer**:
+  - `intake_planner` in [backend/app/agents/planner.py](backend/app/agents/planner.py)
+  - `venue_matcher` and `supplier_matcher` in [backend/app/agents/matcher.py](backend/app/agents/matcher.py)
+  - `quote_extractor` in [backend/app/agents/extractor.py](backend/app/agents/extractor.py)
+- **Testing**:
+  - Integration tests: `verify_endpoints.py`
+  - Agent behavior/guardrail checks: `verify_agents.py`
+
+## Frontend
 
 All commands run from [frontend/](frontend/):
 

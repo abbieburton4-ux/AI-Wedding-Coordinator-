@@ -46,12 +46,11 @@ Every step writes an `AgentDecisionLog` row. Every log row is reviewable in the 
 
 ## 5 · The Tech
 
-- **AI:** Gemini 2.5 Pro (reasoning) + Gemini 2.5 Flash (extraction), routed via a `model_for(agent_name)` resolver
-- **Backend:** Python + SQLite (pilot) → Postgres (production-ready, migration triggered by load)
-- **Frontend (pilot):** Streamlit with role-based session (couple vs. planner)
-- **Frontend (marketing):** Vite + React 18 + Tailwind v4
-- **Payments:** Stripe Checkout (planner subscriptions) + Stripe Billing
-- **Planned production:** Cloud Run · Cloud Tasks · Cloud SQL · SendGrid Inbound Parse · Firebase Auth — see [docs/architecture.md](docs/architecture.md)
+- **AI:** Gemini 2.5 Pro (reasoning) + Gemini 2.5 Flash (extraction), routed via a `model_for(agent_name)` resolver (using Google GenAI SDK).
+- **Backend:** Python FastAPI + SQLModel, configured for SQLite (local) and PostgreSQL (production).
+- **Frontend:** Vite + React 18 + Tailwind v4, consuming backend REST endpoints and asynchronous hook orchestration.
+- **Async Execution:** Google Cloud Tasks in production; Tasks Emulator + worker service or direct asynchronous fallback locally.
+- **Payments:** Stripe Checkout & Stripe Billing (subscriptions).
 
 ## 6 · Status
 
@@ -59,23 +58,29 @@ Every step writes an `AgentDecisionLog` row. Every log row is reviewable in the 
 |---|---|---|
 | Agent layer (4 agents, structured outputs, guardrails, decision logs) | ✅ | timeline_builder by Day 45; contract_reviewer post-submission |
 | Hallucination + budget guardrails | ✅ | More categories of guardrail as edge cases land |
-| SQLite + WAL + idempotency | ✅ | Postgres migration if pilot load triggers it |
+| DB Layer (FastAPI + SQLModel + Alembic migrations) | ✅ | Postgres scaling if pilot load triggers it |
 | Stripe Checkout (test mode) | 🔄 W2 | Live charges by Day 14 |
-| Auth (role-based session) | ✅ | Firebase Auth before public couple-direct |
-| Marketing site | ✅ | Pricing reconciled with coordinator-fee positioning |
-| Cloud Run / Cloud Tasks / SendGrid / Twilio | ⛔ | Post-Day-30 if pilot demand warrants |
+| Auth & Access Control (Bearer token-based mock/Firebase Auth) | ✅ | Firebase Auth integration |
+| Marketing & Planner App Frontend (Vite + React) | ✅ | Pricing reconciled with coordinator-fee positioning |
+| Cloud Run / Cloud Tasks / Worker / Emulator setup | ✅ | Deployment to production GCP infra |
 
 ## 7 · Run It Locally
 
 ```bash
-# Pilot app (the AI wedding coordinator)
-cd streamlit_mock
+# 1. Start the FastAPI Backend
+cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-export GEMINI_API_KEY=...
-streamlit run app.py
+export GEMINI_API_KEY=your_gemini_api_key_here
+uvicorn app.main:app --reload --port 8000
 
-# Marketing site
+# 2. Run the Verification Suites (in a separate terminal)
+cd backend
+source .venv/bin/activate
+python verify_endpoints.py    # verify API endpoints
+python verify_agents.py       # verify agent logic and guardrails
+
+# 3. Start the Vite React Frontend (in a separate terminal)
 cd frontend
 npm i
 npm run dev

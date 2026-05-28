@@ -8,9 +8,10 @@ This is a 2-founder hackathon project on a hard deadline (17 Aug 2026). Keep PRs
 
 | Path | Purpose |
 |---|---|
-| [streamlit_mock/](streamlit_mock/) | Pilot app — Streamlit + SQLite + Gemini. This is where the agent layer lives. |
-| [frontend/](frontend/) | Vite + React 18 marketing site, deployed to GitHub Pages |
-| [docs/](docs/) | Architecture, ERD, runway, strategic memo, agent decision log spec |
+| [backend/](backend/) | FastAPI backend, database schemas (SQLModel), agent implementations, migrations, and test scripts. |
+| [frontend/](frontend/) | Vite + React 18 frontend (Landing + Experience + Wedding Views). |
+| [docs/](docs/) | Architecture, ERD, runway, strategic memo, agent decision log spec. |
+| [streamlit_mock/](streamlit_mock/) | Initial Streamlit pilot app. Kept for historical reference. |
 | [scripts/](scripts/) | One-off scripts (e.g., `build_tracker.py` regenerates `runway-tracker.xlsx`) |
 | `runway-tracker.xlsx` | Live execution tracker. Edit in Excel/Numbers/Sheets; commit changes when status moves. |
 
@@ -18,59 +19,59 @@ This is a 2-founder hackathon project on a hard deadline (17 Aug 2026). Keep PRs
 
 ## Local Development
 
-### Pilot app (`streamlit_mock/`)
+### Backend (FastAPI + Worker)
 
 ```bash
-cd streamlit_mock
+cd backend
 python -m venv .venv
 source .venv/bin/activate          # macOS/Linux
 pip install -r requirements.txt
 export GEMINI_API_KEY=...           # required for live agent runs
-streamlit run app.py                 # opens http://localhost:8501
+uvicorn app.main:app --reload      # opens http://localhost:8000
 ```
 
-The first run seeds a local SQLite DB (`venueflow_mock.db`) with sample venues, suppliers, and two test weddings. The DB file is `.gitignore`d — never commit it.
+The server automatically initializes and seeds the SQLite database (`endpoints_test.db` or configured local db) on startup if it does not exist.
 
-### Marketing site (`frontend/`)
+### Frontend (Vite + React)
 
 ```bash
 cd frontend
 npm i
-npm run dev                          # vite dev server
+npm run dev                          # vite dev server on http://localhost:5173
 npm run build                        # production build to dist/
 ```
 
-No backend dependency — this is a static marketing/landing site.
+By default, the React frontend connects to `http://localhost:8000`. You can configure this via the `VITE_API_URL` env variable or toggle backend integration in `frontend/src/app/api/config.ts`.
 
 ### Tests
 
 ```bash
-cd streamlit_mock
-.venv/bin/pytest test_agents.py -v
+cd backend
+source .venv/bin/activate
+python verify_endpoints.py    # Verify FastAPI REST endpoints and security
+python verify_agents.py       # Verify agent tasks, schemas, and guardrails
 ```
 
-Tests are **fully mocked** — they don't call Gemini. The mock client returns canned JSON, so the suite is fast (<1s), free, and CI-safe.
+Tests use temporary databases and mocked API calls to Gemini where appropriate, meaning they run quickly and without consuming API quotas.
 
 ---
 
 ## How to Add a New Agent
 
-Agents live in [streamlit_mock/agents.py](streamlit_mock/agents.py). The shape:
+Agents live in the [backend/app/agents/](backend/app/agents/) directory (e.g., `planner.py`, `matcher.py`, `extractor.py`). The shape:
 
-1. **Define a Pydantic schema** for the structured output. Example: `IntakeResult`, `MatchingResult`. Keep field descriptions verbose — Gemini uses them.
-2. **Pick a model.** Add the agent name to `model_for()` if it's a reasoning task (→ `gemini-2.5-pro`); leave it as default (→ `gemini-2.5-flash`) for extraction/drafting.
-3. **Open a log row first, mutate domain last.** Every agent function:
-   - inserts an `agent_decision_logs` row with `status='pending'`
-   - calls Gemini with the schema and a system instruction
-   - validates output, applies guardrails
-   - on success: writes domain mutations + flips log to `status='success'` in **one** `conn.commit()`
-   - on guardrail block: writes `status='blocked_by_guardrail'` with an `error_kind`
-   - on exception: `conn.rollback()`, then writes `status='error'` with `error_kind='api_error'`
-4. **Capture metrics.** `latency_ms`, `tokens_input`, `tokens_output`, `external_api_calls` JSON, `confidence_score` — every row needs these for the submission CSV.
-5. **Wire `parent_decision_id`** when the agent is triggered by another agent's output (e.g., `quote_extractor` → parent is the matching `inquiry_draft`).
-6. **Add a pytest case.** Mock the Gemini client; assert on the resulting DB state. See [test_agents.py](streamlit_mock/test_agents.py) for the pattern.
-
-**Do not** copy the entire boilerplate scaffold across agents — extract shared logic into a helper as soon as you have 2 agents that look the same. (`run_agent(agent_id, decision_type, model, schema, system_prompt, mutate_fn)` is the right factor when we get there.)
+1. **Define a Pydantic schema** for the structured output. Keep field descriptions verbose — Gemini uses them for tool calling / structured generation.
+2. **Pick a model.** Add the agent name to `model_for()` in [backend/app/agents/base.py](backend/app/agents/base.py) if it's a reasoning task (→ `gemini-2.5-pro`); leave it as default (→ `gemini-2.5-flash`) for extraction/drafting.
+3. **Open a log row first, mutate domain last.** Every agent function should follow this sequence:
+   - Insert an `AgentDecisionLog` row with `status='pending'`
+   - Call Gemini with the schema and system instructions
+   - Validate output and apply guardrails (e.g., category whitelisting, hallucination checking)
+   - On success: Write domain mutations and flip log to `status='success'` in one transaction
+   - On guardrail block: Write `status='blocked_by_guardrail'` with an `error_kind`
+   - On exception: Roll back changes and write `status='error'` with `error_kind`
+4. **Capture metrics.** Capture `latency_ms`, `tokens_input`, `tokens_output`, `external_api_calls` JSON, and `confidence_score` — every row needs these for the submission CSV.
+5. **Wire `parent_decision_id`** when the agent is triggered by another agent's output (e.g., `quote_extractor` -> parent is the matching `inquiry_draft`).
+6. **Add verification coverage.** Add mock-based assertions in `verify_agents.py` to test the new agent's behavior and guardrail compliance.
 
 ---
 
@@ -160,12 +161,13 @@ Until 17 Aug 2026, every commit affects the submission. Specifically:
 
 | Task | Command |
 |---|---|
-| Run pilot app | `cd streamlit_mock && .venv/bin/streamlit run app.py` |
-| Run tests | `cd streamlit_mock && .venv/bin/pytest test_agents.py -v` |
+| Run Backend FastAPI | `cd backend && uvicorn app.main:app --reload` |
+| Run Endpoint Tests | `cd backend && python verify_endpoints.py` |
+| Run Agent Logic Tests | `cd backend && python verify_agents.py` |
+| Run Frontend | `cd frontend && npm run dev` |
+| Build Frontend | `cd frontend && npm run build` |
+| Type-check Frontend | `cd frontend && npx tsc --noEmit` |
 | Regenerate Excel tracker | `python scripts/build_tracker.py` |
-| Build marketing site | `cd frontend && npm run build` |
-| Type-check frontend | `cd frontend && npx tsc --noEmit` |
-| Reset pilot DB | In the Streamlit sidebar: "Reset & Re-Seed Database" |
 
 ---
 

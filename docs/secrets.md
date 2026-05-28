@@ -11,7 +11,7 @@ How VenueFlow handles credentials, today and as we move to production. Read this
 | Layer | What lives here | Tool |
 |---|---|---|
 | Personal vault | Account logins, recovery codes, short-lived team shares | 1Password / Bitwarden |
-| Local dev secrets | Test-mode API keys, personal Gemini key | `streamlit_mock/.env.local` (gitignored) |
+| Local dev secrets | Test-mode API keys, personal Gemini key | `backend/.env` (gitignored) |
 | Production secrets | Live API keys, webhook signing secrets | Google Secret Manager |
 | Code | Variable *names* and an `.env.example` template | git (this repo) |
 
@@ -70,17 +70,17 @@ brew install gitleaks pre-commit
 pre-commit install
 
 # 3. Set up your local env
-cp streamlit_mock/.env.example streamlit_mock/.env.local
-# Edit .env.local: paste your personal Gemini key, leave Stripe blank until W2
+cp backend/.env.example backend/.env
+# Edit backend/.env: paste your personal Gemini key, leave Stripe blank until W2
 
 # 4. Run the app
-cd streamlit_mock
+cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-streamlit run app.py
+uvicorn app.main:app --reload
 ```
 
-`.env.local` is in `.gitignore`. Verify with `git check-ignore -v streamlit_mock/.env.local` — should print the matching rule.
+`.env` is in `.gitignore`. Verify with `git check-ignore -v backend/.env` — should print the matching rule.
 
 ## Pre-commit secret scanning (gitleaks)
 
@@ -147,5 +147,5 @@ When a new contributor joins (post-submission, hypothetically):
 - [ ] Added to GCP project with Editor role (Owner only if they need IAM)
 - [ ] Added to Stripe with Developer role (or Read-Only if they don't need to ship)
 - [ ] Cloned the repo, ran `pre-commit install`
-- [ ] Copied `.env.example` → `.env.local`, generated personal Gemini key
-- [ ] Verified `git check-ignore -v streamlit_mock/.env.local` passes
+- [ ] Copied `.env.example` → `.env`, generated personal Gemini key
+- [ ] Verified `git check-ignore -v backend/.env` passes

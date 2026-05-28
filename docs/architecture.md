@@ -1,11 +1,9 @@
 # VenueFlow — Architecture (MVP, AI Wedding Coordinator)
 
-> [!WARNING]
-> **Implementation Status**: This document details the planned Day-90 target architecture.
-> - **Current Implementation**: A single Streamlit application backed by a local **SQLite** database, using a unified Google Gemini model set via model resolution (`gemini-2.5-pro` for reasoning, `gemini-2.5-flash` for extraction).
-> - **Planned Architecture**: Cloud Run services, Cloud Tasks queues, Cloud Scheduler, Cloud SQL Postgres, SendGrid parse webhook, Twilio SMS, and Firebase Auth are currently mock-simulated in the UI code rather than running as external infra.
-
-This document describes the planned Day-90 architecture for the AI Wedding Coordinator product. It is paired with [ERD.md](./ERD.md) (data model) and [user-stories.md](./user-stories.md) (scope). Read [CLAUDE.md](../CLAUDE.md) first for product framing.
+> [!NOTE]
+> **Implementation Status**:
+> - **Current Implementation**: A Vite + React frontend communicating with a **FastAPI backend** over REST endpoints. Database schemas are managed using **SQLModel** with SQLite for local development, and Postgres ready. Asynchronous agent task execution uses a Google Cloud Tasks structure, with a local Tasks Emulator and direct background invocation fallback for development.
+> - **Planned Infrastructure**: Deployment to GCP Cloud Run, Cloud Tasks, Cloud Scheduler, Cloud SQL Postgres, SendGrid parse webhook, Twilio SMS, and Firebase Auth. Some third-party integrations (like full Firebase Auth, Twilio SMS sending, SendGrid parse webhooks) are mocked/simulated in the development environment.
 
 Constraints driving the picks:
 - **XPRIZE rule:** must use Gemini + at least one Google Cloud product. The picks below satisfy this several times over.
