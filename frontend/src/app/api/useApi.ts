@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { API_BASE_URL } from "./config";
+import { useAuth } from "../auth/AuthProvider";
 
 /**
  * Lightweight fetch wrapper with automatic auth header injection,
@@ -10,6 +11,7 @@ import { API_BASE_URL } from "./config";
  *   const data = await request("/weddings", { method: "GET" });
  */
 export function useApi() {
+  const { getToken } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,7 +21,7 @@ export function useApi() {
       setError(null);
 
       try {
-        const token = localStorage.getItem("vf_planner_token");
+        const token = await getToken();
         const headers = new Headers(options.headers);
 
         if (token) {
@@ -56,7 +58,7 @@ export function useApi() {
         setLoading(false);
       }
     },
-    []
+    [getToken]
   );
 
   const clearError = useCallback(() => setError(null), []);

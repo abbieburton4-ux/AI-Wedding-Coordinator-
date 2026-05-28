@@ -92,15 +92,22 @@ def run_agent(agent_name: str, decision_type: str):
                 return result_dict
                 
             except Exception as e:
-                # Outer commit to capture the error log
+                # The agent failed inside the savepoint, which leaves the session in a
+                # rollback-pending state. Roll back to a clean transaction first —
+                # otherwise this error-log UPDATE is silently dropped (the pending row
+                # was already committed above, so rollback doesn't lose it).
+                await db.rollback()
                 latency = int((time.time() - start_time) * 1000)
-                logger.error(f"Agent {agent_name} failed: {e}")
-                
+                # Some exceptions (notably httpx timeouts) have an empty str(); fall
+                # back to repr() so error_message is never blank.
+                error_message = str(e) or repr(e)
+                logger.error("Agent %s failed: %s", agent_name, error_message, exc_info=True)
+
                 log.status = "error"
                 log.error_kind = type(e).__name__
-                log.error_message = str(e)
+                log.error_message = error_message
                 log.latency_ms = latency
-                
+
                 db.add(log)
                 await db.commit()
                 raise e

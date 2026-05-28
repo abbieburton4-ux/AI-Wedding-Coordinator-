@@ -7,6 +7,11 @@ import uuid
 def generate_uuid_str() -> str:
     return str(uuid.uuid4())
 
+def utcnow() -> datetime.datetime:
+    """Naive UTC timestamp. Matches the naive DateTime columns and replaces the
+    deprecated datetime.datetime.utcnow()."""
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
 class User(SQLModel, table=True):
     __tablename__ = "users"
     
@@ -15,7 +20,7 @@ class User(SQLModel, table=True):
     name: str
     email: str = Field(index=True)
     phone: Optional[str] = None
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
     # Relationships
     weddings_owned: List["Wedding"] = Relationship(
@@ -47,7 +52,7 @@ class Wedding(SQLModel, table=True):
     currency: str = Field(default="EUR")
     style_notes: Optional[str] = Field(default=None, sa_column=Column(Text))
     status: str = Field(default="intake")  # intake, planning, booked, completed, cancelled
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
     # Relationships
     couple_user: User = Relationship(
@@ -102,7 +107,7 @@ class Venue(SQLModel, table=True):
     pricing_summary: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     eircode: Optional[str] = None
     source: str = Field(default="manual")
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
     # Relationships
     weddings: List[Wedding] = Relationship(back_populates="venue")
@@ -124,7 +129,7 @@ class Supplier(SQLModel, table=True):
     pricing_summary: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     attributes: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     source: str = Field(default="manual")
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
     # Relationships
     availabilities: List["SupplierAvailability"] = Relationship(
@@ -143,7 +148,7 @@ class VenueAvailability(SQLModel, table=True):
     start_time: Optional[datetime.time] = Field(default=None, sa_column=Column(Time))
     end_time: Optional[datetime.time] = Field(default=None, sa_column=Column(Time))
     source: str = Field(default="manual")
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
     # Relationships
     venue: Venue = Relationship(back_populates="availabilities")
@@ -158,7 +163,7 @@ class SupplierAvailability(SQLModel, table=True):
     start_time: Optional[datetime.time] = Field(default=None, sa_column=Column(Time))
     end_time: Optional[datetime.time] = Field(default=None, sa_column=Column(Time))
     source: str = Field(default="manual")
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
     # Relationships
     supplier: Supplier = Relationship(back_populates="availabilities")
@@ -179,7 +184,7 @@ class Booking(SQLModel, table=True):
     supplier_id: Optional[str] = Field(default=None, foreign_key="suppliers.id")
     status: str = Field(default="shortlisted")  # shortlisted, inquired, quoted, booked, declined, cancelled
     sourced_by_agent_id: Optional[str] = None
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
     # Relationships
     wedding: Wedding = Relationship(back_populates="bookings")
@@ -213,7 +218,7 @@ class Quote(SQLModel, table=True):
     generated_by_agent_id: Optional[str] = None
     rationale_text: Optional[str] = Field(default=None, sa_column=Column(Text))
     expires_at: Optional[datetime.datetime] = None
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
     # Relationships
     booking: Booking = Relationship(back_populates="quotes")
@@ -229,7 +234,7 @@ class Contract(SQLModel, table=True):
     terms_snapshot: Optional[str] = Field(default=None, sa_column=Column(Text))
     risk_flags: List[Dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
     reviewed_by_agent_id: Optional[str] = None
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
     # Relationships
     booking: Booking = Relationship(back_populates="contract")
@@ -246,7 +251,7 @@ class Payment(SQLModel, table=True):
     stripe_payment_id: str
     status: str
     payment_type: str = Field(default="coordinator_fee")  # coordinator_fee, planner_setup
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
     # Relationships
     wedding: Wedding = Relationship(back_populates="payments")
@@ -263,7 +268,7 @@ class Subscription(SQLModel, table=True):
     stripe_subscription_id: str
     status: str
     started_at: datetime.datetime
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
 
 class SupplierPayment(SQLModel, table=True):
@@ -276,7 +281,7 @@ class SupplierPayment(SQLModel, table=True):
     kind: str  # deposit, balance, additional
     external_reference: Optional[str] = None
     paid_on: datetime.date = Field(sa_column=Column(Date))
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
     # Relationships
     booking: Booking = Relationship(back_populates="payments")
@@ -290,8 +295,8 @@ class BudgetLine(SQLModel, table=True):
     category: str
     allocated_amount: float
     spent_amount: float = Field(default=0.0)
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
-    updated_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
+    updated_at: datetime.datetime = Field(default_factory=utcnow)
 
     # Relationships
     wedding: Wedding = Relationship(back_populates="budget_lines")
@@ -308,7 +313,7 @@ class TimelineItem(SQLModel, table=True):
     due_at: datetime.date = Field(sa_column=Column(Date))
     status: str = Field(default="todo")  # todo, in_progress, done
     generated_by_agent_id: Optional[str] = None
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
     # Relationships
     wedding: Wedding = Relationship(back_populates="timeline_items")
@@ -326,7 +331,7 @@ class Guest(SQLModel, table=True):
     dietary: Optional[str] = Field(default=None, sa_column=Column(Text))
     plus_one: bool = Field(default=False)
     table_number: Optional[int] = None
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
     # Relationships
     wedding: Wedding = Relationship(back_populates="guests")
@@ -344,7 +349,7 @@ class AgentDecisionLog(SQLModel, table=True):
     booking_id: Optional[str] = Field(default=None, foreign_key="bookings.id")
     parent_decision_id: Optional[str] = Field(default=None, foreign_key="agent_decision_logs.id")
     trigger: str
-    timestamp: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    timestamp: datetime.datetime = Field(default_factory=utcnow)
     decision_type: str
     status: str  # success, error, blocked_by_guardrail, overridden
     error_kind: Optional[str] = None

@@ -8,7 +8,11 @@ def get_client() -> genai.Client:
     key = settings.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY")
     if not key:
         raise ValueError("GEMINI_API_KEY is not set in environment or config.")
-    return genai.Client(api_key=key, http_options={"timeout": 30.0})
+    # NOTE: google-genai's http_options timeout is in MILLISECONDS. The original
+    # 30.0 meant 30ms (every call ConnectTimeout/ReadTimeout). 90000 = 90s: the
+    # gemini-2.5-pro intake_planner generation (full budget + timeline) measures
+    # ~36s, so 30s was too tight and surfaced as 504 DEADLINE_EXCEEDED.
+    return genai.Client(api_key=key, http_options={"timeout": 90000})
 
 def model_for(agent_name: str) -> str:
     """Resolves the correct model for each agent.
