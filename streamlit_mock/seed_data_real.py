@@ -188,27 +188,19 @@ venues = [
      json.dumps({"rental_fee": None, "average_cost_per_head": 55, "currency": "EUR", "min_spend": None,
                  "note": "Restaurant near Glendalough; intimate private-dining weddings.", "_indicative": True})),
 
-    # ---- BUDGET HALL / GAA CLUB + CHURCH (ceremony) ----
-    # Bray Emmets is a real GAA club (contacts founder-verified 2026-05-28),
-    # replacing the earlier GAA template. Community-hall template still stands.
+    # ---- BUDGET HALL / GAA CLUB (real, founder-verified 2026-05-28) ----
+    # Both replace the earlier [TEMPLATE] budget rows. No venue templates remain.
     ("venue_bray_emmets", "Bray Emmets GAA Club", "Old Connaught Ave, Bray, Co. Wicklow, A98 NP03", "Wicklow",
      "gaa_clubhouse", 40, 150, 2, 0,
      json.dumps({"website": None, "email": "Brayemmets.office@gmail.com", "phone": "+353873336971", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": 350, "average_cost_per_head": 25, "currency": "EUR", "min_spend": 0,
                  "note": "Club function hall; dry-hire, self-catering allowed, bar staff available.", "_indicative": True})),
 
-    ("venue_olgc_killiney", "Our Lady of Good Counsel Church", "Churchview Road, Killiney, Co. Dublin, A96 EY91", "Dublin",
-     "church", 50, 250, 2, 0,
+    ("venue_olgc_killiney", "Our Lady of Good Counsel Parish Hall", "Churchview Road, Killiney, Co. Dublin, A96 EY91", "Dublin",
+     "community_hall", 40, 180, 2, 0,
      json.dumps({"website": None, "email": "johnstownparish@gmail.com", "phone": "+35312351416", "_method": "published_email", "_checked": "2026-05-28"}),
-     json.dumps({"rental_fee": 400, "average_cost_per_head": None, "currency": "EUR", "min_spend": None,
-                 "note": "Catholic ceremony venue (not reception); donation-based fee. Confirm pre-marriage paperwork lead time.", "_indicative": True})),
-
-    ("venue_community_hall_template", "[TEMPLATE] Community Celebration Hall", "Co. Sligo", "Sligo",
-     "community_hall", 30, 200, 2, 0,
-     json.dumps({"website": None, "email": None, "phone": None, "_verify": True, "_template": True,
-                 "note": "Replace with a real community hall you confirm (parish/community centre office)."}),
-     json.dumps({"rental_fee": 200, "average_cost_per_head": 15, "currency": "EUR", "min_spend": 0,
-                 "note": "Basic dry-hire; BYO caterers and drinks.", "_indicative": True})),
+     json.dumps({"rental_fee": 300, "average_cost_per_head": 20, "currency": "EUR", "min_spend": 0,
+                 "note": "Parish community hall (Johnstown parish); dry-hire, self-catering. Confirm availability via parish office.", "_indicative": True})),
 ]
 
 # =============================================================================
