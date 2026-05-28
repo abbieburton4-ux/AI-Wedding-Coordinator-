@@ -638,6 +638,91 @@ def test_venue_matcher_emits_progress_steps_on_success(mock_client, capsys):
     assert "logged decision" in joined, "missing audit-log confirmation step"
 
 
+def test_intake_planner_emits_progress_steps_on_success(mock_client, capsys):
+    """intake_planner narrates: profile read, Gemini call, response stats,
+    success summary (budget categories + timeline), audit-log write."""
+    mock_response_data = {
+        "is_budget_realistic": True,
+        "guardrail_warning": "",
+        "budget_lines": [
+            {"category": "venue", "allocated_amount": 12000.0, "rationale": "Venue rental"},
+            {"category": "catering", "allocated_amount": 10000.0, "rationale": "Per-head 100 guests"},
+            {"category": "photography", "allocated_amount": 2500.0, "rationale": "Documentary"},
+        ],
+        "timeline_items": [
+            {"title": "Book Venue", "description": "...", "months_before": 12.0, "kind": "planning"},
+            {"title": "HSE Notification", "description": "...", "months_before": 3.0, "kind": "planning"},
+        ],
+        "rationale_summary": "Seeded plan for Sligo Civil/Humanist wedding.",
+        "confidence_score": 0.92,
+    }
+    mock_client.models.generate_content.return_value = MockResponse(
+        json.dumps(mock_response_data), prompt_tokens=1500, output_tokens=3100,
+    )
+
+    captured = []
+    res = agents.run_intake_planner(
+        "wedding_intake_test",
+        user_id="couple_1",
+        on_step=lambda msg: captured.append(msg),
+    )
+    assert res["status"] == "success"
+
+    print("\n--- intake_planner live-reasoning trail ---")
+    for i, line in enumerate(captured, 1):
+        print(f"  {i}. {line}")
+    print("--- end ---\n")
+
+    assert len(captured) >= 5
+    joined = " | ".join(captured).lower()
+    assert "reading intake" in joined and "sligo" in joined and "civil/humanist" in joined, (
+        f"profile-read step should name region + ceremony_type: {captured}"
+    )
+    assert "asking gemini" in joined, "missing pre-LLM step"
+    assert "tokens" in joined and "confidence" in joined, "missing post-LLM stats step"
+    assert "drafted" in joined and "categories" in joined and "milestones" in joined, (
+        "missing success summary step"
+    )
+    assert "logged decision" in joined, "missing audit-log confirmation"
+
+
+def test_intake_planner_emits_blocked_step_on_budget_guardrail(mock_client):
+    """When Gemini returns is_budget_realistic=false, the on_step callback
+    must surface the budget-realism rejection so the user sees the AI's
+    reasoning, not just an error code."""
+    mock_response_data = {
+        "is_budget_realistic": False,
+        "guardrail_warning": (
+            "€2,000 is insufficient for 200 guests in Dublin. Catering alone "
+            "would exceed €15,000 at Irish market rates."
+        ),
+        "budget_lines": [],
+        "timeline_items": [],
+        "rationale_summary": "Budget unrealistic for stated guest count.",
+        "confidence_score": 0.95,
+    }
+    mock_client.models.generate_content.return_value = MockResponse(json.dumps(mock_response_data))
+
+    # Use the planning-test wedding which the seed leaves in 'planning' status —
+    # intake_planner accepts any status for the agent's purposes, the guardrail
+    # check is independent of wedding status.
+    captured = []
+    res = agents.run_intake_planner(
+        "wedding_intake_test",
+        user_id="couple_1",
+        on_step=lambda msg: captured.append(msg),
+    )
+    assert res["status"] == "blocked"
+
+    blocked_line = next((line for line in captured if "realism check failed" in line.lower()), None)
+    assert blocked_line is not None, (
+        f"Expected a 'Budget realism check failed' narration. Got: {captured}"
+    )
+    assert "200 guests" in blocked_line or "dublin" in blocked_line.lower(), (
+        "Blocked step should surface the AI's specific reasoning, not just generic 'blocked'"
+    )
+
+
 def test_venue_matcher_emits_blocked_step_on_hallucination(mock_client):
     """When the LLM hallucinates a venue_id, the on_step callback must surface
     a 'Blocked' message so the user sees WHY the run stopped — not just that
