@@ -123,6 +123,7 @@ def init_db(force=False):
             on_site_accommodation INTEGER DEFAULT 0, -- 0=No, 1=Yes
             contact_info TEXT, -- JSON
             pricing_summary TEXT, -- JSON
+            eircode TEXT, -- derived from address; geocoding key for Google Maps (null for NI/unknown)
             source TEXT DEFAULT 'scraped',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
@@ -317,13 +318,18 @@ def seed_data(cursor):
     ]
     cursor.executemany("INSERT INTO users (id, role, name, email, phone) VALUES (?, ?, ?, ?, ?)", users)
 
-    # 2 & 3. Venues + Suppliers — real Irish seed data (20 venues, 22 suppliers).
+    # 2 & 3. Venues + Suppliers — real Irish seed data (25 venues, 22 suppliers).
     # Drop-in lists from seed_data_real.py; same tuple arity as the schema.
-    # Contacts ship null pending verification (see seed_data_real docstring) and
-    # the pilot contactability guard (agents.resolve_inquiry_recipient) ensures
-    # no real venue is emailed by the system before opting in.
+    # Contacts ship verified-or-null (see seed_data_real docstring) and the pilot
+    # contactability guard (agents.resolve_inquiry_recipient) ensures no real
+    # venue is emailed by the system before opting in.
     from seed_data_real import venues, suppliers
-    cursor.executemany("INSERT INTO venues (id, name, address, region, venue_type, capacity_min, capacity_max, indoor_outdoor, on_site_accommodation, contact_info, pricing_summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", venues)
+    from constants import extract_eircode
+    # Derive the eircode geocoding key from each venue's address (col index 2).
+    # Address stays the single source of truth; eircode is appended as the
+    # final column so the seed tuples don't need an extra field maintained.
+    venues_with_eircode = [tuple(v) + (extract_eircode(v[2]),) for v in venues]
+    cursor.executemany("INSERT INTO venues (id, name, address, region, venue_type, capacity_min, capacity_max, indoor_outdoor, on_site_accommodation, contact_info, pricing_summary, eircode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", venues_with_eircode)
     cursor.executemany("INSERT INTO suppliers (id, name, category, location, contact_info, pricing_summary, attributes) VALUES (?, ?, ?, ?, ?, ?, ?)", suppliers)
 
     # 4. A Pre-made Wedding in intake stage

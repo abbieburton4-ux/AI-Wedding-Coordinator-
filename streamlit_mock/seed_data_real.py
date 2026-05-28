@@ -80,19 +80,19 @@ venues = [
      json.dumps({"rental_fee": None, "average_cost_per_head": 140, "currency": "EUR", "min_spend": None,
                  "note": "800+ yrs hosting; Baronial Hall to 270, Hermione's 120, Restaurant 1180 to 60.", "_indicative": True})),
 
-    ("venue_markree_castle", "Markree Castle", "Collooney, Co. Sligo", "Sligo",
+    ("venue_markree_castle", "Markree Castle", "Collooney, Co. Sligo, F91 AE81", "Sligo",
      "country_house", 50, 190, 1, 1,
      json.dumps({"website": "https://www.markreecastle.ie", "email": "info@markreecastle.ie", "phone": "+353719167800", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": 4000, "average_cost_per_head": 110, "currency": "EUR", "min_spend": 14000,
                  "note": "Exclusive-hire Gothic castle, private chapel, gardens.", "_indicative": True})),
 
-    ("venue_lough_eske", "Lough Eske Castle", "Donegal Town, Co. Donegal", "Donegal",
+    ("venue_lough_eske", "Lough Eske Castle", "Donegal Town, Co. Donegal, F94 HX59", "Donegal",
      "country_house", 60, 200, 1, 1,
      json.dumps({"website": "https://www.lougheskecastlehotel.com", "email": "sales@lougheskecastlehotel.com", "phone": "+353749725100", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 110, "currency": "EUR", "min_spend": None,
                  "note": "5-star castle hotel; published packages ~€95–€119pp (120 guests).", "_indicative": True})),
 
-    ("venue_tankardstown", "Tankardstown House", "Slane, Co. Meath", "Meath",
+    ("venue_tankardstown", "Tankardstown House", "Rathkenny, Slane, Co. Meath, C15 D535", "Meath",
      "country_house", 50, 230, 1, 1,
      json.dumps({"website": "https://www.tankardstown.ie", "email": "info@tankardstown.ie", "phone": "+353419824621", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 150, "currency": "EUR", "min_spend": None,
@@ -105,7 +105,7 @@ venues = [
                  "note": "Period hunting lodge on 100 acres; food-led, relaxed-luxury.", "_indicative": True})),
 
     # ---- HOTELS ----
-    ("venue_marker_hotel", "Anantara The Marker Dublin Hotel", "Grand Canal Square, Docklands, Dublin 2", "Dublin",
+    ("venue_marker_hotel", "Anantara The Marker Dublin Hotel", "Grand Canal Square, Docklands, Dublin 2, D02 CK38", "Dublin",
      "hotel", 60, 220, 2, 1,
      json.dumps({"website": "https://www.anantara.com/en/the-marker-dublin", "email": "info.themarker@anantara-hotels.com", "phone": "+35316875100", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 125, "currency": "EUR", "min_spend": None,
@@ -117,7 +117,7 @@ venues = [
      json.dumps({"rental_fee": None, "average_cost_per_head": 95, "currency": "GBP", "min_spend": None,
                  "note": "NI seaside resort, Mourne Mountains. Published from ~£82pp Sun–Thu.", "_indicative": True})),
 
-    ("venue_hotel_doolin", "Hotel Doolin", "Doolin, Co. Clare", "Clare",
+    ("venue_hotel_doolin", "Hotel Doolin", "Fitz Cross, Doolin, Co. Clare, V95 DE2X", "Clare",
      "hotel", 60, 300, 1, 1,
      json.dumps({"website": "https://www.hoteldoolin.ie", "email": "info@hoteldoolin.ie", "phone": "+353657074111", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": 3000, "average_cost_per_head": 85, "currency": "EUR", "min_spend": 10000,

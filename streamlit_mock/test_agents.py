@@ -296,6 +296,24 @@ def test_intake_planner_normalizes_category_case(mock_client):
 # 6. TEST IRISH REGION HIERARCHY (B4)
 # ==========================================
 
+def test_extract_eircode_pulls_irish_codes_and_skips_ni():
+    """extract_eircode finds an Eircode in an address, normalizes it, and
+    returns None for Northern Irish postcodes (not eircodes) and addresses
+    with none — so the geocoding field is honest about what it has."""
+    ex = constants.extract_eircode
+    assert ex("Old Connaught Ave, Bray, Co. Wicklow, A98 NP03") == "A98 NP03"
+    assert ex("Grand Canal Square, Docklands, Dublin 2, D02 CK38") == "D02 CK38"
+    assert ex("Fitz Cross, Doolin, Co. Clare, V95 DE2X") == "V95 DE2X"
+    # Lowercase in source normalizes to upper
+    assert ex("somewhere a98 np03") == "A98 NP03"
+    # Northern Irish postcode is NOT an eircode
+    assert ex("Downs Road, Newcastle, Co. Down, BT33 0AH") is None
+    # No eircode present
+    assert ex("Adare, Co. Limerick") is None
+    assert ex(None) is None
+    assert ex("") is None
+
+
 def test_region_matches_handles_province_and_county():
     """B4: region_matches must accept county↔province in both directions and
     return False for cross-province pairs."""

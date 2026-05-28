@@ -44,6 +44,7 @@ erDiagram
     bool on_site_accommodation
     json contact_info
     json pricing_summary
+    string eircode
     string source
     datetime created_at
   }
@@ -250,7 +251,7 @@ erDiagram
 
 ### Venues and suppliers (sourced, not customers)
 
-- **Venue** — kept as a first-class entity because the chosen venue is the anchor decision for every wedding and has venue-specific attributes (capacity, indoor/outdoor, on-site accommodation, region). `venue_type` covers the mixed-use angle from [README](../README.md) §3.4: `country_house | hotel | community_hall | gaa_clubhouse | church | farm | restaurant | other`. `source` ∈ `{manual, partner, scraped, couple_submitted}`.
+- **Venue** — kept as a first-class entity because the chosen venue is the anchor decision for every wedding and has venue-specific attributes (capacity, indoor/outdoor, on-site accommodation, region). `venue_type` covers the mixed-use angle from [README](../README.md) §3.4: `country_house | hotel | community_hall | gaa_clubhouse | church | farm | restaurant | other`. `source` ∈ `{manual, partner, scraped, couple_submitted}`. `eircode` is a derived geocoding key (extracted from `address` via `constants.extract_eircode`, nullable) powering the Google Maps view on the frontend; the full `address` remains the source of truth, and Northern Irish venues resolve to `null` (UK postcode, not an eircode) and geocode from `address` instead.
 - **Supplier** — every non-venue vendor (catering, florals, photo, video, music, etc.). `category` drives matching. `attributes` (JSON) holds category-specific fields (e.g., photographer's style tags).
 - **VenueAvailability / SupplierAvailability** — split into two tables (rather than one polymorphic table) to avoid a XOR constraint and to keep indexing simple.
 

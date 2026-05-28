@@ -5,7 +5,10 @@ Single source of truth for:
   WHERE category = ?, quote_extractor category derivation, and the UI dropdown).
 - Supplier-facing subset (excludes 'venue' and 'other', which have their own flows).
 - Irish region hierarchy (province → counties) for matcher pre-filter.
+- Eircode extraction (for the Google Maps geocoding field on venues).
 """
+
+import re
 
 
 ALLOWED_BUDGET_CATEGORIES = {
@@ -67,3 +70,24 @@ def region_matches(venue_region, preferred_region):
         region_matches("Sligo", "Leinster") -> False (Sligo is in Connacht)
     """
     return bool(expand_region(venue_region) & expand_region(preferred_region))
+
+
+# Irish Eircode: routing key (1 valid letter + 2 digits) + space + 4-char unique
+# identifier, e.g. "A98 NP03". The routing-key letter set excludes B, G, I, J,
+# L, M, O, Q, S, U, Z per the Eircode spec. Northern Irish postcodes (e.g.
+# "BT33 0AH") do NOT match — they are not eircodes, so geocoding falls back to
+# the full address for NI venues.
+_EIRCODE_RE = re.compile(r"\b([AC-FHKNPRTV-Y]\d{2})\s+([0-9AC-FHKNPRTV-Y]{4})\b", re.IGNORECASE)
+
+
+def extract_eircode(address):
+    """Pull an Eircode out of an address string, normalized to 'A98 NP03'
+    form, or None if the address contains no eircode. Address remains the
+    single source of truth — this is a derived geocoding key, not a second
+    place to maintain the postcode."""
+    if not address:
+        return None
+    m = _EIRCODE_RE.search(address)
+    if not m:
+        return None
+    return f"{m.group(1).upper()} {m.group(2).upper()}"
