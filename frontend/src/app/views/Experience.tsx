@@ -111,17 +111,17 @@ export function Experience() {
               <MenuItem
                 title="Pulled jackfruit"
                 description="radish, seeds, paprika, tomato, olive oil"
-                price="$20"
+                price="€19"
               />
               <MenuItem
                 title="Vegan meringues"
                 description="chickpeas, sugar, soy cream, fruit"
-                price="$15"
+                price="€15"
               />
               <MenuItem
                 title="Wedding wreath"
                 description="spinach, tofu, nutmeg, cherries"
-                price="$35"
+                price="€35"
               />
             </div>
           </div>
