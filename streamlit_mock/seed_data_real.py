@@ -107,7 +107,7 @@ venues = [
     # ---- HOTELS ----
     ("venue_marker_hotel", "Anantara The Marker Dublin Hotel", "Grand Canal Square, Docklands, Dublin 2", "Dublin",
      "hotel", 60, 220, 2, 1,
-     json.dumps({"website": "https://www.themarkerhoteldublin.com", "email": "info.themarker@anantara-hotels.com", "phone": "+35316875100", "_method": "published_email", "_checked": "2026-05-28"}),
+     json.dumps({"website": "https://www.anantara.com/en/the-marker-dublin", "email": "info.themarker@anantara-hotels.com", "phone": "+35316875100", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": None, "average_cost_per_head": 125, "currency": "EUR", "min_spend": None,
                  "note": "5-star design hotel, Docklands (now Anantara-managed). Packages from ~€125pp.", "_indicative": True})),
 
@@ -188,16 +188,20 @@ venues = [
      json.dumps({"rental_fee": None, "average_cost_per_head": 55, "currency": "EUR", "min_spend": None,
                  "note": "Restaurant near Glendalough; intimate private-dining weddings.", "_indicative": True})),
 
-    # ---- BUDGET: GAA CLUB / COMMUNITY HALL ----
-    # NOTE: GAA clubs & community halls rarely publish wedding-enquiry contacts.
-    # These two rows are TEMPLATES so the budget venue_type is represented for the
-    # matching agent. Replace name+contact with a specific local hall you verify.
-    ("venue_gaa_template", "[TEMPLATE] Local GAA Clubhouse Hall", "Co. Offaly", "Offaly",
+    # ---- BUDGET HALL / GAA CLUB + CHURCH (ceremony) ----
+    # Bray Emmets is a real GAA club (contacts founder-verified 2026-05-28),
+    # replacing the earlier GAA template. Community-hall template still stands.
+    ("venue_bray_emmets", "Bray Emmets GAA Club", "Old Connaught Ave, Bray, Co. Wicklow, A98 NP03", "Wicklow",
      "gaa_clubhouse", 40, 150, 2, 0,
-     json.dumps({"website": None, "email": None, "phone": None, "_verify": True, "_template": True,
-                 "note": "Replace with a real local GAA hall (e.g. confirm via club Facebook/secretary)."}),
+     json.dumps({"website": None, "email": "Brayemmets.office@gmail.com", "phone": "+353873336971", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"rental_fee": 350, "average_cost_per_head": 25, "currency": "EUR", "min_spend": 0,
-                 "note": "Dry-hire hall; self-catering allowed; bar staff sometimes included.", "_indicative": True})),
+                 "note": "Club function hall; dry-hire, self-catering allowed, bar staff available.", "_indicative": True})),
+
+    ("venue_olgc_killiney", "Our Lady of Good Counsel Church", "Churchview Road, Killiney, Co. Dublin, A96 EY91", "Dublin",
+     "church", 50, 250, 2, 0,
+     json.dumps({"website": None, "email": "johnstownparish@gmail.com", "phone": "+35312351416", "_method": "published_email", "_checked": "2026-05-28"}),
+     json.dumps({"rental_fee": 400, "average_cost_per_head": None, "currency": "EUR", "min_spend": None,
+                 "note": "Catholic ceremony venue (not reception); donation-based fee. Confirm pre-marriage paperwork lead time.", "_indicative": True})),
 
     ("venue_community_hall_template", "[TEMPLATE] Community Celebration Hall", "Co. Sligo", "Sligo",
      "community_hall", 30, 200, 2, 0,
