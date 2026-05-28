@@ -15,8 +15,10 @@ export function Footer() {
               Find us
             </h5>
             <p className="font-sans text-[12px] text-foreground/80 leading-relaxed uppercase">
-              Windhover, Enniskerry
-              <br />
+              Windhover
+              <br /><br />
+              Enniskerry
+              <br /><br />
               Ireland
             </p>
           </div>
