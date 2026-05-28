@@ -210,41 +210,41 @@ suppliers = [
 
     # ---- PHOTOGRAPHY (real Irish wedding photographers) ----
     ("sup_dasha_caffrey", "Dasha Caffrey Photography", "photography", "Dublin",
-     json.dumps({"website": "https://www.dashacaffrey.com", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.dashacaffrey.com", "email": "dashacaffrey@gmail.com", "phone": None, "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"package_price": 2800, "currency": "EUR", "note": "Full-day documentary coverage; nationwide.", "_indicative": True}),
      json.dumps({"styles": ["documentary", "natural_light", "storytelling"]})),
 
     ("sup_olga_hogan", "Olga Hogan Photography", "photography", "Dublin",
-     json.dumps({"website": "https://www.olgahoganphotography.com", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.olgahoganphotography.com", "email": "hello@olgahoganphotography.com", "phone": None, "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"package_price": 2600, "currency": "EUR", "note": "Relaxed, candid documentary style.", "_indicative": True}),
      json.dumps({"styles": ["documentary", "candid", "relaxed"]})),
 
     ("sup_kevin_kheffache", "Kevin Kheffache Photography", "photography", "Galway",
-     json.dumps({"website": "https://www.kevinkheffache.com", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.kevinkheffache.com", "email": "Kevin.kheffache@gmail.com", "phone": "+353876846067", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"package_price": 2400, "currency": "EUR", "note": "Castle & countryside weddings nationwide.", "_indicative": True}),
      json.dumps({"styles": ["natural_light", "scenic", "story-driven"]})),
 
     # ---- VIDEOGRAPHY (real) ----
     ("sup_dear_oliver", "Dear Oliver", "videography", "Dublin",
-     json.dumps({"website": "https://www.dearoliver.co", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.dearoliver.co", "email": "info@dearoliver.co", "phone": "+353862436949", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"package_price": 2900, "currency": "EUR", "note": "Luxury destination cinematic films; highlight + feature.", "_indicative": True}),
      json.dumps({"styles": ["cinematic", "luxury", "highlight-film"]})),
 
     ("sup_edit_house", "Edit House Productions", "videography", "Galway",
-     json.dumps({"website": "https://edithouse.ie", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://edithouse.ie", "email": "emma@edithouse.ie", "phone": "+353878371555", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"package_price": 2200, "currency": "EUR", "note": "Documentary-led wedding films, west of Ireland.", "_indicative": True}),
      json.dumps({"styles": ["documentary", "natural", "coastal"]})),
 
     # ---- MUSIC: BANDS (real, via irishweddingbands.ie agency) ----
     ("sup_band_the_firm", "The Firm (Wedding Band)", "music", "Dublin",
-     json.dumps({"website": "https://www.irishweddingbands.ie", "email": None, "phone": None, "_verify": True,
+     json.dumps({"website": "https://www.irishweddingbands.ie", "email": "info@irishweddingbands.ie", "phone": "+35312013660", "_method": "published_email", "_checked": "2026-05-28",
                  "note": "Booked via Irish Wedding Bands / Audionetworks agency."}),
      json.dumps({"package_price": 2600, "currency": "EUR", "note": "One of Ireland's most-booked party bands (5,000+ gigs).", "_indicative": True}),
      json.dumps({"styles": ["party", "pop", "rock", "crowd-pleaser"]})),
 
     ("sup_band_midnight_revellers", "The Midnight Revellers", "music", "Dublin",
-     json.dumps({"website": "https://www.irishweddingbands.ie", "email": None, "phone": None, "_verify": True,
-                 "note": "Booked via Irish Wedding Bands agency."}),
+     json.dumps({"website": "https://www.irishweddingbands.ie", "email": "info@irishweddingbands.ie", "phone": "+35312013660", "_method": "published_email", "_checked": "2026-05-28",
+                 "note": "Booked via Irish Wedding Bands / Audionetworks agency."}),
      json.dumps({"package_price": 2200, "currency": "EUR", "note": "Trad-meets-modern; scalable 3–4 piece, ceremony to party.", "_indicative": True}),
      json.dumps({"styles": ["trad", "folk", "modern", "party"]})),
 
@@ -257,12 +257,12 @@ suppliers = [
 
     # ---- FLORALS (real) ----
     ("sup_jill_wild", "Wild / Jill Wild Flowersmith", "florals", "Cork",
-     json.dumps({"website": "https://www.wild.ie", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.wild.ie", "email": "wildworkshop@gmail.com", "phone": "+353860667298", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"package_price": 1800, "currency": "EUR", "note": "Botanical, sculptural, editorial floral design.", "_indicative": True}),
      json.dumps({"styles": ["botanical", "sculptural", "editorial", "wild"]})),
 
     ("sup_fleur_weddings", "Fleur Weddings", "florals", "Dublin",
-     json.dumps({"website": "https://fleurweddings.ie", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://fleurweddings.ie", "email": "hello@fleurweddings.ie", "phone": "+353863352783", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"package_price": 1500, "currency": "EUR", "note": "Boutique bridal florist + venue stylist; natural, timeless.", "_indicative": True}),
      json.dumps({"styles": ["natural", "elegant", "timeless"]})),
 
@@ -293,7 +293,7 @@ suppliers = [
 
     # ---- OFFICIANT / CELEBRANT (real, registered solemnisers) ----
     ("sup_daragh_doyle_celebrant", "Daragh Doyle Celebrant", "officiant", "Wicklow",
-     json.dumps({"website": "https://www.daraghdoylecelebrant.com", "email": None, "phone": None, "_verify": True}),
+     json.dumps({"website": "https://www.daraghdoylecelebrant.com", "email": "daragh@daraghdoyle.com", "phone": "+353868398152", "_method": "published_email", "_checked": "2026-05-28"}),
      json.dumps({"package_price": 500, "currency": "EUR", "note": "Registered solemniser; Dublin/Wicklow/Wexford; legal + custom.", "_indicative": True}),
      json.dumps({"styles": ["personal", "warm", "secular-or-religious"]})),
 
