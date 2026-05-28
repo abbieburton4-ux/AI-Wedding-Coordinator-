@@ -662,18 +662,54 @@ with tab3:
                     elif not email_input:
                         st.error("Paste an email to analyze first.")
                     else:
-                        with st.spinner("Extracting quote line items..."):
-                            try:
-                                res = agents.run_quote_extractor(sel_bk_id, email_input, user_id=st.session_state.current_user_id, api_key=api_key)
-                                st.success("Quote extracted and booking status updated!")
-                                if res["budget_warning"]:
-                                    st.warning("⚠️ **Budget Alert**: This quote exceeds the category's allocated budget! Budget monitor alert logged in the audit trail.")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Extraction failed: {e}")
+                        captured_steps = []
+                        try:
+                            with st.status(
+                                "AI coordinator parsing the supplier reply...",
+                                expanded=True,
+                            ) as status:
+                                def on_step(msg):
+                                    captured_steps.append(msg)
+                                    st.write(msg)
+
+                                res = agents.run_quote_extractor(
+                                    sel_bk_id,
+                                    email_input,
+                                    user_id=st.session_state.current_user_id,
+                                    api_key=api_key,
+                                    on_step=on_step,
+                                )
+
+                                if res.get("budget_warning"):
+                                    status.update(
+                                        label=f"Quote €{res['total_amount']:,.2f} · over budget",
+                                        state="error",
+                                    )
+                                elif not res.get("is_available"):
+                                    status.update(label="Supplier declined", state="error")
+                                else:
+                                    status.update(
+                                        label=f"Quote €{res['total_amount']:,.2f} · within budget",
+                                        state="complete",
+                                    )
+
+                            st.session_state[f"quote_steps_{sel_bk_id}"] = captured_steps
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Extraction failed: {e}")
                                 
             with q_col2:
                 st.markdown("<h4>Extracted Quotes & Direct Payments</h4>", unsafe_allow_html=True)
+
+                # Reasoning trail from the most recent quote extraction for this
+                # booking — preserved across the post-success st.rerun() so a
+                # planner can re-read the AI's parsing logic next to the quote.
+                quote_steps_key = f"quote_steps_{sel_bk_id}"
+                if quote_steps_key in st.session_state and st.session_state[quote_steps_key]:
+                    with st.expander("How the AI read this reply", expanded=False):
+                        for step in st.session_state[quote_steps_key]:
+                            st.markdown(f"- {step}")
+
                 quotes = db.get_quotes(sel_bk_id)
                 
                 if quotes:
