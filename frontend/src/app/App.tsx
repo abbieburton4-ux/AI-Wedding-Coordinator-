@@ -17,6 +17,10 @@ import { Guests } from "./wedding/views/Guests";
 import { Timeline } from "./wedding/views/Timeline";
 import { SeatingPlan } from "./wedding/views/SeatingPlan";
 import { Concierge as WeddingConcierge } from "./wedding/views/Concierge";
+import { AdminLayout } from "./admin/AdminLayout";
+import { Overview as AdminOverview } from "./admin/views/Overview";
+import { Planners as AdminPlanners } from "./admin/views/Planners";
+import { AgentLog as AdminAgentLog } from "./admin/views/AgentLog";
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
 
@@ -47,6 +51,12 @@ export default function App() {
           <Route path="timeline" element={<Timeline />} />
           <Route path="concierge" element={<WeddingConcierge />} />
           <Route path="*" element={<Dashboard />} />
+        </Route>
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route index element={<AdminOverview />} />
+          <Route path="planners" element={<AdminPlanners />} />
+          <Route path="agent-log" element={<AdminAgentLog />} />
+          <Route path="*" element={<AdminOverview />} />
         </Route>
       </Routes>
     </BrowserRouter>

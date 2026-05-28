@@ -3,8 +3,7 @@
 Personas:
 - **Couple** — B2C customer, pays one-time coordinator fee (€299–€999) per wedding.
 - **Planner** — B2B customer, pays monthly subscription (€199–€499/mo), manages multiple client weddings.
-- **Founder / 
-** — internal, runs ops and assembles the XPRIZE submission package.
+- **Admin** — internal, runs ops and assembles the XPRIZE submission package.
 
 Epics: Onboarding & Billing, Agent-driven Planning, Contracts & Tracked Payments, Agent Execution Logs, RSVPs & Day-of, Planner Workflow, Reporting & Submission.
 

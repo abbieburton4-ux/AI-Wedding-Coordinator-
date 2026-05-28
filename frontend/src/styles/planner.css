@@ -119,8 +119,10 @@
   --spacing-gutter: 14px;
 }
 
-/* Scoped overrides for the three names shared with the marketing theme. */
-.planner {
+/* Scoped overrides for the three names shared with the marketing theme.
+ * `.admin` reuses the planner's olive palette (internal back-office tool). */
+.planner,
+.admin {
   --background: #faf9f6;
   --primary: #735c00;
   --secondary: #76593b;

@@ -17,15 +17,10 @@ const FOOTER_ITEMS = [
 
 export function PlannerSidebar() {
   return (
-    <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 border-r border-outline-variant/20 bg-wedding-white flex-col py-8 px-4 z-40">
-      <div className="flex items-center gap-base mb-12 px-4">
-        <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center border border-outline-variant/30">
-          <Icon name="auto_awesome" className="text-primary" filled />
-        </div>
-        <div>
-          <h1 className="font-title-lg text-title-lg text-primary tracking-tight">VenueFlow</h1>
-          <p className="font-label-caps text-label-caps text-on-surface-variant">Planner Studio</p>
-        </div>
+    <aside className="hidden md:flex fixed left-0 top-16 bottom-0 w-64 border-r border-outline-variant/20 bg-wedding-white flex-col py-6 px-4 z-40 overflow-y-auto">
+      <div className="px-4 mb-6">
+        <p className="font-headline-sm text-headline-sm text-primary">Planner Studio</p>
+        <p className="font-label-caps text-label-caps text-on-surface-variant">Premium Tier</p>
       </div>
 
       <nav className="flex-1 flex flex-col gap-2">
@@ -56,7 +51,7 @@ export function PlannerSidebar() {
         ))}
       </nav>
 
-      <div className="mt-auto mb-8 px-2">
+      <div className="mt-auto mb-6 px-2">
         <NavLink
           to="/planner/concierge"
           className="w-full bg-primary-container text-on-primary-container font-button-text text-button-text py-3 rounded-full flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"

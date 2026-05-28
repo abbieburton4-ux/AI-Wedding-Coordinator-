@@ -48,7 +48,7 @@ export function Concierge() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-[calc(100vh-4rem)] flex flex-col">
       <header className="shrink-0 border-b border-outline-variant/20 px-margin-mobile md:px-margin-desktop py-5 flex items-center gap-4 bg-surface-bright/80 backdrop-blur-md">
         <div className="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center">
           <Icon name="auto_awesome" filled className="text-on-primary-container" />

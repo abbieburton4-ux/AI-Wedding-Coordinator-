@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import { Icon } from "../Icon";
 
 const CLIENTS: {
@@ -118,12 +119,12 @@ export function Clients() {
                     </div>
                   ))}
                 </div>
-                <button
-                  type="button"
+                <Link
+                  to="/wedding"
                   className="text-primary font-button-text text-button-text flex items-center gap-1 group-hover:underline decoration-1 underline-offset-4"
                 >
                   View Details <Icon name="arrow_forward" size={16} />
-                </button>
+                </Link>
               </div>
             </div>
           ))}
