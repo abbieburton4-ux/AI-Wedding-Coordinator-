@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: venueflow_db
+    restart: always
+    environment:
+      POSTGRES_USER: venueflow
+      POSTGRES_PASSWORD: venueflow_pass
+      POSTGRES_DB: venueflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  tasks-emulator:
+    image: ghcr.io/aaronaddleman/gcloud-tasks-emulator:latest
+    container_name: venueflow_tasks_emulator
+    restart: always
+    command: -host 0.0.0.0 -port 8123
+    ports:
+      - "8123:8123"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: venueflow_api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://venueflow:venueflow_pass@db/venueflow
+      - SYNC_DATABASE_URL=postgresql+psycopg2://venueflow:venueflow_pass@db/venueflow
+      - TASKS_EMULATOR_HOST=tasks-emulator
+      - TASKS_EMULATOR_PORT=8123
+      - DEVELOPMENT_MODE=True
+      - ALLOW_MOCK_AUTH=True
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - db
+      - tasks-emulator
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: venueflow_worker
+    # The worker also runs a FastAPI app to handle inbound push requests from Cloud Tasks
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+    volumes:
+      - .:/app
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://venueflow:venueflow_pass@db/venueflow
+      - SYNC_DATABASE_URL=postgresql+psycopg2://venueflow:venueflow_pass@db/venueflow
+      - DEVELOPMENT_MODE=True
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
