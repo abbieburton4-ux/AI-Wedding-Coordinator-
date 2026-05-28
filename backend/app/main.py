@@ -13,13 +13,23 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configure CORS for local React/Vite development
+# Configure CORS dynamically for local Vite development and deployed GitHub Pages
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust in production
+    allow_origins=[
+        "https://alanmaizon.github.io",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Content-Type", 
+        "Authorization", 
+        "X-Idempotency-Key", 
+        "X-Requested-With",
+        "Accept"
+    ],
 )
 
 # Startup Event: DB Initialization and Automatic Seeding
@@ -41,15 +51,28 @@ def on_startup():
         logger.error(f"Error during startup database seeding: {e}")
 
 # Include Routers
-from app.api.v1.endpoints import weddings, webhooks
+from app.api.v1.endpoints import weddings, webhooks, auth, inquiries, metrics
 from app.worker import tasks
 
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(weddings.router, prefix="/api/v1/weddings", tags=["Weddings"])
+app.include_router(inquiries.router, prefix="/api/v1/inquiries", tags=["Inquiries"])
+app.include_router(metrics.router, prefix="/api/v1/metrics", tags=["Metrics"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["Webhooks"])
 app.include_router(tasks.router, prefix="/tasks", tags=["Worker Tasks"])
 
 @app.get("/")
 def read_root():
+    return {
+        "status": "healthy",
+        "service": "VenueFlow Backend",
+        "environment": "development" if settings.DEVELOPMENT_MODE else "production"
+    }
+
+@app.get("/api/v1/health")
+@app.get("/api/health")
+@app.get("/health")
+def read_health():
     return {
         "status": "healthy",
         "service": "VenueFlow Backend",
