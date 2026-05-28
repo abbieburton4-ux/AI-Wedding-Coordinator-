@@ -263,4 +263,3 @@ RSVP follow-ups follow the same shape but triggered by Cloud Scheduler instead o
 - **Antigravity vs. hand-rolled orchestrator.** Resolve via week-1 spike. The invocation contract above is portable either way.
 - **BigQuery mirror cadence.** Datastream gives sub-minute lag; whether that's needed for the live dashboard or whether a 5-minute scheduled export suffices is unclear until traffic exists.
 - **Guardrails authoring.** Per-agent guardrail configs (price ceilings, PII redaction, "don't promise availability without DB lookup") need an owner. Probably the prompt-engineering surface area expands fastest in weeks 4–8.
-- **Couple ↔ planner permissions.** When a planner is attached to a wedding, who can override agent decisions, sign contracts, approve outbound emails? Default: both can act, all actions audited. Confirm with Mary-Aoife.

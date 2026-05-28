@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useLocation } from "react-router";
+import { Outlet, useLocation } from "react-router";
 import { Nav } from "./Nav";
 import { Footer } from "./Footer";
 
@@ -19,12 +19,14 @@ function ScrollManager() {
   return null;
 }
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export function Layout() {
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden selection:bg-primary/20">
       <ScrollManager />
       <Nav />
-      <main>{children}</main>
+      <main>
+        <Outlet />
+      </main>
       <Footer />
     </div>
   );

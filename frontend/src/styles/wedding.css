@@ -1,0 +1,76 @@
+/*
+ * Couple-facing (B2C) wedding app theme. Shares the planner's MD3 @theme
+ * token set; only the three names that overlap with the marketing brand are
+ * scoped here. The couple palette differs from the planner in one token:
+ * `primary` is the gold (#d4af37) rather than the planner's olive.
+ */
+
+.wedding {
+  --background: #faf9f6;
+  --primary: #d4af37;
+  --secondary: #76593b;
+}
+
+.wedding .custom-shadow {
+  box-shadow: 0px 4px 20px rgba(142, 103, 73, 0.08);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.timeline-line::before {
+  content: "";
+  position: absolute;
+  left: 23px;
+  top: 48px;
+  bottom: -32px;
+  width: 1px;
+  background-color: #d0c5af;
+  opacity: 0.5;
+  z-index: 0;
+}
+.timeline-item:last-child .timeline-line::before {
+  display: none;
+}
+
+.chart-donut {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: conic-gradient(#d4af37 0% 65%, #f4f3f1 65% 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.chart-donut::after {
+  content: "";
+  position: absolute;
+  width: 160px;
+  height: 160px;
+  background-color: #faf9f6;
+  border-radius: 50%;
+}
+
+@keyframes wedding-slide-up {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.animate-slide-up {
+  animation: wedding-slide-up 0.25s ease-out;
+}
