@@ -5,11 +5,12 @@ import { Icon } from "../planner/Icon";
 import { IMG } from "../design-system/assets";
 
 const NAV_ITEMS = [
-  { path: "/wedding", label: "Overview", deskIcon: "dashboard", mobileLabel: "Home", mobileIcon: "home", end: true },
-  { path: "/wedding/vendors", label: "Vendors", deskIcon: "storefront", mobileLabel: "Vendors", mobileIcon: "favorite" },
-  { path: "/wedding/budget", label: "Budget", deskIcon: "payments", mobileLabel: "Budget", mobileIcon: "account_balance_wallet" },
-  { path: "/wedding/guests", label: "Guests & Seating", deskIcon: "group", mobileLabel: "Guests", mobileIcon: "people" },
-  { path: "/wedding/timeline", label: "Timeline", deskIcon: "auto_schedule", mobileLabel: "Timeline", mobileIcon: "event" },
+  { path: "/wedding", label: "Overview", deskIcon: "dashboard", mobileLabel: "Home", mobileIcon: "home", end: true, mobile: true },
+  { path: "/wedding/vendors", label: "Vendors", deskIcon: "storefront", mobileLabel: "Vendors", mobileIcon: "favorite", mobile: true },
+  { path: "/wedding/budget", label: "Budget", deskIcon: "payments", mobileLabel: "Budget", mobileIcon: "account_balance_wallet", mobile: true },
+  { path: "/wedding/guests", label: "Guests & Seating", deskIcon: "group", mobileLabel: "Guests", mobileIcon: "people", mobile: true },
+  { path: "/wedding/seating", label: "Seating Plan", deskIcon: "table_restaurant", mobileLabel: "Seating", mobileIcon: "table_restaurant", mobile: false },
+  { path: "/wedding/timeline", label: "Timeline", deskIcon: "auto_schedule", mobileLabel: "Timeline", mobileIcon: "event", mobile: true },
 ];
 
 function WeddingHeader() {
@@ -75,7 +76,7 @@ function WeddingDesktopNav() {
 function WeddingBottomNav() {
   return (
     <nav className="bg-wedding-white fixed bottom-0 w-full z-50 md:hidden border-t border-outline-variant/20 shadow-sm flex justify-around items-center py-2 pb-safe">
-      {NAV_ITEMS.map((item) => (
+      {NAV_ITEMS.filter((item) => item.mobile).map((item) => (
         <NavLink
           key={item.path}
           to={item.path}

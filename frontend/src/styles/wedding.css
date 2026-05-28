@@ -15,14 +15,23 @@
   box-shadow: 0px 4px 20px rgba(142, 103, 73, 0.08);
 }
 
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(179, 144, 111, 0.2);
+}
+
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 16px);
 }
 
-.scrollbar-hide::-webkit-scrollbar {
+.scrollbar-hide::-webkit-scrollbar,
+.hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
-.scrollbar-hide {
+.scrollbar-hide,
+.hide-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
@@ -73,4 +82,42 @@
 }
 .animate-slide-up {
   animation: wedding-slide-up 0.25s ease-out;
+}
+
+/* --- Seating plan interactions --- */
+.guest-tray {
+  background: linear-gradient(to top, #ffffff, #faf9f6);
+}
+
+.is-dragging {
+  opacity: 0.4;
+}
+
+@keyframes wedding-spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-spin-slow {
+  animation: wedding-spin-slow 24s linear infinite;
+}
+
+@keyframes pulse-gold {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 16px 4px rgba(212, 175, 55, 0.7);
+  }
+}
+.drop-active {
+  animation: pulse-gold 1.2s ease-in-out infinite;
+  outline: 2px solid #d4af37;
+  outline-offset: 2px;
+}
+.drop-reject {
+  outline: 2px solid #ba1a1a;
+  outline-offset: 2px;
+  opacity: 0.7;
 }
