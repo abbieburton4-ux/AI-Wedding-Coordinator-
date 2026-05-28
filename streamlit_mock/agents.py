@@ -710,14 +710,21 @@ def run_venue_matcher(wedding_id, user_id=None, api_key=None, model_name=None, o
         raise e
 
 
-def run_supplier_matcher(wedding_id, category, user_id=None, api_key=None, model_name=None):
+def run_supplier_matcher(wedding_id, category, user_id=None, api_key=None, model_name=None, on_step=None):
     """
     Matches available suppliers for a specific category against the wedding profile and creates shortlisted bookings.
+
+    on_step: optional callable(message: str) for live UI progress display.
+             See run_venue_matcher for the contract.
     """
     agent_id = "supplier_matcher"
     model = model_name or model_for(agent_id)
     decision_id = str(uuid.uuid4())
     start_time = time.time()
+
+    def _step(msg):
+        if on_step:
+            on_step(msg)
     
     system_instruction = (
         f"You are an expert Irish wedding coordinator agent called supplier_matcher. Your job is to match the couple's "
@@ -752,21 +759,29 @@ def run_supplier_matcher(wedding_id, category, user_id=None, api_key=None, model
         budget_row = cursor.fetchone()
         allocated_budget = dict(budget_row)["allocated_amount"] if budget_row else wedding["budget_total"] * 0.1
 
+        preferred_region = wedding["region"]
+        _step(f"Sourcing {category} · {preferred_region} · €{allocated_budget:,.0f} allocated")
+
         cursor.execute("SELECT * FROM suppliers WHERE category = ?", (category,))
         suppliers_list = [dict(r) for r in cursor.fetchall()]
 
         # Pre-filter suppliers by region preference. Suppliers store their
         # geography in `location`, which currently uses the same county/province
         # vocabulary as venues, so region_matches works identically.
-        preferred_region = wedding["region"]
         suppliers_in_region = [s for s in suppliers_list if region_matches(s["location"], preferred_region)]
 
         if len(suppliers_in_region) >= 3:
             filtered_suppliers = suppliers_in_region
+            _step(f"Found {len(suppliers_list)} {category} suppliers · {len(suppliers_in_region)} in {preferred_region}")
         else:
             # Include other regions as backup options
             other_suppliers = [s for s in suppliers_list if not region_matches(s["location"], preferred_region)]
+            fallback_count = min(3 - len(suppliers_in_region), len(other_suppliers))
             filtered_suppliers = suppliers_in_region + other_suppliers[:(3 - len(suppliers_in_region))]
+            _step(
+                f"Found {len(suppliers_list)} {category} suppliers · {len(suppliers_in_region)} in "
+                f"{preferred_region} · pulling {fallback_count} fallback from adjacent counties"
+            )
 
         # Build Context
         input_payload = {
@@ -790,7 +805,8 @@ def run_supplier_matcher(wedding_id, category, user_id=None, api_key=None, model
 
         client = get_client(api_key)
         prompt = f"Match suppliers for the following couple profile and options:\n{json.dumps(input_payload, indent=2)}"
-        
+
+        _step(f"Asking Gemini ({model}) to rank candidates and draft your inquiry emails...")
         response = client.models.generate_content(
             model=model,
             contents=prompt,
@@ -801,25 +817,32 @@ def run_supplier_matcher(wedding_id, category, user_id=None, api_key=None, model
                 temperature=0.2
             )
         )
-        
+
         result_dict = json.loads(response.text)
-        
+
         latency = int((time.time() - start_time) * 1000)
         tokens_in = response.usage_metadata.prompt_token_count if response.usage_metadata else 0
         tokens_out = response.usage_metadata.candidates_token_count if response.usage_metadata else 0
-        
+
+        shortlist_count = len(result_dict.get("shortlist", []))
+        confidence = result_dict.get("confidence_score") or 0
+        _step(
+            f"Received {shortlist_count} ranked matches in {latency/1000:.1f}s · "
+            f"{tokens_out:,} tokens · confidence {confidence:.0%}"
+        )
+
         external_api_calls = [{
             "provider": "google",
             "model": model,
             "latency_ms": latency,
             "tokens": {"input": tokens_in, "output": tokens_out}
         }]
-        
+
         # Pre-validate vendor_id ∈ filtered_suppliers (to prevent DB crash on hallucinations)
         valid_supplier_ids = {s["id"] for s in filtered_suppliers}
         bookings_to_insert = []
         hallucinated_ids = []
-        
+
         for match in result_dict.get("shortlist", []):
             s_id = match["vendor_id"]
             if s_id in valid_supplier_ids:
@@ -832,8 +855,9 @@ def run_supplier_matcher(wedding_id, category, user_id=None, api_key=None, model
                     ))
             else:
                 hallucinated_ids.append(s_id)
-                
+
         if hallucinated_ids:
+            _step(f"Blocked: supplier IDs not in candidate list — protecting you from AI fabrication ({', '.join(hallucinated_ids)})")
             # Guardrail Blocked Path
             cursor.execute("""
                 UPDATE agent_decision_logs 
@@ -861,11 +885,11 @@ def run_supplier_matcher(wedding_id, category, user_id=None, api_key=None, model
             INSERT INTO bookings (id, wedding_id, supplier_id, status, sourced_by_agent_id)
             VALUES (?, ?, ?, ?, ?)
         """, bookings_to_insert)
-        
+
         # Write success log
         cursor.execute("""
-            UPDATE agent_decision_logs 
-            SET status = 'success', rationale_summary = ?, 
+            UPDATE agent_decision_logs
+            SET status = 'success', rationale_summary = ?,
                 input_payload = ?, output_payload = ?, confidence_score = ?,
                 latency_ms = ?, tokens_input = ?, tokens_output = ?, external_api_calls = ?
             WHERE id = ?
@@ -878,6 +902,8 @@ def run_supplier_matcher(wedding_id, category, user_id=None, api_key=None, model
             json.dumps(external_api_calls),
             decision_id
         ))
+
+        _step(f"Logged decision `{decision_id[:8]}` with full audit trail · {len(bookings_to_insert)} bookings created")
         
         conn.commit()
         conn.close()
