@@ -1,5 +1,6 @@
 import { Icon } from "../../planner/Icon";
 import { useWedding, USE_FASTAPI_BACKEND } from "../../api";
+import { useActiveWedding } from "../WeddingProvider";
 
 const STATIC_ITEMS: {
   date: string;
@@ -65,8 +66,9 @@ function formatDate(dateStr: string): string {
 }
 
 export function Timeline() {
-  const weddingId = "wedding_planning_test";
-  const { data, loading } = useWedding(USE_FASTAPI_BACKEND ? weddingId : null);
+  const { activeWedding } = useActiveWedding();
+  const weddingId = activeWedding?.id ?? null;
+  const { data, loading } = useWedding(weddingId);
 
   const useLiveData = USE_FASTAPI_BACKEND && data.timelineItems.length > 0;
 

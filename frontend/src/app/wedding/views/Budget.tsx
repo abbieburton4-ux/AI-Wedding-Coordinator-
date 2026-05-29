@@ -1,5 +1,6 @@
 import { Icon } from "../../planner/Icon";
 import { useWedding, USE_FASTAPI_BACKEND } from "../../api";
+import { useActiveWedding } from "../WeddingProvider";
 
 const STATIC_CATEGORIES = [
   {
@@ -36,8 +37,9 @@ function formatCurrency(amount: number): string {
 }
 
 export function Budget() {
-  const weddingId = "wedding_planning_test";
-  const { data, loading } = useWedding(USE_FASTAPI_BACKEND ? weddingId : null);
+  const { activeWedding } = useActiveWedding();
+  const weddingId = activeWedding?.id ?? null;
+  const { data, loading } = useWedding(weddingId);
 
   const useLiveData = USE_FASTAPI_BACKEND && data.budgetLines.length > 0;
 

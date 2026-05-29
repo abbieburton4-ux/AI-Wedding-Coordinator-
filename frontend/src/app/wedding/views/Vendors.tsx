@@ -2,6 +2,7 @@ import { Icon } from "../../planner/Icon";
 import { IMG } from "../../design-system/assets";
 import { useAgentMatcher, USE_FASTAPI_BACKEND } from "../../../app/api";
 import type { AgentStatus } from "../../../app/api";
+import { useActiveWedding } from "../WeddingProvider";
 
 const STATIC_VENDORS = [
   { title: "The Glasshouse Estate", cat: "Venue", rating: "4.9", img: IMG.showroom },
@@ -81,8 +82,8 @@ function AgentErrorBanner({ message }: { message: string }) {
 }
 
 export function Vendors() {
-  // TODO: Replace with actual weddingId from route params or context
-  const weddingId = "wedding_planning_test";
+  const { activeWedding } = useActiveWedding();
+  const weddingId = activeWedding?.id ?? "";
   const {
     triggerVenueMatch,
     triggerSupplierMatch,

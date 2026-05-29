@@ -28,9 +28,14 @@ export function Landing() {
             elegance and intention — turning the day you imagine into a memory you'll
             carry forever.
           </p>
-          <ButtonLink to="/experience" variant="outline">
-            Explore
-          </ButtonLink>
+          <div className="flex flex-wrap items-center gap-4">
+            <ButtonLink to="/signup" variant="solid">
+              Start planning
+            </ButtonLink>
+            <ButtonLink to="/experience" variant="outline">
+              Explore
+            </ButtonLink>
+          </div>
         </div>
 
         <div className="flex-1 w-full relative aspect-[4/5] sm:aspect-[3/4] md:aspect-auto md:h-[80vh] md:max-h-[800px]">

@@ -15,10 +15,12 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   tasks-emulator:
-    image: ghcr.io/aaronaddleman/gcloud-tasks-emulator:latest
+    # Public Cloud Tasks emulator (gRPC). -queue pre-creates the queue path that
+    # app/utils/tasks.enqueue_agent_task targets.
+    image: ghcr.io/aertje/cloud-tasks-emulator:latest
     container_name: venueflow_tasks_emulator
     restart: always
-    command: -host 0.0.0.0 -port 8123
+    command: -host 0.0.0.0 -port 8123 -queue projects/venueflow-dev/locations/europe-west1/queues/agent-tasks
     ports:
       - "8123:8123"
 
@@ -63,5 +65,25 @@ services:
     depends_on:
       - db
 
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: venueflow_frontend
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    volumes:
+      - ../frontend:/app
+      # Keep the image's installed node_modules; don't let the bind mount clobber it.
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      # The React app runs in the browser on the host, so it must reach the API
+      # via the host-published port — NOT the docker-internal name `api:8000`.
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - api
+
 volumes:
   postgres_data:
+  frontend_node_modules:

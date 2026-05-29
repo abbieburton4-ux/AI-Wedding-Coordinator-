@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import { Outlet, NavLink, useLocation } from "react-router";
 import { cn } from "../design-system/cn";
-import { Icon } from "../planner/Icon";
+import { Icon } from "../shared/Icon";
 import { WorkspaceHeader } from "../shared/WorkspaceHeader";
+import { WeddingProvider } from "./WeddingProvider";
 
 const NAV_ITEMS = [
   { path: "/wedding", label: "Overview", deskIcon: "dashboard", mobileLabel: "Home", mobileIcon: "home", end: true, mobile: true },
@@ -70,20 +71,23 @@ function WeddingBottomNav() {
 
 export function WeddingLayout() {
   const { pathname } = useLocation();
-  const showShell = !pathname.endsWith("/concierge");
+  // Concierge and the intake/onboarding flow render full-bleed (no nav chrome).
+  const showShell = !pathname.endsWith("/concierge") && !pathname.endsWith("/intake");
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
   }, [pathname]);
 
   return (
-    <div className="wedding min-h-screen flex flex-col md:flex-row bg-background text-on-background font-body-md antialiased selection:bg-primary-container selection:text-on-primary-container">
-      {showShell && <WorkspaceHeader profileTo="/wedding/concierge" searchPlaceholder="Search vendors, guests…" />}
-      {showShell && <WeddingDesktopNav />}
-      <div className="flex-grow w-full min-w-0">
-        <Outlet />
+    <WeddingProvider>
+      <div className="wedding min-h-screen flex flex-col md:flex-row bg-background text-on-background font-body-md antialiased selection:bg-primary-container selection:text-on-primary-container">
+        {showShell && <WorkspaceHeader profileTo="/wedding/concierge" searchPlaceholder="Search vendors, guests…" />}
+        {showShell && <WeddingDesktopNav />}
+        <div className="flex-grow w-full min-w-0">
+          <Outlet />
+        </div>
+        {showShell && <WeddingBottomNav />}
       </div>
-      {showShell && <WeddingBottomNav />}
-    </div>
+    </WeddingProvider>
   );
 }
