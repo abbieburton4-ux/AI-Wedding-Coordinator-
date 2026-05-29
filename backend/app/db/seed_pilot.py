@@ -64,7 +64,7 @@ PILOT_PLANNERS = [
 
 def _make_jwt(user: User) -> str:
     """Mint a 30-day HS256 bearer token validated by app.api...auth.get_current_user."""
-    secret = settings.JWT_SECRET or "dev-jwt-secret-key-change-me-in-production"
+    secret = getattr(settings, "JWT_SECRET", None) or "dev-jwt-secret-key-change-me-in-production"
     return jwt.encode(
         {
             "sub": user.id,

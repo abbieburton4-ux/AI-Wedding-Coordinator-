@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     
     # API Keys & Auth
     GEMINI_API_KEY: Optional[str] = None
+    JWT_SECRET: Optional[str] = "dev-jwt-secret-key-change-me-in-production"
     FIREBASE_PROJECT_ID: str = "venueflow-dev"
     
     # Dev settings
