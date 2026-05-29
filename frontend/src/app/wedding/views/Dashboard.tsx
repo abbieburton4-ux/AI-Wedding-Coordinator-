@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router";
 import { Icon } from "../../shared/Icon";
 import { useWedding, useAgentMatcher } from "../../api";
@@ -20,20 +20,24 @@ export function Dashboard() {
   const venues = data.bookings.filter((b) => b.venue_id);
   const suppliers = data.bookings.filter((b) => b.supplier_id);
 
-  // While the intake_planner is still working, poll until the plan appears.
+  // Poll through intake AND the venue/supplier matcher cascade that lands
+  // incrementally just after status flips to "planning". We poll for a bounded
+  // window only for a wedding we watched go through intake this session, so the
+  // dashboard keeps refreshing until the full shortlist arrives — while a
+  // returning couple (already planned) doesn't poll at all.
   const [waited, setWaited] = useState(0);
+  const sawBuilding = useRef(false);
+  if (building) sawBuilding.current = true;
+  const poll = !!weddingId && (building || (sawBuilding.current && waited < POLL_TIMEOUT_MS * 2));
   useEffect(() => {
-    if (!building) {
-      setWaited(0);
-      return;
-    }
-    const poll = setInterval(() => refetch(), POLL_INTERVAL_MS);
-    const tick = setInterval(() => setWaited((w) => w + POLL_INTERVAL_MS), POLL_INTERVAL_MS);
+    if (!poll) return;
+    const pollId = setInterval(() => refetch(), POLL_INTERVAL_MS);
+    const tickId = setInterval(() => setWaited((w) => w + POLL_INTERVAL_MS), POLL_INTERVAL_MS);
     return () => {
-      clearInterval(poll);
-      clearInterval(tick);
+      clearInterval(pollId);
+      clearInterval(tickId);
     };
-  }, [building, refetch]);
+  }, [poll, refetch]);
   const slow = waited >= POLL_TIMEOUT_MS;
 
   // ---- Activation moment: the AI is drafting the plan ----
