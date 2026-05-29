@@ -27,7 +27,18 @@ interface WeddingContextValue {
   refetch: () => Promise<void>;
 }
 
-const ACTIVE_KEY = "vf_active_wedding";
+export const ACTIVE_WEDDING_KEY = "vf_active_wedding";
+
+/**
+ * Set the active wedding id from outside the provider (e.g. a planner opening a
+ * client's wedding), then navigate to /wedding — WeddingProvider reads this on
+ * mount, so the couple workspace renders the chosen wedding.
+ */
+export function setStoredActiveWeddingId(id: string) {
+  localStorage.setItem(ACTIVE_WEDDING_KEY, id);
+}
+
+const ACTIVE_KEY = ACTIVE_WEDDING_KEY;
 
 const WeddingContext = createContext<WeddingContextValue | undefined>(undefined);
 
