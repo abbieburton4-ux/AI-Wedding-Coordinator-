@@ -66,17 +66,20 @@ export function useWedding(weddingId: string | null) {
     if (!weddingId || !USE_FASTAPI_BACKEND) return;
 
     try {
-      const [wedding, budgetLines, timelineItems] = await Promise.all([
+      // Sub-resources use .catch so a single failing endpoint can never blank
+      // the whole dashboard (the wedding fetch itself must succeed).
+      const [wedding, budgetLines, timelineItems, bookings] = await Promise.all([
         request<WeddingData>(`/weddings/${weddingId}`),
-        request<BudgetLine[]>(`/weddings/${weddingId}/budget`),
-        request<TimelineItem[]>(`/weddings/${weddingId}/timeline`),
+        request<BudgetLine[]>(`/weddings/${weddingId}/budget`).catch(() => [] as BudgetLine[]),
+        request<TimelineItem[]>(`/weddings/${weddingId}/timeline`).catch(() => [] as TimelineItem[]),
+        request<Booking[]>(`/weddings/${weddingId}/bookings`).catch(() => [] as Booking[]),
       ]);
 
       setData({
         wedding,
         budgetLines,
         timelineItems,
-        bookings: [], // Bookings endpoint can be added later
+        bookings,
       });
     } catch {
       // Error is already captured in useApi's error state

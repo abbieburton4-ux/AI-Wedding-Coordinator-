@@ -1,6 +1,7 @@
 import json
 import logging
 import uuid
+from typing import Optional
 from pydantic import BaseModel, Field
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession

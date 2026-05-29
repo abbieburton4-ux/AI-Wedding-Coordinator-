@@ -11,7 +11,7 @@ import pandas as pd
 from pydantic import BaseModel
 
 from app.db.session import get_db
-from app.db.models import User, Wedding, BudgetLine, TimelineItem, AgentDecisionLog
+from app.db.models import User, Wedding, BudgetLine, TimelineItem, AgentDecisionLog, Booking
 from app.api.v1.endpoints.auth import get_current_user
 from app.utils.tasks import enqueue_agent_task
 
@@ -145,6 +145,27 @@ async def get_wedding_timeline(
         select(TimelineItem).where(TimelineItem.wedding_id == wedding_id).order_by(TimelineItem.due_at.asc())
     )
     return timeline_result.all()
+
+
+@router.get("/{wedding_id}/bookings", response_model=List[Booking])
+async def get_wedding_bookings(
+    wedding_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Fetches the venue + supplier shortlist (bookings) for a wedding."""
+    result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
+    wedding = result.first()
+    if not wedding:
+        raise HTTPException(status_code=404, detail="Wedding not found")
+
+    if wedding.couple_user_id != current_user.id and wedding.planner_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this wedding")
+
+    bookings_result = await db.exec(
+        select(Booking).where(Booking.wedding_id == wedding_id).order_by(Booking.created_at.asc())
+    )
+    return bookings_result.all()
 
 
 @router.get("/{wedding_id}/logs", response_model=List[AgentDecisionLog])
