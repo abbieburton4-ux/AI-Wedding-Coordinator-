@@ -1,0 +1,58 @@
+VOICEOVER SCRIPT - 2:08 TARGET (128 seconds)
+
+[00:00 - 00:15]
+Planning a wedding should feel magical.
+But for most couples, it quickly becomes a second full-time job,
+filled with vendor calls, budget decisions, timeline pressure,
+and hundreds of details that all depend on each other.
+
+[00:15 - 00:31]
+VenueFlow is an AI wedding coordinator built to remove that chaos.
+Instead of juggling disconnected spreadsheets, chats, and inbox threads,
+couples get one guided planning workspace that helps them decide,
+prioritize, and move faster with confidence.
+
+[00:31 - 00:48]
+In this demo, a couple creates a new account and goes straight into guided intake.
+They describe their style, guest count, and priorities in plain language,
+then click Build my plan.
+That one action starts the full planning pipeline.
+
+[00:48 - 01:06]
+Behind the scenes, Gemini agents begin collaborating.
+The intake planner checks budget realism,
+creates initial category allocations,
+and seeds timeline milestones that map to the wedding date.
+The output is practical from the start, not just inspirational.
+
+[01:06 - 01:24]
+Within moments, the dashboard appears as a live operating system for the wedding.
+Asynchronous matching agents then shortlist venues and suppliers,
+ranked by region, capacity, style fit, and budget compatibility.
+The couple avoids days of manual research and repetitive outreach.
+
+[01:24 - 01:41]
+From here, they can move through every core planning workflow:
+vendors, budget tracking, guests and seating,
+seating plan, and timeline.
+Because each module is connected,
+changes in one place stay synchronized across the full plan.
+
+[01:41 - 01:56]
+They can also open the Aurelia concierge and ask practical questions,
+like how to keep florist spend under control without losing quality.
+The assistant answers in context of their current plan,
+so recommendations are specific and immediately actionable.
+
+[01:56 - 02:12]
+Next we switch to the planner view.
+Independent planners can manage multiple client workspaces,
+open a specific wedding in one click,
+and monitor tasks, subscriptions, and analytics from a single command center.
+
+[02:12 - 02:28]
+Every autonomous step is captured in AgentDecisionLog,
+with clear records of what the agent did and why.
+VenueFlow gives couples affordable coordination,
+and gives planners the leverage to scale with confidence.
+From first checklist to wedding day.
