@@ -24,6 +24,13 @@ interface Booking {
   supplier_id?: string;
   status: string;
   sourced_by_agent_id?: string;
+  vendor_name?: string;
+  vendor_kind?: "venue" | "supplier";
+  vendor_category?: string;
+  vendor_location?: string;
+  pricing_summary?: Record<string, unknown> | null;
+  matching_rationale?: string;
+  draft_inquiry_email?: string;
 }
 
 interface WeddingData {

@@ -71,7 +71,11 @@ def get_client(api_key=None):
     key = api_key or os.environ.get("GEMINI_API_KEY")
     if not key:
         raise ValueError("Gemini API key not found. Please set the GEMINI_API_KEY environment variable or enter it in the settings sidebar.")
-    return genai.Client(api_key=key, http_options={"timeout": 30.0})
+    # NOTE: google-genai expresses http_options.timeout in MILLISECONDS, not
+    # seconds. The previous value of 30.0 meant 30ms and aborted every call
+    # with "The read operation timed out" — gemini-2.5-pro (used by the
+    # planner/matchers) routinely needs tens of seconds to respond.
+    return genai.Client(api_key=key, http_options={"timeout": 120_000})
 
 def model_for(agent_name: str) -> str:
     """Returns the targeted Gemini model for an agent (Pro for reasoning, Flash for extraction)."""

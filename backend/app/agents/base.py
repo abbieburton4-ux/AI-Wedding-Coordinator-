@@ -14,14 +14,23 @@ def get_client() -> genai.Client:
     # ~36s, so 30s was too tight and surfaced as 504 DEADLINE_EXCEEDED.
     return genai.Client(api_key=key, http_options={"timeout": 90000})
 
+# Pro gives the best planning/reasoning quality, but the Gemini *free tier* has
+# a hard quota of 0 for gemini-2.5-pro — every call 429s with RESOURCE_EXHAUSTED.
+# So default to Flash (which has free-tier quota and runs the whole flow), and
+# let a paid key opt back into Pro via env:
+#   GEMINI_PLANNING_MODEL=gemini-2.5-pro
+PLANNING_MODEL = os.environ.get("GEMINI_PLANNING_MODEL", "gemini-2.5-flash")
+FAST_MODEL = os.environ.get("GEMINI_FAST_MODEL", "gemini-2.5-flash")
+
 def model_for(agent_name: str) -> str:
     """Resolves the correct model for each agent.
-    
-    Pro is used for complex planning and reasoning, Flash for extraction.
+
+    Planning/matching agents use PLANNING_MODEL; extraction uses FAST_MODEL.
+    Both default to Flash so the stack works on a free-tier key out of the box.
     """
     if agent_name in ("intake_planner", "venue_matcher", "supplier_matcher"):
-        return "gemini-2.5-pro"
-    return "gemini-2.5-flash"
+        return PLANNING_MODEL
+    return FAST_MODEL
 
 def get_prompt_version(system_instruction: str) -> str:
     """Generates a prompt version hash from the instruction content."""

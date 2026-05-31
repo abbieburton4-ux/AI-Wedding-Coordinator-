@@ -60,8 +60,15 @@ SYSTEM_INSTRUCTION = (
 )
 
 @run_agent("intake_planner", "timeline_generate")
-async def run_intake_planner(db: AsyncSession, wedding_id: str):
-    """Orchestrates intake analysis and seeds timeline & budget allocations."""
+async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = False):
+    """Orchestrates intake analysis and seeds timeline & budget allocations.
+
+    When ``force`` is True the budget-realism guardrail is acknowledged rather
+    than blocking: the warning is still recorded on the decision log (so the
+    audit trail and the "AI flagged this" signal are preserved), but the agent
+    proceeds to build the plan anyway. This powers the couple's
+    "continue anyway" choice after the guardrail fires.
+    """
     agent_id = "intake_planner"
     model = model_for(agent_id)
     prompt_version = get_prompt_version(SYSTEM_INSTRUCTION)
@@ -122,7 +129,7 @@ async def run_intake_planner(db: AsyncSession, wedding_id: str):
     }]
     
     # 3. Check budget realism guardrail
-    if not result_dict.get("is_budget_realistic", True):
+    if not result_dict.get("is_budget_realistic", True) and not force:
         return (
             {
                 "status": "blocked",

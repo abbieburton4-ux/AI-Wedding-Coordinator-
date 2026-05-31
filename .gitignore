@@ -52,6 +52,18 @@ Desktop.ini
 # Cache
 .cache/
 .parcel-cache/
+
+# Local SQLite database (dev only)
+backend/venueflow.db
+backend/venueflow.db-shm
+backend/venueflow.db-wal
+*.sqlite3
+
+# Stray empty agent-output artifacts (accidental)
+/budget_alert
+/inquiry
+/inquiry_draft
+/quote_draft
 .vite/
 
 # Python

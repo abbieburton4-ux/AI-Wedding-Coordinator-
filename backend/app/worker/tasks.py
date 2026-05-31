@@ -16,6 +16,7 @@ router = APIRouter()
 # Task Request Schema Definitions
 class IntakePlannerTaskSchema(BaseModel):
     wedding_id: str
+    force: bool = False
 
 class VenueMatcherTaskSchema(BaseModel):
     wedding_id: str
@@ -38,21 +39,36 @@ async def task_intake_planner(
     logger.info(f"Worker Task: starting intake-planner for wedding {payload.wedding_id}")
     try:
         # Run agent
-        result = await run_intake_planner(db, payload.wedding_id, trigger="couple_action")
-        
-        # After seeding budget and timeline, automatically trigger venue and supplier matching in the background!
-        logger.info(f"Intake completed. Enqueuing matcher jobs for wedding {payload.wedding_id}...")
-        from app.utils.tasks import enqueue_agent_task
-        await enqueue_agent_task("venue-matcher", {"wedding_id": payload.wedding_id})
-        
-        # We can also automatically trigger matching for core suppliers
-        # e.g., florals, photography, music
-        for category in ["photography", "florals", "music"]:
-            await enqueue_agent_task("supplier-matcher", {
-                "wedding_id": payload.wedding_id, 
-                "category": category
-            })
-            
+        result = await run_intake_planner(
+            db, payload.wedding_id, force=payload.force, trigger="couple_action"
+        )
+
+        # If the intake was blocked by a guardrail (e.g. unrealistic budget) the
+        # wedding stays in 'intake' with no budget seeded — don't waste matcher
+        # calls. The couple resolves it from the dashboard (adjust / continue).
+        if isinstance(result, dict) and result.get("status") == "blocked":
+            logger.info(f"Intake blocked by guardrail for wedding {payload.wedding_id}; skipping matcher cascade.")
+            return {"status": "blocked", "result": result}
+
+        # After seeding budget and timeline, cascade into venue + supplier matching.
+        # Run these SEQUENTIALLY (not as 4 concurrent tasks): the agent holds a DB
+        # write transaction open across its Gemini call, so concurrent matchers
+        # deadlock SQLite ("database is locked"); sequential also stays under
+        # free-tier rate limits. Each is best-effort — one failure (e.g. a rate
+        # limit) must not abort the rest of the shortlist.
+        logger.info(f"Intake completed. Running matcher cascade for wedding {payload.wedding_id}...")
+        cascade = [
+            (run_venue_matcher, {}),
+            (run_supplier_matcher, {"category": "photography"}),
+            (run_supplier_matcher, {"category": "florals"}),
+            (run_supplier_matcher, {"category": "music"}),
+        ]
+        for runner, extra in cascade:
+            try:
+                await runner(db, payload.wedding_id, trigger="agent_initiated", **extra)
+            except Exception as e:
+                logger.error(f"Cascade {runner.__name__} failed (continuing): {e}")
+
         return {"status": "completed", "result": result}
     except Exception as e:
         logger.error(f"Worker Task: intake-planner failed: {e}")

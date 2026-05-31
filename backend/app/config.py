@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     DEVELOPMENT_MODE: bool = True
     ALLOW_MOCK_AUTH: bool = True
     
+    # Base URL the task dispatcher posts agent jobs to. Defaults to the Docker
+    # Compose service name; for a non-Docker local run set this to the single
+    # backend process, e.g. WORKER_BASE_URL=http://localhost:8000.
+    WORKER_BASE_URL: str = "http://worker:8001"
+
     # Cloud Tasks
     TASKS_EMULATOR_HOST: str = "tasks-emulator"
     TASKS_EMULATOR_PORT: int = 8123

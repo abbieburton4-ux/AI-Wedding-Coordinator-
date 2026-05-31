@@ -22,6 +22,7 @@ export function Intake() {
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
+    couple_name: "",
     region: "Dublin",
     ceremony_type: "Civil/Humanist",
     guest_count_estimate: 120,
@@ -40,6 +41,7 @@ export function Intake() {
       ceremony_type: form.ceremony_type,
       guest_count_estimate: Number(form.guest_count_estimate),
       budget_total: Number(form.budget_total),
+      couple_name: form.couple_name || undefined,
       style_notes: form.style_notes || undefined,
     };
     if (form.wedding_date) payload.wedding_date = form.wedding_date;
@@ -72,6 +74,12 @@ export function Intake() {
         {error && <p className="mb-4 text-sm text-error">{error}</p>}
 
         <form onSubmit={onSubmit} className="flex flex-col gap-5">
+          <div>
+            <label className={labelClass}>Your names</label>
+            <input className={inputClass} type="text" placeholder="e.g. Priya & David"
+              value={form.couple_name} onChange={(e) => set("couple_name", e.target.value)} />
+          </div>
+
           <div>
             <label className={labelClass}>Region</label>
             <select className={inputClass} value={form.region} onChange={(e) => set("region", e.target.value)}>

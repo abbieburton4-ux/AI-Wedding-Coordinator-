@@ -1,19 +1,115 @@
+import { useState } from "react";
 import { Icon } from "../../planner/Icon";
 import { IMG } from "../../design-system/assets";
-import { useAgentMatcher, USE_FASTAPI_BACKEND } from "../../../app/api";
-import type { AgentStatus } from "../../../app/api";
+import { useWedding, useAgentMatcher, USE_FASTAPI_BACKEND } from "../../../app/api";
 import { useActiveWedding } from "../WeddingProvider";
 
-const STATIC_VENDORS = [
-  { title: "The Glasshouse Estate", cat: "Venue", rating: "4.9", img: IMG.showroom },
-  { title: "Ethereal Lens Studio", cat: "Photography", rating: "5.0", img: IMG.weddingConfetti },
-  { title: "Culinary Canvas", cat: "Catering", rating: "4.8", img: IMG.fineDining },
-];
+// Real vendors carry no photography, so we cycle a few brand images for warmth.
+const CARD_IMAGES = [IMG.showroom, IMG.weddingConfetti, IMG.fineDining];
+
+interface VendorBooking {
+  id: string;
+  status: string;
+  vendor_name?: string;
+  vendor_kind?: "venue" | "supplier";
+  vendor_category?: string;
+  vendor_location?: string;
+  matching_rationale?: string;
+  draft_inquiry_email?: string;
+}
+
+function prettyCategory(b: VendorBooking) {
+  const c = b.vendor_category || (b.vendor_kind === "venue" ? "Venue" : "Supplier");
+  return c.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function VendorCard({ booking, img }: { booking: VendorBooking; img: string }) {
+  const [showEmail, setShowEmail] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    if (!booking.draft_inquiry_email) return;
+    try {
+      await navigator.clipboard.writeText(booking.draft_inquiry_email);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard blocked — no-op */
+    }
+  };
+
+  return (
+    <div className="bg-surface-container-lowest rounded-[3rem] border border-outline-variant/20 overflow-hidden flex flex-col group hover:shadow-lg transition-all">
+      <div className="relative h-40 w-full">
+        <img src={img} alt={booking.vendor_name ?? "Vendor"} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+        <div className="absolute top-3 right-3 bg-surface-container-lowest/90 px-3 py-1 rounded-full flex items-center gap-1">
+          <Icon name="auto_awesome" filled size={14} className="text-tertiary" />
+          <span className="font-label-caps text-[10px] text-tertiary font-bold">AI MATCH</span>
+        </div>
+      </div>
+
+      <div className="p-gutter flex flex-col flex-1 gap-3">
+        <div className="flex justify-between items-start gap-2">
+          <div>
+            <span className="font-label-caps text-[10px] text-outline tracking-widest uppercase">{prettyCategory(booking)}</span>
+            <h3 className="font-title-lg text-title-lg text-on-surface mt-1 leading-tight">{booking.vendor_name ?? "Vendor"}</h3>
+            {booking.vendor_location && (
+              <p className="text-sm text-on-surface-variant mt-0.5 flex items-center gap-1">
+                <Icon name="location_on" size={14} className="text-outline" />
+                {booking.vendor_location}
+              </p>
+            )}
+          </div>
+          <span className="shrink-0 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-[10px] font-bold uppercase tracking-wider">
+            {booking.status}
+          </span>
+        </div>
+
+        {/* The magic: why the coordinator picked this one */}
+        {booking.matching_rationale && (
+          <div className="bg-primary-container/10 border border-primary-container/20 rounded-2xl p-3">
+            <p className="font-label-caps text-[10px] text-primary tracking-widest uppercase mb-1">Why your coordinator picked this</p>
+            <p className="text-sm text-on-surface-variant leading-relaxed">{booking.matching_rationale}</p>
+          </div>
+        )}
+
+        {/* The ready-to-send draft email */}
+        {booking.draft_inquiry_email && (
+          <div className="mt-auto">
+            <button
+              type="button"
+              onClick={() => setShowEmail((s) => !s)}
+              className="flex items-center gap-2 text-sm font-button-text text-primary hover:opacity-80 transition-opacity"
+            >
+              <Icon name={showEmail ? "expand_less" : "mail"} size={18} />
+              {showEmail ? "Hide draft email" : "View draft inquiry email"}
+            </button>
+            {showEmail && (
+              <div className="mt-3">
+                <pre className="whitespace-pre-wrap text-xs text-on-surface-variant bg-surface-container-low rounded-2xl p-4 max-h-56 overflow-y-auto font-body-md">
+                  {booking.draft_inquiry_email}
+                </pre>
+                <button
+                  type="button"
+                  onClick={copy}
+                  className="mt-2 flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-full text-xs font-button-text uppercase tracking-wider hover:opacity-90 transition-opacity"
+                >
+                  <Icon name={copied ? "check" : "content_copy"} size={15} />
+                  {copied ? "Copied" : "Copy email"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function SkeletonCard() {
   return (
     <div className="bg-surface-container-lowest rounded-[3rem] border border-outline-variant/20 overflow-hidden flex flex-col animate-pulse">
-      <div className="h-48 w-full bg-surface-container-low" />
+      <div className="h-40 w-full bg-surface-container-low" />
       <div className="p-gutter flex flex-col gap-3">
         <div className="h-3 bg-surface-container-low rounded-full w-1/3" />
         <div className="h-5 bg-surface-container-low rounded-full w-2/3" />
@@ -23,78 +119,18 @@ function SkeletonCard() {
   );
 }
 
-function AgentThinkingBanner({ rationale }: { rationale: string }) {
-  return (
-    <div className="bg-primary-container/20 border border-primary-container/40 rounded-[2rem] p-5 mb-6 flex items-start gap-3 animate-in fade-in duration-500">
-      <div className="relative mt-0.5">
-        <Icon name="psychology" size={22} className="text-primary animate-pulse" />
-      </div>
-      <div className="flex-1">
-        <p className="font-button-text text-primary text-sm mb-1">AI Agent Working</p>
-        <p className="font-body-md text-on-surface-variant text-sm leading-relaxed">
-          {rationale}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function GuardrailBlockPanel({ rationale }: { rationale: string }) {
-  return (
-    <div className="bg-tertiary-container/20 border border-tertiary-container/50 rounded-[2rem] p-6 mb-6">
-      <div className="flex items-center gap-3 mb-3">
-        <Icon name="shield" size={22} className="text-tertiary" />
-        <h3 className="font-title-lg text-title-lg text-tertiary">AI Safety Guardrail</h3>
-      </div>
-      <p className="font-body-md text-on-surface-variant text-sm leading-relaxed mb-4">
-        {rationale}
-      </p>
-      <div className="flex gap-3">
-        <button
-          type="button"
-          className="px-5 py-2.5 bg-tertiary text-on-tertiary rounded-full font-button-text text-sm hover:opacity-90 transition-opacity"
-        >
-          Edit Parameters
-        </button>
-        <button
-          type="button"
-          className="px-5 py-2.5 bg-surface-container border border-outline-variant/30 rounded-full font-button-text text-sm text-on-surface hover:bg-surface-container-high transition-colors"
-        >
-          Override Safeguard
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function AgentErrorBanner({ message }: { message: string }) {
-  return (
-    <div className="bg-error-container/20 border border-error-container/40 rounded-[2rem] p-5 mb-6 flex items-start gap-3">
-      <Icon name="error" size={22} className="text-error" />
-      <div className="flex-1">
-        <p className="font-button-text text-error text-sm mb-1">Matching Error</p>
-        <p className="font-body-md text-on-surface-variant text-sm">
-          {message}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 export function Vendors() {
   const { activeWedding } = useActiveWedding();
   const weddingId = activeWedding?.id ?? "";
-  const {
-    triggerVenueMatch,
-    triggerSupplierMatch,
-    status,
-    rationale,
-    errorMsg,
-    reset,
-  } = useAgentMatcher(weddingId);
+  const { data, loading } = useWedding(weddingId || null);
+  const { triggerVenueMatch, status, rationale, errorMsg } = useAgentMatcher(weddingId);
 
   const isRunning = status === "running";
-  const showResults = !USE_FASTAPI_BACKEND || status === "idle" || status === "success";
+  const bookings = (data.bookings ?? []) as VendorBooking[];
+  const venues = bookings.filter((b) => b.vendor_kind === "venue");
+  const suppliers = bookings.filter((b) => b.vendor_kind === "supplier");
+  const ordered = [...venues, ...suppliers];
+  const hasResults = ordered.length > 0;
 
   return (
     <main className="pt-16 md:pl-72 pb-20 md:pb-8">
@@ -105,19 +141,13 @@ export function Vendors() {
               Curated Vendors
             </h2>
             <p className="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mt-2">
-              Discover and manage the professionals bringing your vision to life.
+              {hasResults
+                ? `Your coordinator shortlisted ${venues.length} venue${venues.length === 1 ? "" : "s"} and ${suppliers.length} supplier${suppliers.length === 1 ? "" : "s"} that fit your brief — with a reason and a ready-to-send email for each.`
+                : "Discover and manage the professionals bringing your vision to life."}
             </p>
           </div>
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
-              <Icon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-outline" />
-              <input
-                className="w-full h-12 pl-12 pr-4 bg-surface-container-lowest border-b border-outline-variant/20 rounded-t-[2rem] focus:outline-none"
-                placeholder="Search vendors..."
-                type="text"
-              />
-            </div>
-            {USE_FASTAPI_BACKEND && (
+          {USE_FASTAPI_BACKEND && (
+            <div className="flex">
               <button
                 type="button"
                 disabled={isRunning}
@@ -132,79 +162,60 @@ export function Vendors() {
                 ) : (
                   <>
                     <Icon name="auto_awesome" size={18} />
-                    <span className="font-button-text">Run AI Venue Matcher</span>
+                    <span className="font-button-text">{hasResults ? "Re-run venue matcher" : "Run AI venue matcher"}</span>
                   </>
                 )}
               </button>
-            )}
-            {!USE_FASTAPI_BACKEND && (
-              <button
-                type="button"
-                className="flex items-center gap-2 px-6 h-12 bg-soft-clay/10 rounded-full border border-soft-clay/20 text-tertiary"
-              >
-                <Icon name="auto_awesome" size={18} />
-                <span className="font-button-text">Recommended by AI</span>
-              </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </section>
 
       <section className="px-margin-mobile md:px-margin-desktop py-6">
-        {/* Agent Status Banners */}
-        {isRunning && <AgentThinkingBanner rationale={rationale} />}
-        {status === "blocked" && <GuardrailBlockPanel rationale={rationale} />}
-        {status === "error" && <AgentErrorBanner message={errorMsg} />}
-        {status === "timeout" && (
-          <AgentThinkingBanner rationale="Matching is taking longer than expected. Results will appear when the agent completes." />
+        {/* Agent status banners */}
+        {isRunning && (
+          <div className="bg-primary-container/20 border border-primary-container/40 rounded-[2rem] p-5 mb-6 flex items-start gap-3">
+            <Icon name="psychology" size={22} className="text-primary animate-pulse mt-0.5" />
+            <div className="flex-1">
+              <p className="font-button-text text-primary text-sm mb-1">AI agent working</p>
+              <p className="font-body-md text-on-surface-variant text-sm">{rationale}</p>
+            </div>
+          </div>
+        )}
+        {status === "blocked" && (
+          <div className="bg-tertiary-container/20 border border-tertiary-container/50 rounded-[2rem] p-5 mb-6 flex items-start gap-3">
+            <Icon name="shield" size={22} className="text-tertiary mt-0.5" />
+            <p className="font-body-md text-on-surface-variant text-sm">{rationale}</p>
+          </div>
+        )}
+        {status === "error" && (
+          <div className="bg-error-container/20 border border-error-container/40 rounded-[2rem] p-5 mb-6 flex items-start gap-3">
+            <Icon name="error" size={22} className="text-error mt-0.5" />
+            <p className="font-body-md text-on-surface-variant text-sm">{errorMsg}</p>
+          </div>
         )}
 
-        {/* Success celebration */}
-        {status === "success" && (
-          <div className="bg-primary-container/10 border border-primary-container/30 rounded-[2rem] p-5 mb-6 flex items-center gap-3">
-            <Icon name="check_circle" size={22} className="text-primary" />
-            <p className="font-button-text text-primary text-sm">
-              Venue matching complete! Here are your AI-curated recommendations.
+        {/* Empty state */}
+        {!isRunning && !loading && !hasResults && (
+          <div className="bg-wedding-white custom-shadow rounded-[3rem] p-10 border border-outline-variant/10 text-center max-w-xl mx-auto">
+            <Icon name="storefront" size={32} className="text-primary mb-3 mx-auto" />
+            <h3 className="font-headline-sm text-headline-sm text-on-surface mb-2">No vendors yet</h3>
+            <p className="text-body-md text-on-surface-variant">
+              Run the AI venue matcher above and your coordinator will curate options that fit your region, guest count, and budget.
             </p>
           </div>
         )}
 
-        {/* Vendor Grid — skeleton or real cards */}
+        {/* Vendor grid — skeleton or real AI-matched cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter">
-          {isRunning ? (
+          {isRunning && !hasResults ? (
             <>
               <SkeletonCard />
               <SkeletonCard />
               <SkeletonCard />
             </>
           ) : (
-            showResults &&
-            STATIC_VENDORS.map((v) => (
-              <div
-                key={v.title}
-                className="bg-surface-container-lowest rounded-[3rem] border border-outline-variant/20 overflow-hidden flex flex-col group hover:shadow-lg transition-all"
-              >
-                <div className="relative h-48 w-full">
-                  <img src={v.img} alt={v.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                  <div className="absolute top-3 right-3 bg-surface-container-lowest/90 px-3 py-1 rounded-full flex items-center gap-1">
-                    <Icon name="auto_awesome" filled size={14} className="text-tertiary" />
-                    <span className="font-label-caps text-[10px] text-tertiary font-bold">MATCH</span>
-                  </div>
-                </div>
-                <div className="p-gutter flex flex-col flex-1 gap-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="font-label-caps text-[10px] text-outline tracking-widest uppercase">{v.cat}</span>
-                      <h3 className="font-title-lg text-title-lg text-on-surface mt-1">{v.title}</h3>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Icon name="star" filled size={16} className="text-primary" />
-                      <span className="font-body-md">{v.rating}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))
+            ordered.map((b, i) => <VendorCard key={b.id} booking={b} img={CARD_IMAGES[i % CARD_IMAGES.length]} />)
           )}
         </div>
       </section>

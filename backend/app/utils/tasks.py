@@ -16,7 +16,7 @@ async def enqueue_agent_task(task_name: str, payload: dict) -> bool:
     
     # Target URL on our worker container (Cloud Run endpoint in production)
     if settings.DEVELOPMENT_MODE:
-        worker_url = f"http://worker:8001/tasks/{task_name}"
+        worker_url = f"{settings.WORKER_BASE_URL}/tasks/{task_name}"
     else:
         # In production Cloud Run, the worker runs on its own private service URL
         worker_url = f"https://worker-private-service-url/tasks/{task_name}"
