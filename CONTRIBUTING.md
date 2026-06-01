@@ -24,13 +24,26 @@ This is a 2-founder hackathon project on a hard deadline (17 Aug 2026). Keep PRs
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate          # macOS/Linux
+source .venv/bin/activate          # macOS/Linux  (Windows: .venv\Scripts\activate)
 pip install -r requirements.txt
-export GEMINI_API_KEY=...           # required for live agent runs
+export GEMINI_API_KEY=AIza...       # required for live agent runs (must be a Developer key, starts with AIza)
+export WORKER_BASE_URL=http://localhost:8000   # non-Docker: loop async agent tasks back to this process
 uvicorn app.main:app --reload      # opens http://localhost:8000
 ```
 
 The server automatically initializes and seeds the SQLite database (`endpoints_test.db` or configured local db) on startup if it does not exist.
+
+> **Non-Docker gotcha:** agent work runs via Cloud Tasks → a separate worker. Outside
+> Docker there's no `worker` host, so `WORKER_BASE_URL` **must** point at this same
+> process (`http://localhost:8000`) or the emulator/worker fallback silently drops the
+> task — the symptom is a wedding stuck in `planning`/`preview` with an empty plan.
+> (Docker Compose wires the real worker, so this is only for a bare `uvicorn` run.)
+
+> **Payment gate affects local behavior:** with `REQUIRE_PAYMENT=True` (default) a fresh
+> intake runs the planner for free and lands in `preview` (a teaser — partial budget +
+> timeline, locked vendors); the paid venue/supplier cascade only runs after checkout
+> (`PAYMENTS_PROVIDER=mock` = no real charge). Set `REQUIRE_PAYMENT=False` to get the
+> full plan immediately on intake (handy for quick local testing).
 
 ### Frontend (Vite + React)
 
@@ -78,7 +91,7 @@ Agents live in the [backend/app/agents/](backend/app/agents/) directory (e.g., `
 ## Code Style
 
 - **Python:** PEP-8 with reasonable line length (~100 chars). No black/ruff config yet — keep formatting consistent within a file.
-- **TypeScript:** match the surrounding file. No linter wired up; `tsc --noEmit` works from `frontend/`.
+- **TypeScript:** match the surrounding file. No linter wired up and TypeScript isn't installed standalone, so use `npm run build` from `frontend/` as the compile check (Vite/esbuild strips types but catches syntax/import errors).
 - **No comments** unless the *why* is non-obvious. Don't restate what the code does. Don't reference the current task or PR.
 - **No new dependencies** without a 1-line justification in the commit message. The pilot app's transitive deps are already heavy.
 - **Never commit secrets.** `GEMINI_API_KEY`, Stripe keys, planner email lists — all out of repo. Use environment variables or `.env.local` (already `.gitignore`d). See [docs/secrets.md](docs/secrets.md) for the per-service runbook and [streamlit_mock/.env.example](streamlit_mock/.env.example) for the template to copy. A pre-commit `gitleaks` hook ships with the repo; install once with `brew install gitleaks pre-commit && pre-commit install` and it blocks accidental secrets at commit time. Do **not** disable it with `--no-verify`.
@@ -166,7 +179,7 @@ Until 17 Aug 2026, every commit affects the submission. Specifically:
 | Run Agent Logic Tests | `cd backend && python verify_agents.py` |
 | Run Frontend | `cd frontend && npm run dev` |
 | Build Frontend | `cd frontend && npm run build` |
-| Type-check Frontend | `cd frontend && npx tsc --noEmit` |
+| Compile-check Frontend | `cd frontend && npm run build` (TypeScript isn't installed standalone, so `tsc` won't run; the Vite build is the compile check) |
 | Regenerate Excel tracker | `python scripts/build_tracker.py` |
 
 ---
