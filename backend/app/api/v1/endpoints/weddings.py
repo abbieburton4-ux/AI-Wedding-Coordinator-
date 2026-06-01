@@ -15,6 +15,7 @@ from app.db.session import get_db
 from app.db.models import User, Wedding, BudgetLine, TimelineItem, AgentDecisionLog, Booking, Venue, Supplier, Quote
 from app.api.v1.endpoints.auth import get_current_user
 from app.utils.tasks import enqueue_agent_task
+from app.agents.concierge import run_concierge
 
 router = APIRouter()
 
@@ -461,6 +462,39 @@ async def trigger_supplier_matching(
         raise HTTPException(status_code=500, detail="Failed to enqueue supplier matcher task")
         
     return {"status": "pending", "message": f"Supplier matching agent for {payload.category} enqueued successfully."}
+
+
+class ConciergeRequest(BaseModel):
+    message: str
+
+
+@router.post("/{wedding_id}/concierge")
+async def ask_concierge(
+    wedding_id: str,
+    payload: ConciergeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Answers a couple's question via the concierge agent, grounded in their real
+    budget, timeline, and vendors. Runs synchronously (chat needs an immediate reply)
+    and logs an AgentDecisionLog row per question."""
+    result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
+    wedding = result.first()
+    if not wedding:
+        raise HTTPException(status_code=404, detail="Wedding not found")
+    if wedding.couple_user_id != current_user.id and wedding.planner_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this wedding")
+
+    message = (payload.message or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message is empty")
+
+    try:
+        out = await run_concierge(db, wedding_id, message=message, trigger="couple_action", user_id=current_user.id)
+    except Exception:
+        raise HTTPException(status_code=502, detail="The concierge is briefly unavailable — please try again.")
+
+    return {"reply": out.get("reply", "")}
 
 
 def mask_pii(text: str) -> str:

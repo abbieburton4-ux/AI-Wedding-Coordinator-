@@ -5,6 +5,36 @@ Newest entries at the top. One dated section per working session.
 
 ---
 
+## 2026-06-01 (P1) — Grounded AI Concierge ("Aurelia")
+
+**Context:** The headline "AI coordinator" chat was a static mock. Wired it to a real
+Gemini agent that answers from the couple's actual budget, timeline, and vendors — the
+biggest live-demo "wow" and a strong agent-native artifact (every question = a logged decision).
+
+### Backend
+- `agents/concierge.py` (new) — `run_concierge` (`@run_agent("concierge", "concierge_reply")`).
+  Assembles a context snapshot (profile + budget allocated/spent + upcoming timeline +
+  shortlisted vendors with quotes), prompts Gemini Flash with a grounded system instruction
+  (be specific with their real €, never invent vendors/prices), returns the reply. Retries
+  transient 503/429 so the live chat doesn't fail on a blip.
+- `api/v1/endpoints/weddings.py` — `POST /weddings/{id}/concierge` (auth + ownership), runs
+  the agent synchronously (chat needs an immediate reply) and returns `{reply}`.
+
+### Frontend
+- `wedding/views/Concierge.tsx` — replaced the mock with a real chat: posts to the endpoint,
+  typing indicator, grounded suggestion chips.
+
+### Verification (real Gemini, dev DB)
+- "Are we on budget?" → cited the actual vendor (Dasha Caffrey Photography), its €5,000
+  quote, the €4,000 allocation, and flagged the €1,000 overage. Backend imports clean
+  (35 routes); `npm run build` passes.
+
+### Note
+- Built on a fresh `feature/concierge` branch off `origin/main` (local `main` had gone stale
+  at `3b517bf3`; resync with `git reset --hard origin/main`).
+
+---
+
 ## 2026-06-01 (P0) — Quote loop + live budget (the signature agent moment)
 
 **Context:** Post-payment the product went static — `spent_amount` was always €0 and the
