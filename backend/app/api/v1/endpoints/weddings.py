@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.db.session import get_db
-from app.db.models import User, Wedding, BudgetLine, TimelineItem, AgentDecisionLog, Booking, Venue, Supplier
+from app.db.models import User, Wedding, BudgetLine, TimelineItem, AgentDecisionLog, Booking, Venue, Supplier, Quote
 from app.api.v1.endpoints.auth import get_current_user
 from app.utils.tasks import enqueue_agent_task
 
@@ -262,6 +262,12 @@ class BookingDetail(BaseModel):
     pricing_summary: Optional[dict] = None
     matching_rationale: Optional[str] = None
     draft_inquiry_email: Optional[str] = None
+    # Latest quote the couple has logged for this vendor (from quote_extractor)
+    quote_total: Optional[float] = None
+    quote_currency: Optional[str] = None
+    quote_rationale: Optional[str] = None
+    allocated_amount: Optional[float] = None  # budget allocated to this vendor's category
+    over_budget: Optional[bool] = None        # quote_total > allocated_amount
 
 
 @router.get("/{wedding_id}/bookings", response_model=List[BookingDetail])
@@ -316,6 +322,32 @@ async def get_wedding_bookings(
                     "email": item.get("draft_inquiry_email"),
                 }
 
+    # Latest quote per booking + budget allocation per category, so each vendor card
+    # can show the live "quoted vs allocated" picture and an over-budget flag.
+    booking_ids = [b.id for b in bookings]
+    latest_quote: dict[str, Quote] = {}
+    if booking_ids:
+        quotes_result = await db.exec(
+            select(Quote).where(Quote.booking_id.in_(booking_ids)).order_by(Quote.created_at.desc())
+        )
+        for q in quotes_result.all():
+            latest_quote.setdefault(q.booking_id, q)
+    budget_rows = (await db.exec(select(BudgetLine).where(BudgetLine.wedding_id == wedding_id))).all()
+    alloc_by_cat = {b.category: b.allocated_amount for b in budget_rows}
+
+    def quote_fields(bid: str, budget_category: str) -> dict:
+        q = latest_quote.get(bid)
+        if not q:
+            return {}
+        allocated = alloc_by_cat.get(budget_category)
+        return {
+            "quote_total": q.total_amount,
+            "quote_currency": q.currency,
+            "quote_rationale": q.rationale_text,
+            "allocated_amount": allocated,
+            "over_budget": bool(allocated and q.total_amount > allocated),
+        }
+
     details: List[BookingDetail] = []
     for b in bookings:
         if b.venue_id:
@@ -331,6 +363,7 @@ async def get_wedding_bookings(
                 pricing_summary=(v.pricing_summary if v else None),
                 matching_rationale=meta.get("rationale"),
                 draft_inquiry_email=meta.get("email"),
+                **quote_fields(b.id, "venue"),
             ))
         else:
             s = suppliers.get(b.supplier_id)
@@ -345,6 +378,7 @@ async def get_wedding_bookings(
                 pricing_summary=(s.pricing_summary if s else None),
                 matching_rationale=meta.get("rationale"),
                 draft_inquiry_email=meta.get("email"),
+                **quote_fields(b.id, s.category if s else ""),
             ))
     return details
 

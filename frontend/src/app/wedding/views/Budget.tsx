@@ -51,11 +51,15 @@ export function Budget() {
     const pct = bl.allocated_amount > 0
       ? Math.round((bl.spent_amount / bl.allocated_amount) * 100)
       : 0;
+    const over = bl.allocated_amount > 0 && bl.spent_amount > bl.allocated_amount;
     return {
       name: bl.category.charAt(0).toUpperCase() + bl.category.slice(1),
       spent: formatCurrency(bl.spent_amount),
       total: formatCurrency(bl.allocated_amount),
       pct: `${pct}%`,
+      barPct: `${Math.min(pct, 100)}%`,
+      over,
+      overBy: over ? formatCurrency(bl.spent_amount - bl.allocated_amount) : "",
       icon: ICON_MAP[bl.category] || "payments",
       tip: "", // Tips will come from AI agent suggestions in the future
     };
@@ -91,6 +95,19 @@ export function Budget() {
         </div>
       )}
 
+      {useLiveData && totalSpent > totalAllocated && (
+        <div className="bg-error-container/15 border border-error-container/40 rounded-[2rem] p-4 mb-6 flex items-start gap-3">
+          <Icon name="warning" size={22} className="text-error mt-0.5" />
+          <div>
+            <p className="font-button-text text-error text-sm">Over budget</p>
+            <p className="text-sm text-on-surface-variant">
+              Your tracked quotes total {formatCurrency(totalSpent)} — {formatCurrency(totalSpent - totalAllocated)} over
+              your {formatCurrency(totalAllocated)} plan. Trim a category or adjust your budget.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-6">
         {loading ? (
           // Skeleton cards
@@ -121,13 +138,17 @@ export function Budget() {
                     <h3 className="font-button-text text-on-surface">{cat.name}</h3>
                     <p className="text-[12px] text-on-surface-variant">
                       {cat.spent} of {cat.total}
+                      {cat.over && <span className="text-error font-bold"> · {cat.overBy} over</span>}
                     </p>
                   </div>
                 </div>
-                <span className="text-primary font-bold">{cat.pct}</span>
+                <span className={`font-bold ${cat.over ? "text-error" : "text-primary"}`}>{cat.pct}</span>
               </div>
               <div className="w-full bg-surface-container-low h-2 rounded-full mb-4">
-                <div className="bg-primary-container h-2 rounded-full" style={{ width: cat.pct }} />
+                <div
+                  className={`h-2 rounded-full ${cat.over ? "bg-error" : "bg-primary-container"}`}
+                  style={{ width: cat.barPct || cat.pct }}
+                />
               </div>
               {cat.tip && (
                 <div className="bg-secondary-fixed/20 p-3 rounded-[2rem] flex items-start gap-2 border border-secondary-fixed/50">

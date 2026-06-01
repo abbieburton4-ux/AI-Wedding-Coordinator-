@@ -5,6 +5,42 @@ Newest entries at the top. One dated section per working session.
 
 ---
 
+## 2026-06-01 (P0) — Quote loop + live budget (the signature agent moment)
+
+**Context:** Post-payment the product went static — `spent_amount` was always €0 and the
+`quote_extractor` agent (reads a vendor email → structured quote → over-budget alert) had
+no UI. Closed the loop so a couple can log a vendor reply and watch the AI update their
+budget. This is the most coordinator-like moment and the agent-native proof for the XPRIZE.
+
+### Backend
+- `agents/extractor.py` — `quote_extractor` now **rolls the quote into the live budget**:
+  on an available quote it sets the category's `BudgetLine.spent_amount = total_amount`
+  (declined quotes don't count). The `budget_monitor` over-budget alert was already there.
+- `api/v1/endpoints/weddings.py` — `GET /weddings/{id}/bookings` now joins the latest
+  `Quote` + budget allocation per vendor and returns `quote_total`, `quote_currency`,
+  `quote_rationale`, `allocated_amount`, `over_budget`.
+
+### Frontend
+- `wedding/views/Vendors.tsx` — added `QuoteLogger` (paste a vendor reply → POST
+  `/inquiries/{booking_id}/quote` → poll until the agent result lands) and `QuotePanel`
+  (shows the AI-read quote, over-budget badge, and the agent's rationale).
+- `wedding/views/Budget.tsx` — over-budget categories now render red (capped bar + "€X
+  over") plus a top-level over-budget banner; budget is live now that `spent_amount` moves.
+- `api/useWedding.ts` — `Booking` type extended with the quote fields.
+
+### Verification (real Gemini call, against the dev DB)
+- Logged a simulated florist reply quoting €2,600 vs €2,000 allocated:
+  booking → `quoted`; **`spent_amount` €0 → €2,600**; `budget_monitor` alert fired
+  ("exceeds allocated by €600"); bookings API returned `over_budget=true`.
+- `npm run build` passes; backend imports clean (34 routes).
+
+### Follow-ups
+- Quote rollup is "latest available quote per category" (projected spend) — refine to a
+  proper quoted-vs-booked model when the booking-confirm flow lands.
+- Wire SendGrid Inbound Parse later so replies auto-ingest instead of paste-in.
+
+---
+
 ## 2026-06-01 (later) — Freemium preview teaser (value before paywall)
 
 **Context:** The cold paywall (pay before seeing anything) converts badly. Switched to
