@@ -53,6 +53,8 @@ export function Intake() {
       });
       await refetch();
       setActiveWedding(created.id);
+      // The AI planner runs free now and builds the teaser; the dashboard shows the
+      // "building" spinner → preview. Payment (from the teaser) unlocks the rest.
       navigate("/wedding", { replace: true });
     } catch {
       // error rendered below via useApi state
@@ -121,7 +123,7 @@ export function Intake() {
 
           <button type="submit" disabled={loading}
             className="mt-2 rounded-full bg-primary text-on-primary px-8 py-3.5 font-button-text text-button-text disabled:opacity-60 hover:opacity-90 transition-opacity">
-            {loading ? "Creating your plan…" : "Build my plan"}
+            {loading ? "Saving your details…" : "Continue"}
           </button>
         </form>
       </div>

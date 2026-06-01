@@ -17,6 +17,7 @@ import { Concierge } from "./planner/views/Concierge";
 import { WeddingLayout } from "./wedding/WeddingLayout";
 import { Dashboard } from "./wedding/views/Dashboard";
 import { Intake } from "./wedding/views/Intake";
+import { Checkout } from "./wedding/views/Checkout";
 import { Vendors } from "./wedding/views/Vendors";
 import { Budget } from "./wedding/views/Budget";
 import { Guests } from "./wedding/views/Guests";
@@ -52,6 +53,7 @@ export default function App() {
             <Route path="/wedding" element={<WeddingLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="intake" element={<Intake />} />
+              <Route path="checkout" element={<Checkout />} />
               <Route path="vendors" element={<Vendors />} />
               <Route path="budget" element={<Budget />} />
               <Route path="guests" element={<Guests />} />

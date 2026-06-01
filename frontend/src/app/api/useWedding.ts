@@ -31,6 +31,11 @@ interface Booking {
   pricing_summary?: Record<string, unknown> | null;
   matching_rationale?: string;
   draft_inquiry_email?: string;
+  quote_total?: number | null;
+  quote_currency?: string | null;
+  quote_rationale?: string | null;
+  allocated_amount?: number | null;
+  over_budget?: boolean | null;
 }
 
 interface WeddingData {

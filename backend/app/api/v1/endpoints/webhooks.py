@@ -7,6 +7,7 @@ from app.config import settings
 from app.db.session import get_db
 from app.db.models import Wedding, Booking
 from app.utils.tasks import enqueue_agent_task
+from app.api.v1.endpoints.payments import activate_wedding_planning
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -34,13 +35,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
             wedding = result.first()
             if wedding:
-                wedding.status = "planning"
-                db.add(wedding)
-                await db.commit()
-                
-                # Enqueue the intake planner task
-                await enqueue_agent_task("intake-planner", {"wedding_id": wedding.id})
-                logger.info(f"Stripe webhook: updated wedding {wedding_id} to planning and enqueued intake")
+                await activate_wedding_planning(db, wedding)
                 return {"status": "success", "message": f"Wedding {wedding_id} updated to planning."}
             else:
                 logger.error(f"Stripe webhook: wedding {wedding_id} not found in database.")
@@ -67,15 +62,9 @@ async def debug_stripe_mock(wedding_id: str, db: AsyncSession = Depends(get_db))
             detail=f"Wedding {wedding_id} not found."
         )
         
-    # Trigger same side-effects as Stripe webhook
-    wedding.status = "planning"
-    db.add(wedding)
-    await db.commit()
-    
-    # Enqueue intake_planner
-    await enqueue_agent_task("intake-planner", {"wedding_id": wedding.id})
-    logger.info(f"Stripe debug mock: triggered planning status and enqueued intake for wedding {wedding_id}")
-    
+    # Trigger same side-effects as a completed Stripe payment.
+    await activate_wedding_planning(db, wedding)
+
     return {
         "status": "mocked", 
         "wedding_id": wedding_id, 

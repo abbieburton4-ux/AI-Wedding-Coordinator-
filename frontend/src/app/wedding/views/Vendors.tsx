@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Icon } from "../../planner/Icon";
 import { IMG } from "../../design-system/assets";
-import { useWedding, useAgentMatcher, USE_FASTAPI_BACKEND } from "../../../app/api";
+import { useWedding, useAgentMatcher, useApi, USE_FASTAPI_BACKEND } from "../../../app/api";
 import { useActiveWedding } from "../WeddingProvider";
 
 // Real vendors carry no photography, so we cycle a few brand images for warmth.
@@ -16,6 +16,143 @@ interface VendorBooking {
   vendor_location?: string;
   matching_rationale?: string;
   draft_inquiry_email?: string;
+  quote_total?: number | null;
+  quote_currency?: string | null;
+  quote_rationale?: string | null;
+  allocated_amount?: number | null;
+  over_budget?: boolean | null;
+}
+
+/** Quote loop: paste a vendor's email reply → quote_extractor parses it → the live
+ *  budget updates and an over-budget alert fires. Polls until the agent's result lands. */
+function QuoteLogger({ booking, refetch }: { booking: VendorBooking; refetch: () => Promise<void> }) {
+  const { request } = useApi();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+
+  async function submit() {
+    if (!text.trim()) return;
+    setSubmitting(true);
+    setErr(null);
+    try {
+      await request(`/inquiries/${booking.id}/quote`, {
+        method: "POST",
+        body: JSON.stringify({ email_body: text }),
+      });
+      // The extractor runs async on the worker — poll until the quote lands (which
+      // re-renders this card into the "quote received" panel and unmounts us).
+      for (let i = 0; i < 20 && mounted.current; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        await refetch();
+      }
+      if (mounted.current) setErr("Still working… give it a moment and refresh.");
+    } catch (e: any) {
+      if (mounted.current) setErr(e?.message || "Could not extract the quote. Try again.");
+    } finally {
+      if (mounted.current) setSubmitting(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-2 text-sm font-button-text text-primary hover:opacity-80 transition-opacity"
+      >
+        <Icon name="forward_to_inbox" size={18} /> Heard back? Log their reply
+      </button>
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-xs text-on-surface-variant mb-2">
+        Paste the vendor's email reply — the AI reads the price, checks it against your budget,
+        and updates your tracker.
+      </p>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={4}
+        placeholder="Paste the vendor's reply here…"
+        className="w-full rounded-2xl border border-outline-variant/40 bg-surface-container-low px-3 py-2 text-sm text-on-surface focus:border-primary focus:outline-none"
+      />
+      {err && <p className="text-xs text-error mt-1">{err}</p>}
+      <div className="flex items-center gap-2 mt-2">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={submitting || !text.trim()}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-full text-xs font-button-text uppercase tracking-wider hover:opacity-90 transition-opacity disabled:opacity-50"
+        >
+          {submitting ? (
+            <>
+              <span className="w-3.5 h-3.5 border-2 border-on-primary border-t-transparent rounded-full animate-spin" />
+              Extracting…
+            </>
+          ) : (
+            <>
+              <Icon name="auto_awesome" size={15} /> Extract quote
+            </>
+          )}
+        </button>
+        {!submitting && (
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="px-3 py-2 text-xs text-on-surface-variant hover:text-on-surface"
+          >
+            Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Shows the AI-extracted quote vs the budget allocated to this category. */
+function QuotePanel({ booking }: { booking: VendorBooking }) {
+  const cur = booking.quote_currency === "EUR" ? "€" : "";
+  const total = booking.quote_total ?? 0;
+  const allocated = booking.allocated_amount ?? null;
+  return (
+    <div
+      className={`rounded-2xl p-3 border ${
+        booking.over_budget
+          ? "bg-error-container/15 border-error-container/40"
+          : "bg-primary-container/10 border-primary-container/20"
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <p className="font-label-caps text-[10px] tracking-widest uppercase text-on-surface-variant">
+          AI-read quote
+        </p>
+        {booking.over_budget && (
+          <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-error">
+            <Icon name="warning" size={13} /> Over budget
+          </span>
+        )}
+      </div>
+      <p className="font-title-lg text-title-lg text-on-surface mt-1 leading-tight">
+        {cur}{total.toLocaleString()}
+      </p>
+      {allocated != null && (
+        <p className="text-xs text-on-surface-variant">
+          {booking.over_budget
+            ? `${cur}${Math.round(total - allocated).toLocaleString()} over the ${cur}${allocated.toLocaleString()} allocated`
+            : `within the ${cur}${allocated.toLocaleString()} allocated`}
+        </p>
+      )}
+      {booking.quote_rationale && (
+        <p className="text-xs text-on-surface-variant mt-2 leading-relaxed">{booking.quote_rationale}</p>
+      )}
+    </div>
+  );
 }
 
 function prettyCategory(b: VendorBooking) {
@@ -23,7 +160,7 @@ function prettyCategory(b: VendorBooking) {
   return c.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
-function VendorCard({ booking, img }: { booking: VendorBooking; img: string }) {
+function VendorCard({ booking, img, refetch }: { booking: VendorBooking; img: string; refetch: () => Promise<void> }) {
   const [showEmail, setShowEmail] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -101,6 +238,15 @@ function VendorCard({ booking, img }: { booking: VendorBooking; img: string }) {
             )}
           </div>
         )}
+
+        {/* Quote loop: log a vendor reply → AI extracts the quote → live budget */}
+        <div className="pt-1">
+          {booking.quote_total != null ? (
+            <QuotePanel booking={booking} />
+          ) : (
+            <QuoteLogger booking={booking} refetch={refetch} />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -122,7 +268,7 @@ function SkeletonCard() {
 export function Vendors() {
   const { activeWedding } = useActiveWedding();
   const weddingId = activeWedding?.id ?? "";
-  const { data, loading } = useWedding(weddingId || null);
+  const { data, loading, refetch } = useWedding(weddingId || null);
   const { triggerVenueMatch, status, rationale, errorMsg } = useAgentMatcher(weddingId);
 
   const isRunning = status === "running";
@@ -215,7 +361,7 @@ export function Vendors() {
               <SkeletonCard />
             </>
           ) : (
-            ordered.map((b, i) => <VendorCard key={b.id} booking={b} img={CARD_IMAGES[i % CARD_IMAGES.length]} />)
+            ordered.map((b, i) => <VendorCard key={b.id} booking={b} img={CARD_IMAGES[i % CARD_IMAGES.length]} refetch={refetch} />)
           )}
         </div>
       </section>

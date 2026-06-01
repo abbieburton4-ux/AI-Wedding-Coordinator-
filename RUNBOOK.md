@@ -72,12 +72,83 @@ against Google's public keys
 
 ## What happens on intake (the agent flow)
 
-`POST /weddings` (intake) → the **intake_planner** agent drafts the budget + timeline
-and flips status to `planning`, then cascades to the **venue_matcher** and
-**supplier_matcher** agents, which shortlist real seeded vendors. The dashboard
-polls and fills in as these land. Every agent action is recorded in
-`agent_decision_logs`. Async dispatch goes through the Cloud Tasks emulator with a
-direct-to-worker fallback ([backend/app/utils/tasks.py](backend/app/utils/tasks.py)).
+The flow is **freemium**: a free preview earns the payment. States go
+`intake` → `preview` → `planning`.
+
+1. `POST /weddings` (intake) creates the wedding in `intake` status and immediately
+   runs the **intake_planner** agent as a **free preview** (1 cheap call → budget +
+   timeline), landing it in **`preview`**.
+2. The dashboard shows a **teaser**: a few budget lines + timeline milestones (the rest
+   withheld), locked vendor cards, and an "Unlock · €299" CTA.
+3. Payment unlocks the rest. The mock €299 checkout / Stripe Checkout / Stripe webhook
+   all call `activate_wedding_planning`
+   ([payments.py](backend/app/api/v1/endpoints/payments.py)), which flips status to
+   **`planning`** and enqueues the **plan-cascade** task — the paid **venue_matcher** +
+   **supplier_matcher** shortlist real seeded vendors. The dashboard polls and fills in.
+
+The budget/timeline endpoints return only a teaser slice while status is `preview`
+(`PREVIEW_BUDGET_LINES` / `PREVIEW_TIMELINE_ITEMS` in `weddings.py`) — the full data is
+generated and stored but **withheld at the API**, so the blurred UI can't be bypassed
+via DevTools.
+
+If the **budget guardrail** fires (e.g. €3,000 for 120 guests), intake_planner blocks,
+the wedding stays in `intake`, and the dashboard shows the "your coordinator flagged
+something" card to adjust the budget — no payment prompt until there's a real plan.
+
+Every agent action is recorded in `agent_decision_logs`. Async dispatch goes through the
+Cloud Tasks emulator with a direct-to-worker fallback
+([backend/app/utils/tasks.py](backend/app/utils/tasks.py)).
+
+Payments default to `PAYMENTS_PROVIDER=mock` (no real charge). Flipping to real Stripe
+test mode is a one env change — see [docs/worklog.md](docs/worklog.md).
+
+## Testing the product
+
+Two ways to test, depending on what you're checking.
+
+### A. Fast checks — agent logic & API routes (no Docker)
+
+The verification suites run the app **in-process** with FastAPI's `TestClient` against
+a throwaway SQLite DB — no server, worker, or Postgres needed. This is the day-to-day
+inner loop.
+
+```bash
+cd backend
+python verify_endpoints.py   # API routes, auth, decision-log export
+python verify_agents.py      # agent behaviour + guardrails
+```
+
+> Windows: activate the venv first — `.\.venv\Scripts\Activate.ps1`.
+
+### B. Full product end-to-end (Docker) — use before any demo
+
+This exercises the real path a customer hits: Postgres, async Cloud Tasks dispatch
+(`api` → `worker`), and the **payment → planning** trigger. The in-process suites
+above do *not* cover that async path.
+
+```bash
+scripts/stack.sh up          # or: cd backend && docker compose up --build
+```
+
+Then at <http://localhost:5173/VenueFlow/>:
+
+1. `/signup` → **new couple** → fill the intake form
+2. Dashboard shows "building…" then a **preview teaser** (budget + timeline partial,
+   locked vendor cards) — the free `intake_planner` run.
+3. Click **Unlock · €299** → checkout → "Pay" (mock — no real charge)
+4. The **worker** runs the paid matcher cascade; the dashboard fills in with venues +
+   suppliers. Watch it live: `scripts/stack.sh logs worker`.
+
+Run the suites against Postgres inside the running container:
+
+```bash
+cd backend && docker compose exec api python verify_endpoints.py
+```
+
+> **Payment gate note.** With `REQUIRE_PAYMENT=True` (default), a new wedding stays in
+> `intake` until checkout completes, so testing the plan now goes through the checkout
+> step. For a payment-free run (e.g. a script that wants the planner to fire on
+> creation), set `REQUIRE_PAYMENT=False` in `backend/.env`.
 
 ## Demo assets
 

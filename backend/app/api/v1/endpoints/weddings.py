@@ -10,12 +10,19 @@ from fastapi.responses import StreamingResponse
 import pandas as pd
 from pydantic import BaseModel
 
+from app.config import settings
 from app.db.session import get_db
-from app.db.models import User, Wedding, BudgetLine, TimelineItem, AgentDecisionLog, Booking, Venue, Supplier
+from app.db.models import User, Wedding, BudgetLine, TimelineItem, AgentDecisionLog, Booking, Venue, Supplier, Quote
 from app.api.v1.endpoints.auth import get_current_user
 from app.utils.tasks import enqueue_agent_task
 
 router = APIRouter()
+
+# Preview gating: before payment (status 'preview') the budget + timeline endpoints
+# return only a teaser slice. The full data is generated and stored, but withheld at
+# the API until paid — so a blurred UI can't be bypassed via DevTools/network.
+PREVIEW_BUDGET_LINES = 3
+PREVIEW_TIMELINE_ITEMS = 2
 
 # Schema for creating a wedding profile
 class WeddingCreate(BaseModel):
@@ -37,9 +44,12 @@ async def create_wedding(
     db: AsyncSession = Depends(get_db)
 ):
     """Submits a couple's wedding profile (Intake Form).
-    
-    Creates the Wedding record in 'intake' status, and automatically enqueues
-    the asynchronous intake_planner agent task in the background.
+
+    Runs the intake_planner immediately as a FREE preview (1 cheap call → budget +
+    timeline), landing the wedding in 'preview' so the couple sees real value before
+    paying. The expensive venue/supplier cascade is gated: it runs inline here only
+    when payment isn't required (``REQUIRE_PAYMENT=False``, dev/tests); otherwise
+    checkout triggers it via the plan-cascade task.
     """
     wedding = Wedding(
         couple_user_id=current_user.id,
@@ -65,14 +75,18 @@ async def create_wedding(
     await db.commit()
     await db.refresh(wedding)
 
-    # Trigger the intake planner asynchronously in the background
+    # Run the free preview now (budget + timeline). Include the paid matcher cascade
+    # inline only when payment isn't required; otherwise checkout runs it later.
     try:
-        await enqueue_agent_task("intake-planner", {"wedding_id": wedding.id})
+        await enqueue_agent_task(
+            "intake-planner",
+            {"wedding_id": wedding.id, "with_cascade": not settings.REQUIRE_PAYMENT},
+        )
     except Exception as e:
         # Log error but don't fail the request since DB record is committed
         import logging
         logging.getLogger(__name__).error(f"Failed to enqueue intake planner task on creation: {e}")
-    
+
     return wedding
 
 
@@ -202,7 +216,11 @@ async def get_wedding_budget(
     budget_result = await db.exec(
         select(BudgetLine).where(BudgetLine.wedding_id == wedding_id).order_by(BudgetLine.allocated_amount.desc())
     )
-    return budget_result.all()
+    rows = budget_result.all()
+    # Teaser slice until paid (top allocations only).
+    if wedding.status == "preview":
+        return rows[:PREVIEW_BUDGET_LINES]
+    return rows
 
 
 @router.get("/{wedding_id}/timeline", response_model=List[TimelineItem])
@@ -223,7 +241,11 @@ async def get_wedding_timeline(
     timeline_result = await db.exec(
         select(TimelineItem).where(TimelineItem.wedding_id == wedding_id).order_by(TimelineItem.due_at.asc())
     )
-    return timeline_result.all()
+    rows = timeline_result.all()
+    # Teaser slice until paid (earliest milestones only).
+    if wedding.status == "preview":
+        return rows[:PREVIEW_TIMELINE_ITEMS]
+    return rows
 
 
 class BookingDetail(BaseModel):
@@ -240,6 +262,12 @@ class BookingDetail(BaseModel):
     pricing_summary: Optional[dict] = None
     matching_rationale: Optional[str] = None
     draft_inquiry_email: Optional[str] = None
+    # Latest quote the couple has logged for this vendor (from quote_extractor)
+    quote_total: Optional[float] = None
+    quote_currency: Optional[str] = None
+    quote_rationale: Optional[str] = None
+    allocated_amount: Optional[float] = None  # budget allocated to this vendor's category
+    over_budget: Optional[bool] = None        # quote_total > allocated_amount
 
 
 @router.get("/{wedding_id}/bookings", response_model=List[BookingDetail])
@@ -294,6 +322,32 @@ async def get_wedding_bookings(
                     "email": item.get("draft_inquiry_email"),
                 }
 
+    # Latest quote per booking + budget allocation per category, so each vendor card
+    # can show the live "quoted vs allocated" picture and an over-budget flag.
+    booking_ids = [b.id for b in bookings]
+    latest_quote: dict[str, Quote] = {}
+    if booking_ids:
+        quotes_result = await db.exec(
+            select(Quote).where(Quote.booking_id.in_(booking_ids)).order_by(Quote.created_at.desc())
+        )
+        for q in quotes_result.all():
+            latest_quote.setdefault(q.booking_id, q)
+    budget_rows = (await db.exec(select(BudgetLine).where(BudgetLine.wedding_id == wedding_id))).all()
+    alloc_by_cat = {b.category: b.allocated_amount for b in budget_rows}
+
+    def quote_fields(bid: str, budget_category: str) -> dict:
+        q = latest_quote.get(bid)
+        if not q:
+            return {}
+        allocated = alloc_by_cat.get(budget_category)
+        return {
+            "quote_total": q.total_amount,
+            "quote_currency": q.currency,
+            "quote_rationale": q.rationale_text,
+            "allocated_amount": allocated,
+            "over_budget": bool(allocated and q.total_amount > allocated),
+        }
+
     details: List[BookingDetail] = []
     for b in bookings:
         if b.venue_id:
@@ -309,6 +363,7 @@ async def get_wedding_bookings(
                 pricing_summary=(v.pricing_summary if v else None),
                 matching_rationale=meta.get("rationale"),
                 draft_inquiry_email=meta.get("email"),
+                **quote_fields(b.id, "venue"),
             ))
         else:
             s = suppliers.get(b.supplier_id)
@@ -323,6 +378,7 @@ async def get_wedding_bookings(
                 pricing_summary=(s.pricing_summary if s else None),
                 matching_rationale=meta.get("rationale"),
                 draft_inquiry_email=meta.get("email"),
+                **quote_fields(b.id, s.category if s else ""),
             ))
     return details
 

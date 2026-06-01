@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback, type ReactNode } from "react"
 import { useNavigate } from "react-router";
 import { Icon } from "../../shared/Icon";
 import { useWedding, useAgentMatcher, useApi } from "../../api";
-import { POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from "../../api/config";
+import { POLL_INTERVAL_MS, POLL_TIMEOUT_MS, COUPLE_PRICE_EUR } from "../../api/config";
 import { useActiveWedding } from "../WeddingProvider";
 
 interface IntakeLog {
@@ -11,6 +11,29 @@ interface IntakeLog {
   status: string;
   rationale_summary?: string;
   error_message?: string;
+}
+
+/** Blurred placeholder rows with a lock overlay — the "there's more, pay to see it"
+ *  affordance. Contains no real data (the API withholds it until paid), so it can't
+ *  be scraped from the DOM. */
+function LockedRows() {
+  return (
+    <div className="relative mt-3">
+      <div className="space-y-3 blur-sm select-none pointer-events-none" aria-hidden>
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex items-center justify-between">
+            <span className="h-3 w-24 bg-primary/10 rounded" />
+            <span className="h-3 w-12 bg-primary/10 rounded" />
+          </div>
+        ))}
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="flex items-center gap-1.5 text-xs text-on-surface-variant bg-wedding-white/80 px-3 py-1 rounded-full">
+          <Icon name="lock" size={14} /> Unlock to reveal all
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function formatDue(due: string): { label: string; overdue: boolean } {
@@ -35,6 +58,7 @@ export function Dashboard() {
 
   const wedding = data.wedding ?? activeWedding;
   const building = !!wedding && wedding.status === "intake";
+  const isPreview = !!wedding && wedding.status === "preview";
   const isRunningMatch = matchStatus === "running";
 
   const venues = data.bookings.filter((b) => b.venue_id);
@@ -77,8 +101,13 @@ export function Dashboard() {
   const [waited, setWaited] = useState(0);
   const sawBuilding = useRef(false);
   if (building) sawBuilding.current = true;
+  // After payment the wedding is 'planning' but the matcher cascade is still running,
+  // so the vendor shortlist arrives a few seconds later — keep polling until it lands.
+  const cascadePending =
+    !!wedding && wedding.status === "planning" && data.bookings.length === 0 && waited < POLL_TIMEOUT_MS * 2;
   const poll =
-    !!weddingId && (building || replanning || (sawBuilding.current && waited < POLL_TIMEOUT_MS * 2));
+    !!weddingId &&
+    (building || replanning || cascadePending || (sawBuilding.current && waited < POLL_TIMEOUT_MS * 2));
 
   useEffect(() => {
     if (weddingId) fetchIntakeLog();
@@ -271,6 +300,120 @@ export function Dashboard() {
           </div>
         )}
       </div>,
+    );
+  }
+
+  // ---- Preview teaser: planner ran free, payment unlocks the rest ----
+  if (isPreview) {
+    return shell(
+      <>
+        <section className="mb-6">
+          <div className="bg-primary-container/10 border border-primary-container/20 rounded-[3rem] p-6 flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <p className="font-label-caps text-[10px] text-primary tracking-widest uppercase mb-1">Your wedding</p>
+              <h2 className="font-headline-sm text-headline-sm text-on-surface">
+                {wedding!.region} • {wedding!.ceremony_type}
+              </h2>
+              <p className="text-sm text-on-surface-variant mt-1">
+                {wedding!.guest_count_estimate} guests • €{wedding!.budget_total.toLocaleString()} budget
+              </p>
+            </div>
+            <span className="px-3 py-1.5 bg-soft-clay/15 text-soft-clay rounded-full text-xs font-bold uppercase tracking-wider">
+              Preview
+            </span>
+          </div>
+        </section>
+
+        <section className="mb-8 text-center">
+          <span className="font-label-caps text-[10px] text-primary tracking-widest uppercase">
+            Your AI coordinator drafted your plan
+          </span>
+          <h1 className="font-display-sm text-display-sm text-on-surface mt-2 mb-2">
+            Here's a preview of your wedding plan
+          </h1>
+          <p className="text-body-md text-on-surface-variant max-w-lg mx-auto">
+            Unlock the full budget breakdown, your complete planning timeline, and a hand-matched
+            shortlist of venues &amp; suppliers — with inquiry emails drafted for you.
+          </p>
+        </section>
+
+        <section className="grid md:grid-cols-2 gap-4 mb-4">
+          <div className="bg-wedding-white custom-shadow rounded-[3rem] p-6 border border-outline-variant/10">
+            <div className="flex items-center gap-2 mb-4">
+              <Icon name="payments" size={20} className="text-primary" />
+              <h3 className="font-button-text text-on-surface">Budget breakdown</h3>
+            </div>
+            <div className="space-y-3">
+              {data.budgetLines.map((b) => (
+                <div key={b.id} className="flex items-center justify-between">
+                  <span className="text-sm text-on-surface capitalize">{b.category.replace(/_/g, " ")}</span>
+                  <span className="text-sm font-bold text-on-surface">€{b.allocated_amount.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+            <LockedRows />
+          </div>
+
+          <div className="bg-wedding-white custom-shadow rounded-[3rem] p-6 border border-outline-variant/10">
+            <div className="flex items-center gap-2 mb-4">
+              <Icon name="auto_schedule" size={20} className="text-primary" />
+              <h3 className="font-button-text text-on-surface">Planning timeline</h3>
+            </div>
+            <div className="space-y-3">
+              {data.timelineItems.map((t) => (
+                <div key={t.id} className="flex items-start gap-3">
+                  <span className="mt-1.5 w-2 h-2 rounded-full bg-primary shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm text-on-surface">{t.title}</p>
+                    {t.description && (
+                      <p className="text-xs text-on-surface-variant line-clamp-1">{t.description}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <LockedRows />
+          </div>
+        </section>
+
+        <section className="mb-8">
+          <div className="bg-wedding-white custom-shadow rounded-[3rem] p-6 border border-outline-variant/10 relative overflow-hidden">
+            <div className="flex items-center gap-2 mb-4">
+              <Icon name="storefront" size={20} className="text-primary" />
+              <h3 className="font-button-text text-on-surface">Venue &amp; supplier shortlist</h3>
+              <span className="bg-soft-clay/10 text-soft-clay font-label-caps text-[10px] px-2 py-1 rounded-full uppercase tracking-tighter ml-auto">
+                AI curated
+              </span>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 blur-sm select-none pointer-events-none" aria-hidden>
+              {["Venue", "Photographer", "Florist", "Music"].map((c) => (
+                <div key={c} className="rounded-[2rem] border border-outline-variant/10 p-4 h-28 bg-primary/5 flex flex-col justify-end">
+                  <div className="h-2 w-2/3 bg-primary/20 rounded mb-2" />
+                  <div className="h-2 w-1/2 bg-primary/10 rounded" />
+                </div>
+              ))}
+            </div>
+            <div className="absolute inset-x-0 bottom-6 flex items-center justify-center px-4">
+              <span className="flex items-center gap-2 text-sm text-on-surface-variant bg-wedding-white/80 px-3 py-1.5 rounded-full text-center">
+                <Icon name="lock" size={16} /> 3 venues + photographers, florists &amp; musicians — unlock to reveal
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section className="text-center">
+          <button
+            type="button"
+            onClick={() => navigate("/wedding/checkout")}
+            className="bg-primary text-on-primary px-10 py-4 rounded-full font-button-text tracking-widest uppercase hover:opacity-90 transition-opacity"
+          >
+            Unlock your full plan + matched vendors · €{COUPLE_PRICE_EUR}
+          </button>
+          <p className="text-xs text-on-surface-variant/70 mt-3">
+            One-time · less than 1% of the average Irish wedding
+          </p>
+        </section>
+      </>,
     );
   }
 

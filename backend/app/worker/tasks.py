@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from typing import Optional
 from app.db.session import get_db
-from app.db.models import Booking
+from app.db.models import Booking, Wedding
 from app.agents.planner import run_intake_planner
 from app.agents.matcher import run_venue_matcher, run_supplier_matcher
 from app.agents.extractor import run_quote_extractor
@@ -13,10 +13,49 @@ from app.agents.extractor import run_quote_extractor
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
+async def _run_matcher_cascade(db: AsyncSession, wedding_id: str) -> None:
+    """Runs the venue + supplier matchers sequentially (the expensive, paid part).
+
+    SEQUENTIAL by design: each matcher holds a DB write transaction open across its
+    Gemini call, so concurrent runs deadlock SQLite ("database is locked"); sequential
+    also stays under free-tier rate limits. Each is best-effort — one failure (e.g. a
+    rate limit) must not abort the rest of the shortlist.
+    """
+    cascade = [
+        (run_venue_matcher, {}),
+        (run_supplier_matcher, {"category": "photography"}),
+        (run_supplier_matcher, {"category": "florals"}),
+        (run_supplier_matcher, {"category": "music"}),
+    ]
+    for runner, extra in cascade:
+        try:
+            await runner(db, wedding_id, trigger="agent_initiated", **extra)
+        except Exception as e:
+            logger.error(f"Cascade {runner.__name__} failed (continuing): {e}")
+
+
+async def _mark_planning(db: AsyncSession, wedding_id: str) -> None:
+    """Promotes a wedding to 'planning' (full, paid plan unlocked)."""
+    res = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
+    w = res.first()
+    if w:
+        w.status = "planning"
+        db.add(w)
+        await db.commit()
+
+
 # Task Request Schema Definitions
 class IntakePlannerTaskSchema(BaseModel):
     wedding_id: str
     force: bool = False
+    # When True, run the paid matcher cascade inline after the planner (used by the
+    # payment-free dev/test path). Default False = free preview, cascade gated by payment.
+    with_cascade: bool = False
+
+
+class PlanCascadeTaskSchema(BaseModel):
+    wedding_id: str
 
 class VenueMatcherTaskSchema(BaseModel):
     wedding_id: str
@@ -35,7 +74,12 @@ async def task_intake_planner(
     payload: IntakePlannerTaskSchema, 
     db: AsyncSession = Depends(get_db)
 ):
-    """Worker task executing the intake planner agent to seed timeline and budget."""
+    """Worker task running the intake planner — the FREE preview (budget + timeline).
+
+    On success the wedding lands in 'preview' (set by the agent). The paid venue +
+    supplier cascade is gated behind payment, so it runs here only when
+    ``with_cascade`` is set (the payment-free dev/test path).
+    """
     logger.info(f"Worker Task: starting intake-planner for wedding {payload.wedding_id}")
     try:
         # Run agent
@@ -50,29 +94,31 @@ async def task_intake_planner(
             logger.info(f"Intake blocked by guardrail for wedding {payload.wedding_id}; skipping matcher cascade.")
             return {"status": "blocked", "result": result}
 
-        # After seeding budget and timeline, cascade into venue + supplier matching.
-        # Run these SEQUENTIALLY (not as 4 concurrent tasks): the agent holds a DB
-        # write transaction open across its Gemini call, so concurrent matchers
-        # deadlock SQLite ("database is locked"); sequential also stays under
-        # free-tier rate limits. Each is best-effort — one failure (e.g. a rate
-        # limit) must not abort the rest of the shortlist.
-        logger.info(f"Intake completed. Running matcher cascade for wedding {payload.wedding_id}...")
-        cascade = [
-            (run_venue_matcher, {}),
-            (run_supplier_matcher, {"category": "photography"}),
-            (run_supplier_matcher, {"category": "florals"}),
-            (run_supplier_matcher, {"category": "music"}),
-        ]
-        for runner, extra in cascade:
-            try:
-                await runner(db, payload.wedding_id, trigger="agent_initiated", **extra)
-            except Exception as e:
-                logger.error(f"Cascade {runner.__name__} failed (continuing): {e}")
+        if payload.with_cascade:
+            logger.info(f"Intake completed. Running matcher cascade for wedding {payload.wedding_id}...")
+            await _run_matcher_cascade(db, payload.wedding_id)
+            await _mark_planning(db, payload.wedding_id)
 
         return {"status": "completed", "result": result}
     except Exception as e:
         logger.error(f"Worker Task: intake-planner failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/plan-cascade", status_code=status.HTTP_200_OK)
+async def task_plan_cascade(
+    payload: PlanCascadeTaskSchema,
+    db: AsyncSession = Depends(get_db),
+):
+    """Worker task running the paid venue + supplier matcher cascade after payment.
+
+    The intake_planner already ran for free at intake (budget + timeline exist), so
+    this only adds the vendor shortlist and promotes the wedding to 'planning'.
+    """
+    logger.info(f"Worker Task: starting plan-cascade for wedding {payload.wedding_id}")
+    await _run_matcher_cascade(db, payload.wedding_id)
+    await _mark_planning(db, payload.wedding_id)
+    return {"status": "completed"}
 
 
 @router.post("/venue-matcher", status_code=status.HTTP_200_OK)

@@ -152,6 +152,14 @@ async def run_quote_extractor(db: AsyncSession, wedding_id: str, booking_id: str
     # 5. Transition Booking Status
     booking.status = "quoted" if is_available else "declined"
     db.add(booking)
+
+    # 5b. Roll the quote into the LIVE budget so the couple's Budget page actually
+    # moves. MVP model: a category's spent_amount = the latest *available* quote total
+    # for that category (the projected spend the couple is tracking). Declined quotes
+    # don't count. This is what turns the static budget into a real tracker.
+    if is_available and budget_row is not None:
+        budget_row.spent_amount = total_amount
+        db.add(budget_row)
     
     # 6. Apply Budget Monitor Alert side effect (chain a budget_monitor log if over budget)
     follow_ups = []
