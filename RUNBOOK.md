@@ -191,7 +191,10 @@ node e2e.mjs        # screenshots are written next to it
 
 ### Wired vs. still-mock (as of this handoff)
 
-- **Wired to real data:** couple signup → intake → dashboard/budget/timeline/vendors;
-  planner Overview + Clients + drill-in to a client's wedding.
-- **Still mock / next slices:** planner Tasks, Subscriptions, Analytics, AI Concierge;
-  planner→couple **invite** (so planners can onboard clients); email notifications.
+- **Wired to real data:** couple signup → intake (free preview) → checkout → dashboard /
+  budget / timeline / vendors; the vendor **quote loop** (log a reply → quote_extractor →
+  live budget + over-budget alert); the couple **AI Concierge** (Aurelia, grounded in the
+  couple's real budget/timeline/vendors); planner Overview + Clients + drill-in.
+- **Still mock / next slices:** planner Tasks, Subscriptions, Analytics, and the *planner*
+  Concierge; planner→couple **invite** (so planners can onboard clients); email
+  notifications; SendGrid inbound-email auto-ingest of vendor replies.

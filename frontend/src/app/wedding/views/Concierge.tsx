@@ -1,39 +1,66 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Icon } from "../../planner/Icon";
+import { useApi } from "../../api";
+import { useActiveWedding } from "../WeddingProvider";
 
 type Message = { role: "ai" | "user"; text: string };
 
 const SEED: Message[] = [
-  { role: "ai", text: "Hello! I'm Aurelia, your wedding concierge. How can I help you refine your special day today?" },
-  { role: "user", text: "I'm worried about the floral budget." },
   {
     role: "ai",
-    text: "Based on your budget of $4,000, we've spent $3,100. I can find seasonal greenery options that save up to 15%.",
+    text: "Hi, I'm Aurelia — your AI wedding coordinator. Ask me anything about your budget, timeline, or vendors and I'll answer from your real plan.",
   },
 ];
 
-const SUGGESTIONS = ["Show portfolios", "Check budget", "See moodboard"];
+const SUGGESTIONS = ["Can we afford a live band?", "Are we on budget?", "What should I do next?"];
 
 export function Concierge() {
   const navigate = useNavigate();
+  const { request } = useApi();
+  const { activeWedding } = useActiveWedding();
+  const weddingId = activeWedding?.id ?? null;
+
   const [messages, setMessages] = useState<Message[]>(SEED);
   const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  function send(text: string) {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text: trimmed },
-      {
-        role: "ai",
-        text: "Lovely — I'm looking into that now. (Preview build: connect the agent backend for live answers.)",
-      },
-    ]);
-    setDraft("");
+  const scroll = () =>
     requestAnimationFrame(() => endRef.current?.scrollIntoView({ behavior: "smooth" }));
+
+  async function send(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
+
+    setMessages((prev) => [...prev, { role: "user", text: trimmed }]);
+    setDraft("");
+    scroll();
+
+    if (!weddingId) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", text: "Start your wedding plan first and I'll have your budget and timeline to work from." },
+      ]);
+      return;
+    }
+
+    setSending(true);
+    try {
+      const res = await request<{ reply: string }>(`/weddings/${weddingId}/concierge`, {
+        method: "POST",
+        body: JSON.stringify({ message: trimmed }),
+      });
+      setMessages((prev) => [...prev, { role: "ai", text: res.reply || "…" }]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", text: "I had trouble reaching my tools just now — please try again in a moment." },
+      ]);
+    } finally {
+      setSending(false);
+      scroll();
+    }
   }
 
   return (
@@ -51,7 +78,7 @@ export function Concierge() {
             <div key={i} className="flex flex-col items-start max-w-[85%]">
               <span className="text-[10px] font-bold text-primary mb-1 uppercase tracking-widest">Aurelia</span>
               <div className="bg-surface-container-low rounded-2xl rounded-tl-none p-4 border border-outline-variant/20">
-                <p className="text-sm">{msg.text}</p>
+                <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
               </div>
             </div>
           ) : (
@@ -62,18 +89,32 @@ export function Concierge() {
             </div>
           ),
         )}
-        <div className="flex flex-wrap gap-2">
-          {SUGGESTIONS.map((btn) => (
-            <button
-              key={btn}
-              type="button"
-              onClick={() => send(btn)}
-              className="bg-soft-clay/10 text-soft-clay text-[10px] font-bold px-4 py-2 rounded-full border border-soft-clay/20"
-            >
-              {btn}
-            </button>
-          ))}
-        </div>
+
+        {sending && (
+          <div className="flex flex-col items-start max-w-[85%]">
+            <span className="text-[10px] font-bold text-primary mb-1 uppercase tracking-widest">Aurelia</span>
+            <div className="bg-surface-container-low rounded-2xl rounded-tl-none p-4 border border-outline-variant/20 flex items-center gap-1">
+              <span className="w-2 h-2 bg-primary/50 rounded-full animate-bounce [animation-delay:-0.3s]" />
+              <span className="w-2 h-2 bg-primary/50 rounded-full animate-bounce [animation-delay:-0.15s]" />
+              <span className="w-2 h-2 bg-primary/50 rounded-full animate-bounce" />
+            </div>
+          </div>
+        )}
+
+        {!sending && (
+          <div className="flex flex-wrap gap-2">
+            {SUGGESTIONS.map((btn) => (
+              <button
+                key={btn}
+                type="button"
+                onClick={() => send(btn)}
+                className="bg-soft-clay/10 text-soft-clay text-[10px] font-bold px-4 py-2 rounded-full border border-soft-clay/20"
+              >
+                {btn}
+              </button>
+            ))}
+          </div>
+        )}
         <div ref={endRef} />
       </main>
 
@@ -91,10 +132,11 @@ export function Concierge() {
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            className="flex-grow bg-transparent border-none focus:ring-0 focus:outline-none text-sm px-2"
+            disabled={sending}
+            className="flex-grow bg-transparent border-none focus:ring-0 focus:outline-none text-sm px-2 disabled:opacity-60"
             placeholder="Ask Aurelia anything..."
           />
-          <button type="submit" aria-label="Send" className="p-3 bg-primary text-white rounded-full">
+          <button type="submit" aria-label="Send" disabled={sending} className="p-3 bg-primary text-white rounded-full disabled:opacity-50">
             <Icon name="send" size={20} />
           </button>
         </form>
