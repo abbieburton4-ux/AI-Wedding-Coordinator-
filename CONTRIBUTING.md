@@ -45,6 +45,14 @@ The server automatically initializes and seeds the SQLite database (`endpoints_t
 > (`PAYMENTS_PROVIDER=mock` = no real charge). Set `REQUIRE_PAYMENT=False` to get the
 > full plan immediately on intake (handy for quick local testing).
 
+> **⚠️ Gemini free-tier quota = 20 requests/day (Flash).** One couple's full flow
+> (intake_planner + the 4-agent matcher cascade + a few Concierge questions + quote
+> extractions) easily exceeds that, so the agents will start returning `429
+> RESOURCE_EXHAUSTED` — both in the app and in batch scripts like
+> `generate_demo_vendors.py`. **Use a paid Gemini key for real demos / data generation.**
+> Also note: the free tier has **0 quota for `gemini-2.5-pro`**, which is why agents
+> default to Flash (`GEMINI_PLANNING_MODEL` / `GEMINI_FAST_MODEL` in `agents/base.py`).
+
 ### Frontend (Vite + React)
 
 ```bash
@@ -87,6 +95,26 @@ Agents live in the [backend/app/agents/](backend/app/agents/) directory (e.g., `
 6. **Add verification coverage.** Add mock-based assertions in `verify_agents.py` to test the new agent's behavior and guardrail compliance.
 
 ---
+
+## Agent & data behaviors worth knowing
+
+- **Timeline is fitted to the runway.** `intake_planner` seeds milestones from the
+  agent's `months_before` values, but `planner.py` then **compresses the plan into
+  `[today, wedding_date]`** when the longest lead exceeds the days remaining, and floors
+  every due date at today. Without this, a couple starting (say) 7 months before a
+  December wedding got tasks dated 1–2 years in the past. Existing weddings need a
+  **re-plan** (`POST /weddings/{id}/replan`) to pick up a changed timeline.
+- **Adding vendors (Option A — VenueFlow is a coordinator tool, vendors don't "sign up").**
+  The vendor catalog is reference data the matcher recommends from. Two ways to grow it
+  (both at `backend/`):
+  - `python load_vendors_csv.py` — bulk-load **real** vendors from `data/venues.csv` /
+    `data/suppliers.csv` (idempotent; rows may carry a `source` column). Non-coders fill
+    the spreadsheet from public directories.
+  - `python generate_demo_vendors.py` — generate realistic **fictional** vendors via
+    Gemini, tagged `source="demo_generated"` with no contact info. Demo/pitch only — keep
+    them distinct from founder-verified real vendors; don't present them to judges/real couples.
+  - Thin seed data = the matcher repeats the same 1–2 vendors. Keep ~5–6 per category per
+    target region so it has room to differentiate.
 
 ## Code Style
 
