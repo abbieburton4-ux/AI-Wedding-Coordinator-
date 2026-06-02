@@ -192,10 +192,23 @@ async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = Fa
     else:
         base_date = date.today() + timedelta(days=365)  # 1 year out fallback
         
-    for item in result_dict.get("timeline_items", []):
-        days_before = int(item["months_before"] * 30.5)
+    # Fit the plan to the time the couple actually has. The agent returns standard
+    # Irish lead times (months_before up to ~24), but a couple starting e.g. 7 months
+    # out must not get tasks dated in the past. If the longest lead exceeds the days
+    # remaining, compress every milestone proportionally into [today, wedding date];
+    # always floor a due date at today as a safety net.
+    today = date.today()
+    items = result_dict.get("timeline_items", [])
+    available_days = (base_date - today).days
+    max_days_before = max((int(i.get("months_before", 0) * 30.5) for i in items), default=0)
+    scale = (available_days / max_days_before) if (max_days_before > available_days and available_days > 0) else 1.0
+
+    for item in items:
+        days_before = int(item["months_before"] * 30.5 * scale)
         due_at = base_date - timedelta(days=days_before)
-        
+        if due_at < today:
+            due_at = today  # never schedule a milestone before the couple started
+
         timeline_item = TimelineItem(
             id=f"ti_{uuid.uuid4().hex[:10]}",
             wedding_id=wedding.id,

@@ -5,6 +5,55 @@ Newest entries at the top. One dated section per working session.
 
 ---
 
+## 2026-06-02 (fix) — Timeline fitted to the actual runway
+
+**Context:** A couple starting ~7 months before a Dec-2026 wedding got a timeline running
+**2024 → 2026** — the first milestone ("Set Budget & Guest List") was dated ~24 months
+before the wedding (Dec 2024), i.e. ~18 months in the **past**. Cause: `planner.py`
+computed `due_at = wedding_date − months_before` with **no clamping**, so any milestone
+whose lead time exceeded the days remaining fell into the past. Not a date-parsing bug —
+the plan just wasn't fitted to the time available.
+
+**Fix (`backend/app/agents/planner.py`):** when the longest `months_before` exceeds the
+days between today and the wedding, **compress all milestones proportionally into
+`[today, wedding_date]`**, and floor every due date at today. Verified: for a 2026-12-30
+wedding started 2026-06-02, the 24-month milestone now lands on today and the rest spread
+across the real 7-month window (none in the past, order preserved). Applies to newly
+generated plans; existing weddings need a re-plan to pick it up.
+
+**Docs:** added the quota cap + this timeline behavior + vendor-seeding notes to
+`CONTRIBUTING.md`.
+
+## 2026-06-01 (data) — Vendor seed tooling + breadth (fix "same vendor" matches)
+
+**Context:** The matcher kept suggesting the same 1–2 vendors because the seed pool was
+tiny/lopsided (Dublin had only 3 venues; most supplier categories had 1 per region). With
+so few candidates the LLM has nothing to choose from. Built two tools to grow the pool.
+
+### Tools (both at `backend/`, run with the venv)
+- `load_vendors_csv.py` + `data/venues.csv` + `data/suppliers.csv` — **CSV bulk loader** so
+  a non-coder (Alan) can crowd-source *real* vendors from directories into a spreadsheet and
+  import with one command. Idempotent (skips existing by name + region/location).
+- `generate_demo_vendors.py` — **LLM generator** that creates realistic *fictional* Irish
+  vendors per region/category via Gemini Flash, tagged `source="demo_generated"` with **no
+  contact info** (so they're never passed off as real businesses). Idempotent; retries 503/429.
+
+### Result
+- Venues **25 → 51** (Dublin 8, Meath 8, Wicklow 7, Kildare 6, Galway 6, Cork 5) — the
+  matcher now has real variety.
+- Suppliers still **27**: the generator hit the **Gemini free-tier daily cap (20 requests/day)**
+  before the supplier batch. Re-run `generate_demo_vendors.py` after the quota resets
+  (idempotent — it'll skip venues and fill suppliers), or load via CSV.
+
+### ⚠️ Ops flag (important for outreach demos)
+- The free tier is **20 Flash requests/day**. One couple's flow (intake + 4-agent cascade +
+  a few concierge questions + quote extractions) easily exceeds that — the live product will
+  **429 mid-demo**. **Get a paid Gemini key before doing real prospect demos.**
+
+### Follow-up
+- Optional matcher tweak: pass a larger candidate set (~8–10) + light rotation so re-runs
+  surface different options even with a modest pool.
+
 ## 2026-06-01 (P0) — Quote loop + live budget (the signature agent moment)
 
 **Context:** Post-payment the product went static — `spent_amount` was always €0 and the
