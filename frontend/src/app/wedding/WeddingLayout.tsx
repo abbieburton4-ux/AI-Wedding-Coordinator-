@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Outlet, NavLink, useLocation } from "react-router";
+import { Outlet, NavLink, useLocation, Link } from "react-router";
 import { cn } from "../design-system/cn";
 import { Icon } from "../shared/Icon";
 import { WorkspaceHeader } from "../shared/WorkspaceHeader";
@@ -69,6 +69,21 @@ function WeddingBottomNav() {
   );
 }
 
+// Always-visible launcher so Aurelia (the AI concierge) is one tap away from any
+// wedding page — instead of being buried behind the top-right profile avatar.
+function ConciergeFab() {
+  return (
+    <Link
+      to="/wedding/concierge"
+      aria-label="Ask Aurelia, your AI wedding coordinator"
+      className="fixed z-50 right-5 bottom-20 md:bottom-6 flex items-center gap-2 rounded-full bg-primary text-on-primary shadow-lg hover:opacity-90 active:scale-95 transition-all px-4 py-3.5"
+    >
+      <Icon name="auto_awesome" filled />
+      <span className="hidden md:inline font-button-text text-button-text pr-1">Ask Aurelia</span>
+    </Link>
+  );
+}
+
 export function WeddingLayout() {
   const { pathname } = useLocation();
   // Concierge and the intake/onboarding flow render full-bleed (no nav chrome).
@@ -87,6 +102,7 @@ export function WeddingLayout() {
           <Outlet />
         </div>
         {showShell && <WeddingBottomNav />}
+        {showShell && <ConciergeFab />}
       </div>
     </WeddingProvider>
   );
