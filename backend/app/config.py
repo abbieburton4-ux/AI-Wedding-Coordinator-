@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     JWT_SECRET: Optional[str] = "dev-jwt-secret-key-change-me-in-production"
     FIREBASE_PROJECT_ID: str = "venueflow-dev"
+
+    # ElevenLabs Conversational AI (the "Aurelia" voice agent). The key is a
+    # server-side secret and must never reach the browser; the frontend instead
+    # fetches a short-lived WebRTC conversation token from /api/v1/voice/token.
+    ELEVENLABS_API_KEY: Optional[str] = None
+    ELEVENLABS_AGENT_ID: str = "agent_3801ktczgph3ep3bpr0rp9jgvzqc"
     
     # Dev settings
     DEVELOPMENT_MODE: bool = True

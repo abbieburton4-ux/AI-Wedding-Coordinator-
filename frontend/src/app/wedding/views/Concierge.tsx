@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { Icon } from "../../planner/Icon";
 import { useApi } from "../../api";
 import { useActiveWedding } from "../WeddingProvider";
+import { VoiceCall } from "../VoiceCall";
 
 type Message = { role: "ai" | "user"; text: string };
 
@@ -24,6 +25,7 @@ export function Concierge() {
   const [messages, setMessages] = useState<Message[]>(SEED);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   const scroll = () =>
@@ -69,7 +71,15 @@ export function Concierge() {
         <button type="button" onClick={() => navigate(-1)} aria-label="Back" className="text-primary p-2">
           <Icon name="arrow_back" />
         </button>
-        <h1 className="font-headline-sm text-headline-sm text-center flex-1 pr-10">Aurelia</h1>
+        <h1 className="font-headline-sm text-headline-sm text-center flex-1">Aurelia</h1>
+        <button
+          type="button"
+          onClick={() => setVoiceOpen(true)}
+          aria-label="Talk to Aurelia by voice"
+          className="text-primary p-2"
+        >
+          <Icon name="call" />
+        </button>
       </header>
 
       <main className="pt-20 pb-24 px-4 max-w-2xl mx-auto w-full flex flex-col gap-6">
@@ -141,6 +151,8 @@ export function Concierge() {
           </button>
         </form>
       </div>
+
+      {voiceOpen && <VoiceCall onClose={() => setVoiceOpen(false)} />}
     </div>
   );
 }
