@@ -71,11 +71,11 @@ export function Login() {
           <p className="text-sm text-muted-foreground mb-1">Dev mode — choose an identity:</p>
           <Button type="button" variant="solid" disabled={busy} className="w-full"
             onClick={() => run(() => devSignIn("couple_2"))}>
-            Continue as a couple (Priya &amp; David)
+            Continue as a couple
           </Button>
           <Button type="button" variant="outline" disabled={busy} className="w-full"
             onClick={() => run(() => devSignIn("planner_1"))}>
-            Continue as a planner (Mary-Aoife)
+            Continue as a planner
           </Button>
         </div>
       )}
