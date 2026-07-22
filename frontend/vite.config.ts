@@ -32,8 +32,8 @@ function gitHubPagesSpaFallback() {
   }
 }
 
-// Project page on GitHub Pages: https://alanmaizon.github.io/VenueFlow/
-// Use VITE_BASE=/ for local dev or other hosts.
+// Custom domain venueflow.ie serves from /. CI sets VITE_BASE=/.
+// Local fallback keeps the project-page path for https://alanmaizon.github.io/VenueFlow/
 const base = process.env.VITE_BASE ?? '/VenueFlow/'
 
 export default defineConfig({
