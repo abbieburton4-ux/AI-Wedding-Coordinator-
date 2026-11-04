@@ -1,7 +1,0 @@
-{
-  "name": "VenueFlow — AI Wedding Coordinator",
-  "description": "Autonomous AI coordinator for couples and independent wedding planners, managing venue matching, supplier sourcing, budget allocation, timelines, and day-of run-of-show.",
-  "capabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}
