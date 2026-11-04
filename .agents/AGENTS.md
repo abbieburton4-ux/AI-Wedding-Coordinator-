@@ -81,7 +81,6 @@ python -m venv .venv && source .venv/bin/activate && pip install -r requirements
 GEMINI_API_KEY=dummy python verify_endpoints.py && GEMINI_API_KEY=dummy python verify_agents.py && GEMINI_API_KEY=dummy python verify.py
 uvicorn app.main:app --reload            # local API; set WORKER_BASE_URL=http://localhost:8000 outside Docker
 ```
-- On Apple Silicon the verify scripts also need `pip install greenlet` (missing from `requirements.txt`, backlog B16).
 - The scripts rewrite the tracked `backend/endpoints_test.db*` files (B17). Restore them with `git restore` and delete the new `*_test.db-shm`/`-wal` files after a run.
 
 Frontend (from `frontend/`): `npm ci`, `npm run dev`, `npm run build`. The build is the only compile check; there is no typecheck script, linter or test runner.

@@ -11,7 +11,7 @@ There's no second human reviewer, and CI (`.github/workflows/ci.yml`, backlog B1
 
 Shortcut: `bash scripts/verify-backend.sh` (from the repo root) runs steps 2 and 7 and exits non-zero if any script fails. CI and the autopilot use it. When reviewing someone else's change, run the scripts by hand instead, because the shortcut also cleans up.
 
-1. If `.venv` is missing: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`. On Apple Silicon also `pip install greenlet` into the venv only (B16); don't add it to `requirements.txt` without the owner's go-ahead.
+1. If `.venv` is missing: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`.
 2. Run each script and record its exit code:
    ```bash
    GEMINI_API_KEY=dummy .venv/bin/python verify_endpoints.py

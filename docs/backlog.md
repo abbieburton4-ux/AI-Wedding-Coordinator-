@@ -24,7 +24,7 @@ Ranked against the couple's must-haves in `wedding.md` (1. in depth budgeting, 2
 4. **Must-have 3, guest planning:** B19.
 5. **Vendor catalogue for Chicago:** the rest of B11, then B20. These rank below the must-haves because the couple are choosing a venue off their own shortlist and didn't list vendor matching as a must-have.
 6. **Honesty fixes for data the couple will see:** B18, B8. Then B9, which depends on B12.
-7. **Housekeeping:** B6 (an owner call, quick), B16, B17, B21, B15, B13.
+7. **Housekeeping:** B6 (an owner call, quick), B17, B21, B15, B13.
 
 Within each tier, how a must-have gets built is still to be decided. Each one needs a short proposed PD on scope before engineering starts.
 
@@ -53,7 +53,6 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 - **B13 — Stale material from the prototype and the XPRIZE.** `streamlit_mock/` (still referenced by `README.md`, `CONTRIBUTING.md`, `docs/runway.md`, `docs/reviews/2026-05-27.md` and `scripts/build_tracker.py`), the `.xlsx` trackers, and the XPRIZE framing in `README.md`, `docs/runway.md`, `docs/strategic-memo.md` and `docs/reviews/`. *Fix:* archive or delete them (owner's call).
 - **B14 — The deploy workflow would publish a frontend with no backend.** `.github/workflows/deploy.yml` publishes `frontend/` to GitHub Pages at VenueFlow's domain, `venueflow.ie` (`frontend/public/CNAME`), on every push to `main`. It sets no `VITE_API_URL`, so the published site would have no backend. No runs are recorded on this repo. *Fix:* decide where the app and its backend are hosted, then point the workflow at that. Keep or drop the domain as part of that decision. *Depends on:* a PD on hosting (couple's call).
 - **B15 — CI is new and untested.** `.github/workflows/ci.yml` runs the backend verify scripts and the frontend build on every PR. *Fix:* confirm the first run passes, then make `CI / backend` and `CI / frontend` required checks (see `docs/autonomy.md`).
-- **B16 — `greenlet` is missing from `requirements.txt`.** SQLAlchemy's async engine needs it, and it isn't installed automatically on Apple Silicon, so `verify_endpoints.py` and `verify_agents.py` crash there. *Fix:* add it, with the one-line reason rule 9 asks for.
 - **B17 — The verify scripts rewrite tracked files.** `backend/endpoints_test.db` and its `-shm`/`-wal` files are committed, and every run of `verify_endpoints.py` changes them; the other scripts leave untracked `-shm`/`-wal` files. `.gitignore` already lists `endpoints_test.db*`, but the files were committed before that. *Fix:* `git rm --cached` them and widen the ignore rule to `backend/*_test.db*`.
 - **B25 — Unattended agents need a first test.** `.github/workflows/claude-agents.yml` is new, and its third-party plugins aren't pinned to a version. Known gaps from its review (2026-11-04):
   - Nothing scans agent commits for secrets: the gitleaks hook runs only locally, and CI has no gitleaks step.
@@ -73,6 +72,7 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-04 | **B16** — `greenlet` missing from `requirements.txt` (backend verify crashed on Apple Silicon and in CI) | this PR (#6) |
 | 2026-11-04 | **B7** — unmeasured confidence logged as 1.0 (also 0.8 and 0.0 in each agent) | `ab3ef135` |
 | 2026-05-27 | Tab 1 plotly Gold crash | `2032afa6` |
 | 2026-05-27 | Region dropdown vs. seed county mismatch | `2032afa6` |
