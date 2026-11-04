@@ -100,7 +100,7 @@ Stripe Checkout for the one-time couple coordinator fee. Stripe Billing for plan
 
 ### Auth — Firebase Auth
 
-Email + social for couples. Email + invite codes for planners onboarded by sales. Row-level security in Postgres keys off the Firebase user id.
+Personal sign-in through the couple's own Firebase project (PD-002): Google, with email and password planned as a fallback (it needs an email-confirmation step first, B22). There's no self sign-up. A new account is created only for a verified email on the wedding's access list (`wedding_members`), or in `ACCESS_BOOTSTRAP_EMAILS`, the couple's own emails. Those are the only ones that may create the wedding, and both become owners. Access levels (viewer, editor, owner) are enforced in the API (`app/api/v1/access.py`), not in Postgres. Worker `/tasks/*` routes need `X-Internal-Token: INTERNAL_TASKS_SECRET`. The Stripe webhook needs a valid signature, and the inbound-email webhook needs `?token=INBOUND_EMAIL_SECRET`. Outside `DEVELOPMENT_MODE`, all three refuse every call when their secret isn't set. The planner invite-code flow from the SaaS era was never built, and the password-less planner login only works with mock sign-in on.
 
 ### Frontend hosting — Firebase Hosting
 

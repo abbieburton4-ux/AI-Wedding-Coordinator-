@@ -9,6 +9,7 @@ from app.config import settings
 from app.db.session import get_db
 from app.db.models import User, Wedding, Payment
 from app.api.v1.endpoints.auth import get_current_user
+from app.api.v1.access import require_wedding_access
 from app.utils.tasks import enqueue_agent_task
 
 logger = logging.getLogger(__name__)
@@ -53,12 +54,7 @@ async def create_checkout(
     Swapping demo -> real payments is a single env change
     (``PAYMENTS_PROVIDER=stripe`` + ``STRIPE_SECRET_KEY``); no code change here.
     """
-    result = await db.exec(select(Wedding).where(Wedding.id == payload.wedding_id))
-    wedding = result.first()
-    if not wedding:
-        raise HTTPException(status_code=404, detail="Wedding not found")
-    if wedding.couple_user_id != current_user.id and wedding.planner_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to pay for this wedding")
+    wedding = await require_wedding_access(db, payload.wedding_id, current_user, "editor")
 
     amount = settings.COUPLE_PRICE_EUR
 
