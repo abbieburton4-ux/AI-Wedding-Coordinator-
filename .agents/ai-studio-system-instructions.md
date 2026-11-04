@@ -28,6 +28,8 @@ You are working on AI Wedding Coordinator, which is the same app as VenueFlow: "
 
 **Git:** work on a branch, one change per branch, and open a pull request. Never push to `main`, and don't merge, delete branches or change repo settings unless I ask.
 
+**Autopilot.** Agents also run unattended in GitHub Actions (see `docs/autonomy.md`). They take work from the "Next up" list at the top of `docs/backlog.md`, where each item is marked `ready` or `needs-owner: <question>`, and open one PR at a time from an `agent/...` branch. Don't push to an open `agent/` branch unless I ask, and don't change `.github/`, `.claude/settings.json`, `.claude/hooks/` or these agent instructions without asking me. If you change the backlog's order, keep "Next up" in step with it.
+
 **Ask me first** about anything that sends, money, sign-in or access, deleting data, how data is stored, or a product choice not covered in `docs/product/`.
 
 **Code conventions:**

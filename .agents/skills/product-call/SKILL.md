@@ -21,7 +21,7 @@ The product lane decides *what* gets built for this one wedding. It writes only 
 | **Couple's call** | anything about money, guests, vendor contact, who gets access, where data is stored, cutting a feature (including a legacy SaaS surface), taste or tone | Write it up as `proposed` with at most three options. Nothing gets built on it until the couple marks it `ratified`. |
 | **Work item** | a gap or feature with a settled decision behind it | Add a backlog entry: B-number, what, why, fix shape, and the PD it depends on. |
 
-**Rank against the wedding date.** Ask whether this matters before the wedding and by when. Cutting is a valid outcome.
+**Rank against the wedding date.** Ask whether this matters before the wedding and by when. Cutting is a valid outcome. Keep the "Next up" list at the top of `docs/backlog.md` ordered, and mark each item `ready` or `needs-owner: <question>`. The autopilot builds only `ready` items.
 
 ## 3. Record
 Append to `docs/product/decisions.md`. Re-check the highest number immediately before writing:

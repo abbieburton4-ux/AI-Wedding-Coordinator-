@@ -6,6 +6,10 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 ---
 
+## Next up
+
+*(Empty. The first autopilot run turns the ranking under "Open" into this ordered list, each item marked `ready` or `needs-owner: <question>`. See `docs/autonomy.md`.)*
+
 ## Open
 
 Items B6–B21 come from the 2026-11-04 agent-setup audit, re-checked against the restored backend.
@@ -48,9 +52,18 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B13 — Stale material from the prototype and the XPRIZE.** `streamlit_mock/` (still referenced by `README.md`, `CONTRIBUTING.md`, `docs/runway.md`, `docs/reviews/2026-05-27.md` and `scripts/build_tracker.py`), the `.xlsx` trackers, and the XPRIZE framing in `README.md`, `docs/runway.md`, `docs/strategic-memo.md` and `docs/reviews/`. *Fix:* archive or delete them (owner's call).
 - **B14 — The deploy workflow would publish a frontend with no backend.** `.github/workflows/deploy.yml` publishes `frontend/` to GitHub Pages at VenueFlow's domain, `venueflow.ie` (`frontend/public/CNAME`), on every push to `main`. It sets no `VITE_API_URL`, so the published site would have no backend. No runs are recorded on this repo. *Fix:* decide where the app and its backend are hosted, then point the workflow at that. Keep or drop the domain as part of that decision. *Depends on:* a PD on hosting (couple's call).
-- **B15 — No CI on pull requests.** Nothing runs the backend verify scripts or the frontend build on PRs. *Fix:* a small workflow running the `verify` skill's steps.
+- **B15 — CI is new and untested.** `.github/workflows/ci.yml` runs the backend verify scripts and the frontend build on every PR. *Fix:* confirm the first run passes, then make `CI / backend` and `CI / frontend` required checks (see `docs/autonomy.md`).
 - **B16 — `greenlet` is missing from `requirements.txt`.** SQLAlchemy's async engine needs it, and it isn't installed automatically on Apple Silicon, so `verify_endpoints.py` and `verify_agents.py` crash there. *Fix:* add it, with the one-line reason rule 9 asks for.
 - **B17 — The verify scripts rewrite tracked files.** `backend/endpoints_test.db` and its `-shm`/`-wal` files are committed, and every run of `verify_endpoints.py` changes them; the other scripts leave untracked `-shm`/`-wal` files. `.gitignore` already lists `endpoints_test.db*`, but the files were committed before that. *Fix:* `git rm --cached` them and widen the ignore rule to `backend/*_test.db*`.
+- **B25 — Unattended agents need a first test.** `.github/workflows/claude-agents.yml` is new, and its third-party plugins aren't pinned to a version. Known gaps from its review (2026-11-04):
+  - Nothing scans agent commits for secrets: the gitleaks hook runs only locally, and CI has no gitleaks step.
+  - The tool list allows `git push origin agent/x --delete` and edits to `.claude/hooks/`.
+  - The "Next up" list carries no date, so "older than 14 days" can't be checked.
+  - With no open PR, there's nowhere to post `[BLOCKED]`.
+  - The `reply` job installs no dependencies, so it can't run the verify gate.
+  - CI installs whatever `sqlmodel` resolves to (B21).
+  
+  *Fix:* follow the test checklist in `docs/autonomy.md` before relying on it, then close these gaps.
 
 Not carried over from the audit, because the restored backend already covers them: invented concierge prices in the old `mockService.ts` (the concierge now calls Gemini through the backend), data living in one browser (the backend has a database), and "no real AI" (the agents call Gemini).
 
