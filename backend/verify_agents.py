@@ -379,7 +379,33 @@ async def run_async_verification():
             assert len(alerts) == 1
             print(f"   * Alert message: {alerts[0].rationale_summary}")
             assert "exceeds" in alerts[0].rationale_summary
-            
+
+
+            # --- TEST 8: MISSING CONFIDENCE IS LOGGED AS NULL, NOT INVENTED ---
+            print("\nTEST 8: Running Venue Matcher (No Confidence Reported)...")
+            venue_no_confidence_response = {
+                k: v for k, v in venue_response.items() if k != "confidence_score"
+            }
+
+            async def mock_generate_content_no_confidence(*args, **kwargs):
+                return MockResponse(json.dumps(venue_no_confidence_response))
+
+            mock_models.generate_content = mock_generate_content_no_confidence
+
+            await run_venue_matcher(db, "wedding_intake_test")
+
+            log_result = await db.exec(
+                select(AgentDecisionLog)
+                .where(AgentDecisionLog.wedding_id == "wedding_intake_test", AgentDecisionLog.agent_id == "venue_matcher")
+                .order_by(AgentDecisionLog.timestamp.desc())
+            )
+            logs = log_result.all()
+            print(f"   * Latest status: {logs[0].status}, confidence: {logs[0].confidence_score}")
+            assert logs[0].status == "success"
+            assert logs[0].confidence_score is None
+            reported = [log.confidence_score for log in logs if log.status == "success"]
+            assert 0.92 in reported, "a reported confidence must still be logged as-is"
+
     print("\n--- ASYNC AGENT Logic VERIFICATION SUCCESS ---")
 
 def main():

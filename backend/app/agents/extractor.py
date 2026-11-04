@@ -200,7 +200,7 @@ async def run_quote_extractor(db: AsyncSession, wedding_id: str, booking_id: str
     # and update the parent_decision_id on the committed main log.
     return (
         result_dict,
-        result_dict.get("confidence_score", 1.0),
+        result_dict.get("confidence_score"),
         model,
         prompt_version,
         api_calls,
