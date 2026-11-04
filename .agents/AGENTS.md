@@ -29,6 +29,7 @@ These exist because the data and people are real. They override convenience and 
 7. **Every Gemini agent follows the decision-log contract** (`add-agent` skill): log row first, domain mutation last, guardrails enforced, covered in `verify_agents.py`.
 8. **Never change a test to make it pass.** If a test looks wrong, surface the conflict.
 9. **No new dependency without a one-line reason in the commit.** Don't lift the `sqlmodel<0.0.25` pin until the naive datetimes are fixed.
+10. **Never fabricate metrics or pass simulated output off as real.** Decision-log confidence, latency and token counts are measured or left empty (`None`); don't add hard-coded or default values. Mock, demo or template output shown in the UI is labelled as such.
 
 **Stop and ask** before touching: anything that sends, money, auth or access, deleting guest data, the schema of tables holding real data, or a product choice not covered in `docs/product/`.
 
