@@ -26,7 +26,7 @@ VenueFlow was built as an XPRIZE submission: a SaaS for many couples and planner
 ## Two lanes
 
 - **Engineering** (default): builds, fixes, verifies. Doesn't make product calls. When a task needs a scope, UX, data or vendor choice that `docs/product/` doesn't settle, hand it to the product lane or ask the owner. Don't decide silently in code, and don't edit `docs/product/` yourself.
-- **Product**: writes only `docs/product/**`, `docs/backlog.md` and GitHub issues. Never edits code. Works through the `product-call` skill.
+- **Product**: writes only `docs/product/**` and `docs/backlog.md`. Never edits code. Works through the `product-call` skill.
 
 ## Hard rules
 
@@ -49,7 +49,7 @@ These exist because the data and people are real. They override convenience and 
 ## Working discipline
 
 - **Start with `git pull`** (whichever agent does the git work; parallel helpers don't run git). GitHub is the source of truth. The owner may also edit through AI Studio, which can't pick up changes made elsewhere into an open project; when you change code, tell the owner to re-import it there.
-- **Persist or it didn't happen.** Decisions, findings and open questions go into files (`docs/product/`, `docs/backlog.md`, `docs/worklog.md`) or issues. Console output is lost.
+- **Persist or it didn't happen.** Decisions, findings and open questions go into files (`docs/product/`, `docs/backlog.md`, `docs/worklog.md`) or a PR description. This repo doesn't use GitHub issues; the backlog is the queue. Console output is lost.
 - **Done means verified.** The `verify` skill passes, docs are synced (`finish-work` skill), and your report matches the diff (`git show --stat`). Never claim what the diff doesn't show.
 - **Tag uncertainty**: `[ASSUMPTION]` for anything inferred, `[GAP]` for a missing fact, `[BLOCKED]` for something you couldn't do. Don't paper over rough edges.
 - **Git**: one branch per change, never push directly to `main`, open a PR, stage files by name. Use Conventional Commits (`feat(scope): subject`, imperative, ≤72 chars, body explains why) with a `Co-Authored-By:` trailer naming the agent.
