@@ -9,4 +9,5 @@ The shared instructions above apply in full. This section only adds what is part
 - **Independent review before "done".** For any change beyond a typo, run the `reviewer` subagent on the diff before reporting completion, and fix or report its blocking findings. It applies the `review` skill with a fresh context, so you don't grade your own work.
 - **Product questions go to the `product-lead` subagent** (or the `product-call` skill when you're already in the product lane). Engineering sessions don't edit `docs/product/`.
 - **Parallel subagents do no git.** The main session is the only git operator. Subagents return findings or edit the files they're assigned; you stage, commit and branch.
+- **The Bash guard.** `.claude/hooks/guard-bash.py` blocks force-pushes, pushes to `main`, `--no-verify` and `.env` access. If it blocks something the owner really wants, ask them to run it themselves with `!`.
 - **Memory**: save the user's preferences and feedback to Claude's memory. Project facts belong in the repo (`docs/product/wedding.md`, decisions, backlog), where every agent, including the AI Studio one, can read them.
