@@ -3,6 +3,7 @@ import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { cn } from "../../design-system/cn";
 import { Icon } from "../../shared/Icon";
+import { SampleDataNotice } from "../../shared/SampleDataNotice";
 
 const DRAG_TYPE = "GUEST";
 
@@ -318,6 +319,9 @@ function SeatingPlanInner() {
           <p className="font-body-md text-body-md text-on-surface-variant">
             Grand Ballroom • {totalSeated} of {Object.keys(GUESTS).length} guests seated
           </p>
+          <SampleDataNotice className="mt-4">
+            These tables, guests, room and assistant suggestions are made-up examples, not your seating plan. Changes on this screen are not saved.
+          </SampleDataNotice>
         </div>
         <div className="flex gap-3">
           <button

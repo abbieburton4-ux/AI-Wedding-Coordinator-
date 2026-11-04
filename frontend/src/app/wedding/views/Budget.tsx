@@ -1,4 +1,5 @@
 import { Icon } from "../../shared/Icon";
+import { SampleDataNotice } from "../../shared/SampleDataNotice";
 import { useWedding, USE_FASTAPI_BACKEND } from "../../api";
 import { useActiveWedding } from "../WeddingProvider";
 
@@ -76,6 +77,11 @@ export function Budget() {
           Budget Health
         </h1>
         <p className="text-on-surface-variant">Stay on track with your wedding finances.</p>
+        {!loading && !useLiveData && (
+          <SampleDataNotice className="mt-4">
+            These categories, amounts and tips are made-up examples, not your budget.
+          </SampleDataNotice>
+        )}
       </div>
 
       {/* Loading skeleton for the donut chart area */}
