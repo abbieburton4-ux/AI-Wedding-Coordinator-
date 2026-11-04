@@ -13,13 +13,15 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 1. **B28** — label every sample figure on the couple's screens as sample. `ready`
 2. **B26** — stop seeding demo couples and weddings outside dev mode. `ready`
 3. **B22** — PD-002 step 2: access settings screen, owner-only access changes, email confirmation for password sign-in. `ready` (PD-002 ratified)
-4. **B23** — in depth budgeting. `needs-owner: PD-004 calls (a) scope A, B or C, and (b) AI-suggested starting split`
+4. **B23** — in depth budgeting. `ready` for the scope ratified in PD-004 (option C). `needs-owner: PD-004 call (b), AI-suggested starting split` blocks only that part
 5. **B14** — where the app and its data live, and what that costs. `needs-owner: approve the hosting recommendation (the product lane writes the PD next, with costs)`
 6. **B24** — planning checklist. `needs-owner: checklist scope PD (unfixed date; which Jewish traditions), to be proposed`
 7. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
 8. **B8** — record missing token counts as empty, not 0. `ready`
 9. **B17** — stop tracking the test database files. `ready`
-10. **B6** — delete `planner-targets.xlsx` (other people's contacts). `needs-owner: delete it?`
+10. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
+11. **B30** — the budget ring always shows 65% spent. `ready` (could fold into B23)
+12. **B6** — delete `planner-targets.xlsx` (other people's contacts). `needs-owner: delete it?`
 
 ## Open
 
@@ -50,6 +52,8 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
   - *Depends on:* PD-002 (ratified). The email-confirmation step approved by the owner, 2026-11-04, since it's an email to a family member (raised at the 2026-11-04 checkpoint).
 - **B19 — Guest planning (must-have 3), but the guest list and seating plan show unlabelled sample data.** `frontend/src/app/wedding/views/Guests.tsx:9` (`GUESTS`, made-up names with dietary tags) and `SeatingPlan.tsx:13` (`GUESTS`, `INITIAL_TABLES`) are hard-coded and never call the API, on the couple's own workspace (rule 10). The backend has a `Guest` table (`backend/app/db/models.py:322`: name, email, phone, RSVP status, `dietary`, plus-one, table number), but no guest endpoint exists in `api/v1/endpoints/`. *Why it matters:* the couple listed "guest planning (list, food, seating)" as must-have 3, for 225 invited guests. Today nothing they enter would be saved. The "food" part includes dietary needs, which are health data (AGENTS.md rule 3). They must never appear in git, fixtures, issues, logs or `AgentDecisionLog` payloads. In the app, family (view only) can see them: "family can see dietary notes" (owner, 2026-11-04, `wedding.md`). *Fix:* label the sample data as sample now, as a quick and separate step. Then a proposed PD on guest-planning scope (what "food" covers, what seating needs), then backend guest endpoints and wiring. How it's built is not yet decided. *Depends on:* B10/B22 before real guest data goes in, and that PD.
 - **B28 — Sample data on the couple's screens looks real.** The guest list (`Guests.tsx`, `GUESTS`), seating plan (`SeatingPlan.tsx`, `GUESTS`, `INITIAL_TABLES`), budget fallback (`Budget.tsx`, `STATIC_CATEGORIES` and the "$24,500 of $35,000" totals) and checklist fallback (`Timeline.tsx`, `STATIC_ITEMS`) show made-up content with no label (rule 10). *Why it matters:* the couple and family could mistake made-up guests or dollar totals for their own. *Fix:* a clear, visible "Sample data, not your wedding" label on each of these screens wherever sample content shows. No new features and no data changes. This is the quick first step split out of B19, B23 and B24. *Depends on:* nothing (rule 10).
+- **B29 — Sample content flashes before real data loads.** Found while building B28 (PR #12). When a wedding has real budget lines or checklist items, `Budget.tsx` and `Timeline.tsx` show the static fallback, now labelled as sample, until the API answers. *Fix:* show a loading state instead of sample content while the data is loading. *Depends on:* nothing.
+- **B30 — The budget ring is hard-coded.** Found while building B28 (PR #12). The ring on `Budget.tsx` always shows 65% spent, whatever the totals are (rule 10). *Fix:* compute it from the real totals, or hide it when there's no data. It may be simplest to fold this into B23. *Depends on:* nothing.
 - **B20 — The catalogue and its docstring overstate what's verified.** In `backend/app/db/seed_data_real.py`, 10 of 26 suppliers are unchecked (`_verify: True`) and 3 are `_template` placeholders with made-up names (lines 340–361). The docstring (lines 26–28) promises that inquiries route through `agents.resolve_inquiry_recipient` to an owner-controlled inbox, but no such function exists. *Fix:* check or remove the unchecked rows (`add-vendors` skill), keep templates out of recommendations, and correct the docstring.
 
 ### Making it fit this wedding

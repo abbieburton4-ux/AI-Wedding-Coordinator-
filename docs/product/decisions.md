@@ -109,7 +109,7 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 
 ## PD-004 — What "in depth budgeting" covers (must-have 1)
 
-**Date:** 2026-11-04 · **Status:** proposed
+**Date:** 2026-11-04 · **Status:** ratified (by the owner, one of the couple, 2026-11-04: "option c"). Call (b) is still open
 **Context:** Backlog B23. Budgeting is the couple's first must-have (`wedding.md`). Today the planner creates budget categories with a planned and a spent amount, but nobody can add, edit or record anything (the only budget endpoint is read-only). Live amounts show in euros, though the couple want US dollars (B11). With no live lines, the screen shows made-up dollar figures that look real (B28). The total budget is still [GAP] ("still being determined", owner, 2026-11-04). Family (view only) can see the budget.
 **Options:**
 - **A: Planned vs actual, plus vendor payments.** The couple add, rename and remove categories, and set a planned amount for each. Under each category they record vendor costs: the quoted price, the deposit, and the remaining payments with due dates. Each payment is ticked as paid by a person; the app never marks anything paid (hard rule 4). The screen shows totals, what's left, and the next payments due. The total budget can stay blank until the couple set it.
@@ -123,8 +123,10 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
   - *Build:* medium-plus.
 **Recommendation:** A. It covers what usually goes wrong with wedding money (missed deposit dates and creeping totals) without asking the couple to put family contributions on a screen family can see. C can be added later.
 **Technical choices settled by the team:** amounts in US dollars, stored as whole cents (rule 4). A Google Sheets export is a later step, in a separate PD on Google integrations.
-**Decision:** awaiting couple.
+**Decision:** C. Planned vs actual per category, vendor prices, deposits and payment due dates, plus a record of who is contributing to what. Family (view only) can see contributions, as with the rest of the budget. The couple tick payments as paid; the app never does (rule 4). Until call (b) is answered, the AI doesn't suggest a starting split.
 **Couple's calls:**
-- (a) A, B or C? *Recommended: A.*
+- (a) A, B or C? *Recommended: A.* **Answer: "option c".**
 - (b) Should the AI suggest a starting split across categories once you set a total? It would be labelled as a suggestion, and you'd edit it. *Recommended: yes.*
-**Rejected because:** (to be filled in once the couple decide)
+**Rejected because:**
+- A leaves out who is contributing, which the couple want.
+- B has no payments or due dates, so deposits would be tracked somewhere else.
