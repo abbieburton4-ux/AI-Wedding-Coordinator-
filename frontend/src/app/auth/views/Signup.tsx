@@ -11,7 +11,7 @@ function newDevCoupleUid() {
 }
 
 export function Signup() {
-  const { user, signUpEmail, signInGoogle, devSignIn, firebaseEnabled } = useAuth();
+  const { user, signUpEmail, signInGoogle, devSignIn, firebaseEnabled, accessMessage } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
@@ -51,6 +51,7 @@ export function Signup() {
         </>
       }
     >
+      {accessMessage && <p className="mb-4 text-sm text-destructive">{accessMessage}</p>}
       {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
       {firebaseEnabled ? (

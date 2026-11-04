@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { cn } from "../../design-system/cn";
-import { Icon } from "../../planner/Icon";
+import { Icon } from "../../shared/Icon";
 
 type Status = "Attending" | "Pending" | "Declined";
 type Guest = { id: string; name: string; status: Status; table?: string; head?: boolean; dietary: string[] };

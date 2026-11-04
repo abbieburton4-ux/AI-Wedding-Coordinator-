@@ -10,7 +10,6 @@
 #   scripts/stack.sh down      # stop (keep data)
 #   scripts/stack.sh reset     # wipe the database and start fresh
 #   scripts/stack.sh logs api  # tail logs for a service
-#   scripts/stack.sh tokens    # print pilot planner bearer tokens
 #   scripts/stack.sh verify    # quick health check
 #
 set -euo pipefail
@@ -76,9 +75,8 @@ print_summary() {
   echo "  Log in (no Firebase needed locally) — open the app, then /signup or /login:"
   echo "    • New couple   → 'Create a new couple account'  (→ intake → AI builds the plan)"
   echo "    • Couple demo  → 'Continue as a couple (Priya & David)'"
-  echo "    • Planner      → 'Continue as a planner (Mary-Aoife)'  (manages 1 client)"
   echo
-  echo "  Pilot bearer tokens are printed above. More: scripts/stack.sh {logs|tokens|verify|reset}"
+  echo "  More: scripts/stack.sh {logs|verify|reset}"
   echo
 }
 
@@ -88,15 +86,12 @@ cmd_up() {
   c_blue "Building + starting services (db, tasks-emulator, api, worker, frontend)…"
   dc up -d --build
   wait_for_api
-  c_blue "Seeding pilot data (3 planners, venue/supplier catalog, demo weddings)…"
-  dc exec -T api python -m app.db.seed_pilot || c_yellow "Seed step reported an issue (harmless if already seeded)."
+  c_blue "The api seeds the vendor catalogue and demo weddings on startup."
   print_summary
 }
 
 cmd_down()  { require_docker; c_blue "Stopping services (database volume kept)…"; dc down; }
 cmd_reset() { require_docker; c_yellow "Removing containers AND volumes (this wipes the database)…"; dc down -v; cmd_up; }
-cmd_seed()  { require_docker; dc exec -T api python -m app.db.seed_pilot; }
-cmd_tokens(){ require_docker; dc exec -T api python -m app.db.seed_pilot | sed -n '/PILOT PLANNER/,/Authorization header/p'; }
 
 cmd_logs() {
   require_docker
@@ -123,8 +118,6 @@ Usage: scripts/stack.sh <command>
   down         Stop services (keeps the database volume)
   reset        Wipe volumes (fresh database) and start clean
   logs [svc]   Tail logs; optional service: api | worker | frontend | db | tasks-emulator
-  seed         Re-run the pilot seed (planners + catalog + demo weddings)
-  tokens       Print the pilot planner bearer tokens
   verify       Quick health / connectivity check
   help         Show this help
 
@@ -137,8 +130,6 @@ case "${1:-up}" in
   down)             cmd_down ;;
   reset)            cmd_reset ;;
   logs)             shift || true; cmd_logs "${1:-}" ;;
-  seed)             cmd_seed ;;
-  tokens)           cmd_tokens ;;
   verify)           cmd_verify ;;
   help|-h|--help)   usage ;;
   *)                c_red "Unknown command: $1"; echo; usage; exit 1 ;;

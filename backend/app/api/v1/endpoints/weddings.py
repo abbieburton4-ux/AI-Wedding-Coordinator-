@@ -12,18 +12,18 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.db.session import get_db
-from app.db.models import User, Wedding, BudgetLine, TimelineItem, AgentDecisionLog, Booking, Venue, Supplier, Quote
+from app.db.models import (
+    User, Wedding, WeddingMember, BudgetLine, TimelineItem, AgentDecisionLog, Booking, Venue,
+    Supplier, Quote,
+)
+from app.api.v1.access import (
+    bootstrap_emails, normalise_email, require_wedding_access, weddings_for_member,
+)
 from app.api.v1.endpoints.auth import get_current_user
 from app.utils.tasks import enqueue_agent_task
 from app.agents.concierge import run_concierge
 
 router = APIRouter()
-
-# Preview gating: before payment (status 'preview') the budget + timeline endpoints
-# return only a teaser slice. The full data is generated and stored, but withheld at
-# the API until paid — so a blurred UI can't be bypassed via DevTools/network.
-PREVIEW_BUDGET_LINES = 3
-PREVIEW_TIMELINE_ITEMS = 2
 
 # Schema for creating a wedding profile
 class WeddingCreate(BaseModel):
@@ -46,12 +46,32 @@ async def create_wedding(
 ):
     """Submits a couple's wedding profile (Intake Form).
 
-    Runs the intake_planner immediately as a FREE preview (1 cheap call → budget +
-    timeline), landing the wedding in 'preview' so the couple sees real value before
-    paying. The expensive venue/supplier cascade is gated: it runs inline here only
-    when payment isn't required (``REQUIRE_PAYMENT=False``, dev/tests); otherwise
-    checkout triggers it via the plan-cascade task.
+    Runs the intake_planner to build the budget and timeline. Venue and supplier
+    matching doesn't run automatically: the catalogue doesn't cover this wedding's
+    area yet (B11), so it runs only when the couple ask for it (PD-003).
+
+    This app plans one wedding (PD-001), so only the couple's own sign-in emails
+    (ACCESS_BOOTSTRAP_EMAILS) may create it, and nobody can create a second one.
+    Everyone on that list becomes an owner (PD-002: both partners manage access).
     """
+    creator_email = normalise_email(current_user.email)
+    couple_emails = bootstrap_emails()
+    if not settings.DEVELOPMENT_MODE and creator_email not in couple_emails:
+        raise HTTPException(status_code=403, detail="Only the couple can set up the wedding.")
+    existing = await db.exec(
+        select(WeddingMember.id).where(WeddingMember.user_id == current_user.id)
+    )
+    if existing.first() is not None:
+        raise HTTPException(status_code=409, detail="You already have access to a wedding.")
+    if couple_emails:
+        # The couple's wedding already exists if any of their emails is on a list,
+        # even after one partner was removed from it.
+        theirs = await db.exec(
+            select(WeddingMember.id).where(WeddingMember.email.in_(sorted(couple_emails)))
+        )
+        if theirs.first() is not None:
+            raise HTTPException(status_code=409, detail="Your wedding has already been set up.")
+
     wedding = Wedding(
         couple_user_id=current_user.id,
         guest_count_estimate=payload.guest_count_estimate,
@@ -66,6 +86,14 @@ async def create_wedding(
     )
     
     db.add(wedding)
+    await db.flush()
+    # The creator and the other partner own the wedding on its access list (PD-002).
+    db.add(WeddingMember(
+        wedding_id=wedding.id, email=creator_email, level="owner", user_id=current_user.id,
+    ))
+    for email in sorted(couple_emails - {creator_email}):
+        # Linked to an account at that partner's next verified sign-in.
+        db.add(WeddingMember(wedding_id=wedding.id, email=email, level="owner"))
 
     # Capture the couple's names on their profile so the planner agent and the
     # draft vendor emails address them by name (dev signup leaves a placeholder).
@@ -76,12 +104,11 @@ async def create_wedding(
     await db.commit()
     await db.refresh(wedding)
 
-    # Run the free preview now (budget + timeline). Include the paid matcher cascade
-    # inline only when payment isn't required; otherwise checkout runs it later.
+    # Build the budget and timeline now. Matching waits until the couple ask (PD-003).
     try:
         await enqueue_agent_task(
             "intake-planner",
-            {"wedding_id": wedding.id, "with_cascade": not settings.REQUIRE_PAYMENT},
+            {"wedding_id": wedding.id},
         )
     except Exception as e:
         # Log error but don't fail the request since DB record is committed
@@ -111,12 +138,7 @@ async def update_wedding(
     guardrail warning). Resets status to 'intake' so the caller can re-run the
     planner against the corrected profile via POST /weddings/{id}/replan.
     """
-    result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
-    wedding = result.first()
-    if not wedding:
-        raise HTTPException(status_code=404, detail="Wedding not found")
-    if wedding.couple_user_id != current_user.id and wedding.planner_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to edit this wedding")
+    wedding = await require_wedding_access(db, wedding_id, current_user, "editor")
 
     updates = payload.model_dump(exclude_unset=True)
     for field, value in updates.items():
@@ -142,12 +164,7 @@ async def replan_wedding(
     Used to recover from a failed or guardrail-blocked intake. `force=true`
     acknowledges the budget guardrail and builds the plan anyway.
     """
-    result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
-    wedding = result.first()
-    if not wedding:
-        raise HTTPException(status_code=404, detail="Wedding not found")
-    if wedding.couple_user_id != current_user.id and wedding.planner_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to replan this wedding")
+    wedding = await require_wedding_access(db, wedding_id, current_user, "editor")
 
     # Reset to intake so the dashboard shows the "building" state while it reruns.
     wedding.status = "intake"
@@ -169,15 +186,9 @@ async def list_weddings(
 ):
     """Lists weddings for the authenticated user.
     
-    * Planners see all weddings they manage (`planner_user_id == current_user.id`).
-    * Couples see weddings they own (`couple_user_id == current_user.id`).
+    Weddings the user is on the access list for (PD-002).
     """
-    if current_user.role == "planner":
-        result = await db.exec(select(Wedding).where(Wedding.planner_user_id == current_user.id))
-    else:
-        result = await db.exec(select(Wedding).where(Wedding.couple_user_id == current_user.id))
-        
-    return result.all()
+    return await weddings_for_member(db, current_user)
 
 
 @router.get("/{wedding_id}", response_model=Wedding)
@@ -187,16 +198,7 @@ async def get_wedding(
     db: AsyncSession = Depends(get_db)
 ):
     """Gets details for a specific wedding, verifying user access."""
-    result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
-    wedding = result.first()
-    if not wedding:
-        raise HTTPException(status_code=404, detail="Wedding not found")
-        
-    # Access control
-    if wedding.couple_user_id != current_user.id and wedding.planner_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to access this wedding")
-        
-    return wedding
+    return await require_wedding_access(db, wedding_id, current_user, "viewer")
 
 
 @router.get("/{wedding_id}/budget", response_model=List[BudgetLine])
@@ -206,22 +208,12 @@ async def get_wedding_budget(
     db: AsyncSession = Depends(get_db)
 ):
     """Fetches the budget allocations for a wedding."""
-    result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
-    wedding = result.first()
-    if not wedding:
-        raise HTTPException(status_code=404, detail="Wedding not found")
-        
-    if wedding.couple_user_id != current_user.id and wedding.planner_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to access this wedding")
+    wedding = await require_wedding_access(db, wedding_id, current_user, "viewer")
         
     budget_result = await db.exec(
         select(BudgetLine).where(BudgetLine.wedding_id == wedding_id).order_by(BudgetLine.allocated_amount.desc())
     )
-    rows = budget_result.all()
-    # Teaser slice until paid (top allocations only).
-    if wedding.status == "preview":
-        return rows[:PREVIEW_BUDGET_LINES]
-    return rows
+    return budget_result.all()
 
 
 @router.get("/{wedding_id}/timeline", response_model=List[TimelineItem])
@@ -231,22 +223,12 @@ async def get_wedding_timeline(
     db: AsyncSession = Depends(get_db)
 ):
     """Fetches the timeline milestones for a wedding."""
-    result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
-    wedding = result.first()
-    if not wedding:
-        raise HTTPException(status_code=404, detail="Wedding not found")
-        
-    if wedding.couple_user_id != current_user.id and wedding.planner_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to access this wedding")
+    wedding = await require_wedding_access(db, wedding_id, current_user, "viewer")
         
     timeline_result = await db.exec(
         select(TimelineItem).where(TimelineItem.wedding_id == wedding_id).order_by(TimelineItem.due_at.asc())
     )
-    rows = timeline_result.all()
-    # Teaser slice until paid (earliest milestones only).
-    if wedding.status == "preview":
-        return rows[:PREVIEW_TIMELINE_ITEMS]
-    return rows
+    return timeline_result.all()
 
 
 class BookingDetail(BaseModel):
@@ -284,13 +266,7 @@ async def get_wedding_bookings(
     matcher's AgentDecisionLog output. We join them back here so the UI can show
     *why* each vendor was picked and the ready-to-send email, instead of a bare id.
     """
-    result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
-    wedding = result.first()
-    if not wedding:
-        raise HTTPException(status_code=404, detail="Wedding not found")
-
-    if wedding.couple_user_id != current_user.id and wedding.planner_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to access this wedding")
+    wedding = await require_wedding_access(db, wedding_id, current_user, "viewer")
 
     bookings_result = await db.exec(
         select(Booking).where(Booking.wedding_id == wedding_id).order_by(Booking.created_at.asc())
@@ -401,13 +377,7 @@ async def get_wedding_agent_decisions(
     db: AsyncSession = Depends(get_db)
 ):
     """Fetches the XPRIZE-critical Agent Decision Logs for a wedding with traceable history."""
-    result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
-    wedding = result.first()
-    if not wedding:
-        raise HTTPException(status_code=404, detail="Wedding not found")
-        
-    if wedding.couple_user_id != current_user.id and wedding.planner_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to access this wedding")
+    wedding = await require_wedding_access(db, wedding_id, current_user, "viewer")
         
     logs_result = await db.exec(
         select(AgentDecisionLog).where(AgentDecisionLog.wedding_id == wedding_id).order_by(AgentDecisionLog.timestamp.desc())
@@ -422,13 +392,7 @@ async def trigger_venue_matching(
     db: AsyncSession = Depends(get_db)
 ):
     """Triggers the venue matching agent in the background."""
-    result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
-    wedding = result.first()
-    if not wedding:
-        raise HTTPException(status_code=404, detail="Wedding not found")
-        
-    if wedding.couple_user_id != current_user.id and wedding.planner_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to match venues for this wedding")
+    wedding = await require_wedding_access(db, wedding_id, current_user, "editor")
         
     enqueued = await enqueue_agent_task("venue-matcher", {"wedding_id": wedding_id})
     if not enqueued:
@@ -449,13 +413,7 @@ async def trigger_supplier_matching(
     db: AsyncSession = Depends(get_db)
 ):
     """Triggers the supplier matching agent in the background for a specific category."""
-    result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
-    wedding = result.first()
-    if not wedding:
-        raise HTTPException(status_code=404, detail="Wedding not found")
-        
-    if wedding.couple_user_id != current_user.id and wedding.planner_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to match suppliers for this wedding")
+    wedding = await require_wedding_access(db, wedding_id, current_user, "editor")
         
     enqueued = await enqueue_agent_task("supplier-matcher", {"wedding_id": wedding_id, "category": payload.category})
     if not enqueued:
@@ -478,12 +436,7 @@ async def ask_concierge(
     """Answers a couple's question via the concierge agent, grounded in their real
     budget, timeline, and vendors. Runs synchronously (chat needs an immediate reply)
     and logs an AgentDecisionLog row per question."""
-    result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
-    wedding = result.first()
-    if not wedding:
-        raise HTTPException(status_code=404, detail="Wedding not found")
-    if wedding.couple_user_id != current_user.id and wedding.planner_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to access this wedding")
+    wedding = await require_wedding_access(db, wedding_id, current_user, "editor")
 
     message = (payload.message or "").strip()
     if not message:
@@ -514,13 +467,7 @@ async def export_redacted_decision_logs(
     db: AsyncSession = Depends(get_db)
 ):
     """Produces a PII-redacted CSV export of all decision logs for a wedding."""
-    result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
-    wedding = result.first()
-    if not wedding:
-        raise HTTPException(status_code=404, detail="Wedding not found")
-        
-    if wedding.couple_user_id != current_user.id and wedding.planner_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to export logs for this wedding")
+    wedding = await require_wedding_access(db, wedding_id, current_user, "viewer")
         
     logs_result = await db.exec(
         select(AgentDecisionLog).where(AgentDecisionLog.wedding_id == wedding_id).order_by(AgentDecisionLog.timestamp.asc())

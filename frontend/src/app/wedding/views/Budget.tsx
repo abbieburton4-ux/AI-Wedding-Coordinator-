@@ -1,4 +1,4 @@
-import { Icon } from "../../planner/Icon";
+import { Icon } from "../../shared/Icon";
 import { useWedding, USE_FASTAPI_BACKEND } from "../../api";
 import { useActiveWedding } from "../WeddingProvider";
 

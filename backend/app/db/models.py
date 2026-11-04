@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy import Column, JSON, Text, Date, Time, CheckConstraint
+from sqlalchemy import Column, JSON, Text, Date, Time, CheckConstraint, UniqueConstraint
 from typing import Optional, List, Dict, Any
 import datetime
 import uuid
@@ -16,7 +16,7 @@ class User(SQLModel, table=True):
     __tablename__ = "users"
     
     id: str = Field(primary_key=True, description="Firebase authentication UID")
-    role: str = Field(description="Role: couple, planner, admin")
+    role: str = Field(description="Always couple since PD-003 (planner/admin removed)")
     name: str
     email: str = Field(index=True)
     phone: Optional[str] = None
@@ -371,3 +371,28 @@ class AgentDecisionLog(SQLModel, table=True):
     parent_decision: Optional["AgentDecisionLog"] = Relationship(
         sa_relationship_kwargs={"remote_side": "AgentDecisionLog.id"}
     )
+
+
+ACCESS_LEVELS = ("viewer", "editor", "owner")  # lowest to highest
+
+
+class WeddingMember(SQLModel, table=True):
+    """Who may open a wedding, and at what level (PD-002).
+
+    Rows are keyed by email so the owner can add someone before they first sign in;
+    ``user_id`` is filled in when that person signs in with a verified email.
+    """
+    __tablename__ = "wedding_members"
+    __table_args__ = (
+        UniqueConstraint("wedding_id", "email", name="uq_wedding_member_email"),
+        CheckConstraint("level IN ('viewer', 'editor', 'owner')", name="ck_wedding_member_level"),
+    )
+
+    id: str = Field(default_factory=generate_uuid_str, primary_key=True)
+    wedding_id: str = Field(foreign_key="weddings.id", index=True, ondelete="CASCADE")
+    email: str = Field(index=True, description="Stored trimmed and lower-case")
+    level: str = Field(description="viewer, editor or owner")
+    user_id: Optional[str] = Field(
+        default=None, foreign_key="users.id", index=True, ondelete="SET NULL"
+    )
+    created_at: datetime.datetime = Field(default_factory=utcnow)

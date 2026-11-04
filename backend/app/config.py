@@ -8,8 +8,17 @@ class Settings(BaseSettings):
     
     # API Keys & Auth
     GEMINI_API_KEY: Optional[str] = None
-    JWT_SECRET: Optional[str] = "dev-jwt-secret-key-change-me-in-production"
-    FIREBASE_PROJECT_ID: str = "venueflow-dev"
+    # Only set this if something mints HS256 tokens (the legacy pilot script). No default:
+    # a committed default would let anyone sign tokens (PD-002).
+    JWT_SECRET: Optional[str] = None
+    # The couple's own Firebase project. No default: an unset value refuses Firebase
+    # sign-in instead of trusting someone else's project (PD-002).
+    FIREBASE_PROJECT_ID: Optional[str] = None
+
+    # Shared secrets for routes only our services or providers call. Unset means those
+    # routes refuse every call outside DEVELOPMENT_MODE. Set them in the environment.
+    INTERNAL_TASKS_SECRET: Optional[str] = None   # dispatcher -> /tasks worker routes
+    INBOUND_EMAIL_SECRET: Optional[str] = None    # ?token= on the inbound-email webhook
 
     # ElevenLabs Conversational AI (the "Aurelia" voice agent). The key is a
     # server-side secret and must never reach the browser; the frontend instead
@@ -17,9 +26,14 @@ class Settings(BaseSettings):
     ELEVENLABS_API_KEY: Optional[str] = None
     ELEVENLABS_AGENT_ID: str = "agent_3801ktczgph3ep3bpr0rp9jgvzqc"
     
-    # Dev settings
-    DEVELOPMENT_MODE: bool = True
-    ALLOW_MOCK_AUTH: bool = True
+    # Dev settings. Off by default so a deployment that forgets them is locked down;
+    # backend/.env.example and docker-compose turn them on for local work.
+    DEVELOPMENT_MODE: bool = False
+    ALLOW_MOCK_AUTH: bool = False
+
+    # Comma-separated emails that may create an account before any access list
+    # exists (first sign-in of the couple). Set in the environment, never in git.
+    ACCESS_BOOTSTRAP_EMAILS: str = ""
     
     # Base URL the task dispatcher posts agent jobs to. Defaults to the Docker
     # Compose service name; for a non-Docker local run set this to the single
@@ -32,26 +46,6 @@ class Settings(BaseSettings):
     PROJECT_ID: str = "venueflow-dev"
     LOCATION: str = "europe-west1"
     QUEUE_ID: str = "agent-tasks"
-
-    # Payments
-    # PAYMENTS_PROVIDER selects how /payments/checkout behaves:
-    #   "mock"   -> no real charge; records a mock Payment + starts planning instantly (demo/pitch path)
-    #   "stripe" -> creates a real Stripe Checkout Session (test or live keys)
-    # Flipping demo -> real payments is a single env change (set this to "stripe"
-    # + STRIPE_SECRET_KEY); no code change required.
-    PAYMENTS_PROVIDER: str = "mock"
-    # When True, AI planning is gated behind a completed payment: a new wedding
-    # stays in 'intake' until checkout succeeds (which is what enqueues the planner).
-    # Set False for payment-free demos and the verification scripts.
-    REQUIRE_PAYMENT: bool = True
-    # One-time coordinator fee shown at the couple-facing checkout (EUR).
-    COUPLE_PRICE_EUR: float = 299.0
-    STRIPE_SECRET_KEY: Optional[str] = None
-    STRIPE_PUBLISHABLE_KEY: Optional[str] = None
-    # Optional pre-created Stripe Price id; if unset, an inline price_data is used.
-    STRIPE_PRICE_ID: Optional[str] = None
-    # Where Stripe redirects back to after hosted checkout.
-    FRONTEND_BASE_URL: str = "http://localhost:5173"
 
     class Config:
         env_file = ".env"

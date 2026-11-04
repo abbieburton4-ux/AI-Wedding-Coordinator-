@@ -5,7 +5,7 @@ import { AuthShell, authInputClass } from "../AuthShell";
 import { Button } from "../../design-system/primitives";
 
 export function Login() {
-  const { user, signInEmail, signInGoogle, devSignIn, firebaseEnabled } = useAuth();
+  const { user, signInEmail, signInGoogle, devSignIn, firebaseEnabled, accessMessage } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
@@ -48,6 +48,7 @@ export function Login() {
         </>
       }
     >
+      {accessMessage && <p className="mb-4 text-sm text-destructive">{accessMessage}</p>}
       {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
       {firebaseEnabled ? (
@@ -72,10 +73,6 @@ export function Login() {
           <Button type="button" variant="solid" disabled={busy} className="w-full"
             onClick={() => run(() => devSignIn("couple_2"))}>
             Continue as a couple
-          </Button>
-          <Button type="button" variant="outline" disabled={busy} className="w-full"
-            onClick={() => run(() => devSignIn("planner_1"))}>
-            Continue as a planner
           </Button>
         </div>
       )}

@@ -14,6 +14,15 @@ erDiagram
     datetime created_at
   }
 
+  WEDDING_MEMBER {
+    string id PK
+    string wedding_id FK
+    string email
+    string level
+    string user_id FK
+    datetime created_at
+  }
+
   WEDDING {
     string id PK
     string couple_user_id FK
@@ -214,6 +223,8 @@ erDiagram
 
   USER ||--o{ WEDDING : "owns (couple)"
   USER ||--o{ WEDDING : "manages (planner)"
+  WEDDING ||--o{ WEDDING_MEMBER : "access list"
+  USER |o--o{ WEDDING_MEMBER : "signs in as"
   USER ||--o{ SUBSCRIPTION : pays
   USER ||--o{ PAYMENT : pays
   VENUE ||--o{ WEDDING : hosts
@@ -238,13 +249,14 @@ erDiagram
 
 ### Identity & billing
 
-- **User** — `role` ∈ `{couple, planner, admin}`. The old `venue_admin` role is removed: VenueFlow is not sold to venues.
-- **Subscription** — recurring billing for planners (€199–€499/mo plans). One active subscription per planner user.
-- **Payment** — one-time charges VenueFlow collects via Stripe. `payment_type` ∈ `{coordinator_fee, planner_setup, other}`. Coordinator fees (couples, €299–€999) are the primary one-time revenue stream.
+- **WeddingMember** — the access list (PD-002). One row per wedding and email (unique together); `level` ∈ `{viewer, editor, owner}`. `user_id` is filled in when that person first signs in with a verified email. The wedding's creator is added as owner. Migration `0002` also backfills each existing `couple_user_id` as owner.
+- **User** — `role` is `couple` for everyone since PD-003 (the planner and admin roles were removed; older rows may still hold them, and the API ignores role for access). The old `venue_admin` role is removed: VenueFlow is not sold to venues.
+- **Subscription** — *unused since PD-003, table kept empty.* Recurring billing for planners (€199–€499/mo plans). One active subscription per planner user.
+- **Payment** — *unused since PD-003, table kept empty.* One-time charges VenueFlow collected via Stripe. `payment_type` ∈ `{coordinator_fee, planner_setup, other}`. Coordinator fees (couples, €299–€999) are the primary one-time revenue stream.
 
 ### Core wedding object
 
-- **Wedding** — the central object. `couple_user_id` required; `planner_user_id` optional (set when a planner manages it). `venue_id` is a denormalized convenience FK to the chosen venue — it mirrors the Booking with `venue_id IS NOT NULL AND status='booked'`. `status` ∈ `{intake, planning, booked, completed, cancelled}` (intake = pre-payment, planning = post-coordinator-fee, booked = venue locked). `wedding_date` is nullable; if not set, planning uses the date range defined by `wedding_date_start` and `wedding_date_end`. `region` specifies the target wedding location. `ceremony_type` determines the cultural budgeting and timeline template.
+- **Wedding** — the central object. `couple_user_id` required; `planner_user_id` optional (set when a planner manages it). `venue_id` is a denormalized convenience FK to the chosen venue — it mirrors the Booking with `venue_id IS NOT NULL AND status='booked'`. `status` ∈ `{intake, planning, booked, completed, cancelled}` (intake = being planned by the agent, planning = budget and timeline ready, booked = venue locked; PD-003 removed the payment stage). `wedding_date` is nullable; if not set, planning uses the date range defined by `wedding_date_start` and `wedding_date_end`. `region` specifies the target wedding location. `ceremony_type` determines the cultural budgeting and timeline template.
 - **BudgetLine** — one row per category per wedding (`venue, catering, florals, photography, videography, music, dj, officiant, stationery, hair_makeup, transport, cake, other`). `spent_amount` is recomputed from accepted Quotes + SupplierPayments.
 - **TimelineItem** — `kind` ∈ `{planning, day_of}`. Planning items have a future `due_at`; day-of items use the wedding date + time-of-day. One table to keep the agent's "draft + update timeline" decisions uniform.
 - **Guest** — RSVP + seating. `table_number` is set by the agent's seating-assign decision and can be overridden by the couple/planner.

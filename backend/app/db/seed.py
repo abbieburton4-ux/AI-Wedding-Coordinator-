@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, date
 from sqlmodel import Session, select
 from app.db.session import sync_engine
-from app.db.models import User, Wedding, Venue, Supplier, BudgetLine, Booking
+from app.db.models import User, Wedding, WeddingMember, Venue, Supplier, BudgetLine, Booking
 from app.db.seed_data_real import venues, suppliers
 from app.utils.constants import extract_eircode
 
@@ -25,7 +25,6 @@ def seed_database():
             users_to_seed = [
                 User(id="couple_1", role="couple", name="Clara & Sean", email="clara.sean@wedding.ie", phone="+353871234567"),
                 User(id="couple_2", role="couple", name="Priya & David", email="priya.david@gmail.com", phone="+353869876543"),
-                User(id="planner_1", role="planner", name="Mary-Aoife (Wedding Wonders)", email="maryaoife@weddingwonders.ie", phone="+353855551234"),
             ]
             for u in users_to_seed:
                 session.add(u)
@@ -100,6 +99,13 @@ def seed_database():
                 wedding_date=date(2026, 8, 15)
             )
             session.add(wedding_planning)
+            # Demo couples own their demo weddings on the access list (PD-002).
+            session.add(WeddingMember(id="wm_intake_test", wedding_id="wedding_intake_test",
+                                      email="clara.sean@wedding.ie", level="owner",
+                                      user_id="couple_1"))
+            session.add(WeddingMember(id="wm_planning_test", wedding_id="wedding_planning_test",
+                                      email="priya.david@gmail.com", level="owner",
+                                      user_id="couple_2"))
 
             # Seed budget lines for the planning wedding
             premade_budget = [

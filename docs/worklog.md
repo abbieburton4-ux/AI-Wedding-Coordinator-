@@ -5,6 +5,39 @@ Newest entries at the top. One dated section per working session.
 
 ---
 
+## 2026-11-04 (cleanup) — Legacy business screens removed (PD-003)
+
+**Context:** The app still carried VenueFlow's SaaS surfaces: a payment gate that held back vendor matching, a mock checkout that recorded a €299 "succeeded" payment nobody made, planner and admin areas, and a public marketing site. The owner approved removing them, with nothing to keep.
+
+**Done:**
+- Removed checkout, payments, Stripe and the Stripe webhooks, `/metrics`, the planner login and role, `seed_pilot.py`, and the preview teaser and API gating.
+- Removed the planner, admin and marketing screens. The app now opens on sign-in.
+- The planner moves weddings straight to `planning`. Matching runs only when the couple ask (B11).
+- Removed the verify checks for the removed routes, replaced with checks that they're gone. The demo-user count is now 2.
+
+### Follow-ups / not done yet
+- The `payments`/`subscriptions` tables and `planner_user_id` stay in the schema, unused. Dropping them needs a migration and a later decision.
+- `README.md` is stale XPRIZE material and still describes Stripe and planners.
+
+## 2026-11-04 (security) — Sign-in lock-down and access list (PD-002 step 1)
+
+**Context:** Anyone could sign in as anyone: mock tokens were on by default, an HS256 path used a signing secret committed to this public repo, Firebase sign-up was open, and the planner login had no password. Worker `/tasks/*` routes and the payment and email webhooks needed no sign-in at all. Each wedding also had a single owner account, so the groom and family couldn't be given access.
+
+**Done:**
+- Sign-in fails closed. Mock auth is off by default, there's no default secret, and HS256 tokens need an expiry. Firebase needs the couple's own project and accepts only verified, listed emails.
+- The first Alembic migrations: a baseline and `wedding_members`. Outside dev mode they're applied at startup, behind a Postgres advisory lock.
+- Viewer, editor and owner levels, enforced in one place (`app/api/v1/access.py`).
+- Only the couple can create the wedding, and only one.
+- The worker routes and webhooks need their own secrets.
+- `manage_access.py`, `verify_migrations.py`, and a plain-English owner guide (`docs/setup-sign-in.md`).
+- Reviewed by three independent reviewers (general, security, data integrity). Every blocking finding is fixed.
+
+### Follow-ups / not done yet
+- B22: the owner's settings screen, owner-only actions, and the email-confirmation step the password fallback needs.
+- B26: demo data seeds into production.
+- B27: the migration check is SQLite-only.
+- B14: hosting. Firebase authorised domains and a Postgres migration run depend on it.
+
 ## 2026-11-04 (product) — Wedding facts recorded, PD-001 ratified
 
 **Context:** The product lane interviewed the owner (one of the couple) to fill in

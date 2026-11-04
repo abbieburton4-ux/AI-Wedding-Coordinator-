@@ -39,10 +39,29 @@ def on_startup():
     from app.db.session import sync_engine
     from app.db.seed import seed_database
     
-    logger.info("Initializing database schemas...")
-    # Automatically creates all tables if they do not exist
-    SQLModel.metadata.create_all(sync_engine)
-    logger.info("Database schema initialization complete.")
+    if settings.DEVELOPMENT_MODE and settings.FIREBASE_PROJECT_ID:
+        # Dev mode switches off every secret check (worker routes, webhooks, wedding
+        # creation). Pointing it at a real sign-in project is almost always a mistake.
+        logger.warning(
+            "DEVELOPMENT_MODE is on with a real FIREBASE_PROJECT_ID. Worker routes, "
+            "webhooks and wedding creation are unprotected. Never run this way with real data."
+        )
+    if settings.DEVELOPMENT_MODE:
+        # Local throwaway databases: build tables straight from the models.
+        logger.info("Development mode: creating tables from models...")
+        SQLModel.metadata.create_all(sync_engine)
+    else:
+        # Anywhere real data lives, the schema only changes through migrations (rule 6).
+        import os
+        from alembic import command
+        from alembic.config import Config
+
+        logger.info("Applying database migrations...")
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        alembic_cfg = Config(os.path.join(backend_dir, "alembic.ini"))
+        alembic_cfg.set_main_option("script_location", os.path.join(backend_dir, "migrations"))
+        command.upgrade(alembic_cfg, "head")
+    logger.info("Database schema ready.")
     
     # Automatically seed if database is empty
     try:
@@ -51,14 +70,12 @@ def on_startup():
         logger.error(f"Error during startup database seeding: {e}")
 
 # Include Routers
-from app.api.v1.endpoints import weddings, webhooks, auth, inquiries, metrics, payments, voice
+from app.api.v1.endpoints import weddings, webhooks, auth, inquiries, voice
 from app.worker import tasks
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(weddings.router, prefix="/api/v1/weddings", tags=["Weddings"])
 app.include_router(inquiries.router, prefix="/api/v1/inquiries", tags=["Inquiries"])
-app.include_router(metrics.router, prefix="/api/v1/metrics", tags=["Metrics"])
-app.include_router(payments.router, prefix="/api/v1/payments", tags=["Payments"])
 app.include_router(voice.router, prefix="/api/v1/voice", tags=["Voice"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["Webhooks"])
 app.include_router(tasks.router, prefix="/tasks", tags=["Worker Tasks"])
