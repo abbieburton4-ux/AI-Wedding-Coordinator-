@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.realpath(os.path.dirname(__file__)))
 
 from sqlmodel import SQLModel, Session, select
 from app.db.session import sync_engine
-from app.db.models import Venue, Supplier, User, Wedding, Booking
+from app.db.models import Venue, Supplier, User, Wedding, Booking, WeddingMember, BudgetLine
 from app.db.seed import seed_database
 
 def run_verification():
@@ -54,8 +54,28 @@ def run_verification():
         bookings = session.exec(select(Booking)).all()
         print(f"   * Bookings seeded: {len(bookings)}")
         assert len(bookings) == 1, f"Expected 1 booking, got {len(bookings)}"
-        
-        print("\n--- VERIFICATION SUCCESS: ALL SCHEMA AND DATA TESTS PASSED ---")
+
+    # 4. Outside dev mode, an empty database gets the catalogue but no demo data (B26)
+    print("4. Seeding an empty database outside development mode...")
+    from app.config import settings
+    SQLModel.metadata.drop_all(sync_engine)
+    SQLModel.metadata.create_all(sync_engine)
+    settings.DEVELOPMENT_MODE = False
+    try:
+        seed_database()
+    finally:
+        settings.DEVELOPMENT_MODE = True
+    with Session(sync_engine) as session:
+        assert session.exec(select(Venue)).first() is not None, "Catalogue venues not seeded"
+        assert session.exec(select(Supplier)).first() is not None, "Catalogue suppliers not seeded"
+        assert session.exec(select(User)).all() == [], "Demo users seeded outside dev mode"
+        assert session.exec(select(Wedding)).all() == [], "Demo weddings seeded outside dev mode"
+        assert session.exec(select(Booking)).all() == [], "Demo bookings seeded outside dev mode"
+        assert session.exec(select(WeddingMember)).all() == [], "Demo access rows seeded"
+        assert session.exec(select(BudgetLine)).all() == [], "Demo budget lines seeded"
+        print("   * Catalogue seeded; no demo users, weddings, access rows, budgets or bookings")
+
+    print("\n--- VERIFICATION SUCCESS: ALL SCHEMA AND DATA TESTS PASSED ---")
 
     # Clean up database file after run
     if os.path.exists("./verify_test.db"):
