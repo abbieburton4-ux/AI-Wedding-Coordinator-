@@ -168,7 +168,7 @@ async def run_venue_matcher(db: AsyncSession, wedding_id: str):
                 "warning": f"Agent suggested hallucinated venue IDs: {hallucinated_ids}",
                 "rationale_summary": "Venue matcher blocked: agent fabricated venue IDs."
             },
-            result_dict.get("confidence_score", 0.0),
+            result_dict.get("confidence_score"),
             model,
             prompt_version,
             api_calls
@@ -193,7 +193,7 @@ async def run_venue_matcher(db: AsyncSession, wedding_id: str):
             
     return (
         result_dict,
-        result_dict.get("confidence_score", 1.0),
+        result_dict.get("confidence_score"),
         model,
         prompt_version,
         api_calls
@@ -303,7 +303,7 @@ async def run_supplier_matcher(db: AsyncSession, wedding_id: str, category: str)
                 "warning": f"Agent suggested hallucinated supplier IDs: {hallucinated_ids}",
                 "rationale_summary": f"Supplier matcher blocked: agent fabricated {category} IDs."
             },
-            result_dict.get("confidence_score", 0.0),
+            result_dict.get("confidence_score"),
             model,
             prompt_version,
             api_calls
@@ -328,7 +328,7 @@ async def run_supplier_matcher(db: AsyncSession, wedding_id: str, category: str)
             
     return (
         result_dict,
-        result_dict.get("confidence_score", 1.0),
+        result_dict.get("confidence_score"),
         model,
         prompt_version,
         api_calls

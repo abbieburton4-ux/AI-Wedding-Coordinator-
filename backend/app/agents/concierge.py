@@ -138,7 +138,7 @@ async def run_concierge(db: AsyncSession, wedding_id: str, message: str):
     }]
 
     reply = result_dict.get("reply", "")
-    confidence = result_dict.get("confidence_score", 0.8)
+    confidence = result_dict.get("confidence_score")
     return (
         {"reply": reply, "confidence_score": confidence, "rationale_summary": reply[:160]},
         confidence,

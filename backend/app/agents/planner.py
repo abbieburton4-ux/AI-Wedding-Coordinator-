@@ -137,7 +137,7 @@ async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = Fa
                 "warning": result_dict.get("guardrail_warning"),
                 "rationale_summary": "Intake plan rejected: budget is unrealistic for guest count in this region."
             },
-            result_dict.get("confidence_score", 0.0),
+            result_dict.get("confidence_score"),
             model,
             prompt_version,
             api_calls
@@ -159,7 +159,7 @@ async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = Fa
                 "warning": warning_msg,
                 "rationale_summary": "Intake plan rejected: budget contains non-canonical category labels."
             },
-            result_dict.get("confidence_score", 0.0),
+            result_dict.get("confidence_score"),
             model,
             prompt_version,
             api_calls
@@ -224,7 +224,7 @@ async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = Fa
     # Return details for log recording
     return (
         result_dict,
-        result_dict.get("confidence_score", 1.0),
+        result_dict.get("confidence_score"),
         model,
         prompt_version,
         api_calls

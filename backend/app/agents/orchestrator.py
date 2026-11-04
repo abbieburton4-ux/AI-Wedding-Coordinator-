@@ -62,7 +62,7 @@ def run_agent(agent_name: str, decision_type: str):
                     follow_ups = result[5] if len(result) > 5 else []
                 else:
                     result_dict = result
-                    confidence_score = result_dict.get("confidence_score", 1.0)
+                    confidence_score = result_dict.get("confidence_score")
                     model_id = "unknown"
                     prompt_version = "v1.0"
                     api_calls = []
