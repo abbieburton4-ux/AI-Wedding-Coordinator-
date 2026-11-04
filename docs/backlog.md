@@ -9,7 +9,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 ## Open
 
 - **B6 — A third party's contacts are in a public repo** (added 2026-11-04). `planner-targets.xlsx` (added in `3d728ff3`) is upstream's sales prospect list: named people at real planning businesses, with contact details. *Why it matters:* it's other people's personal data, published. *Fix:* the owner decides whether to delete it; if deleted, it stays in git history unless history is rewritten.
-- **B7 — Unmeasured confidence is logged as 1.0** (added 2026-11-04). `backend/app/agents/orchestrator.py:65` defaults `confidence_score` to `1.0` when an agent returns no score, so the decision log shows full confidence that was never measured (AGENTS.md rule 10). *Fix:* default to `None`; the column is already `Optional[float]` (`backend/app/db/models.py:360`), so no schema change is needed.
+- **B8 — Unmeasured token counts are logged as 0** (added 2026-11-04). Every agent records `"input"`/`"output"` tokens as `0` when Gemini returns no usage data (`usage... if usage else 0` in `planner.py`, `matcher.py`, `extractor.py`, `concierge.py`), so a missing measurement looks like a free call (AGENTS.md rule 10). *Fix:* record `None`, after checking that every consumer of those counts (metrics, logs, frontend) handles a missing value.
 
 ---
 
@@ -17,6 +17,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-04 | **B7** — unmeasured confidence logged as 1.0 (also 0.8 and 0.0 in each agent) | `ab3ef135` |
 | 2026-05-27 | Tab 1 plotly Gold crash | `2032afa6` |
 | 2026-05-27 | Region dropdown vs. seed county mismatch | `2032afa6` |
 | 2026-05-27 | Supplier dropdown hardcoded to 4 categories | `2ba17b20` |
