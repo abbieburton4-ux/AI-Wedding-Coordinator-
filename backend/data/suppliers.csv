@@ -1,0 +1,38 @@
+name,category,location,price_from,price_to,style,source
+Liffey Light Photography,photography,Dublin,1800,3400,documentary natural,demo_generated
+Rebel City Studios,photography,Cork,1600,3000,editorial bold,demo_generated
+Atlantic Lens Photography,photography,Galway,1700,3200,coastal romantic,demo_generated
+Lily & Birch Photo,photography,Kildare,1500,2800,fine-art light,demo_generated
+Boyne Valley Photography,photography,Meath,1600,3000,classic timeless,demo_generated
+Garden County Images,photography,Wicklow,1700,3100,relaxed candid,demo_generated
+Silver Strand Films,videography,Galway,1900,3500,cinematic,demo_generated
+Dublin Reel Co.,videography,Dublin,2000,3600,modern storytelling,demo_generated
+Slane Story Films,videography,Meath,1800,3200,documentary,demo_generated
+Bloom & Vine,florals,Dublin,1200,2600,seasonal wild,demo_generated
+Petal & Thistle,florals,Cork,1100,2400,garden romantic,demo_generated
+Wild Atlantic Blooms,florals,Galway,1000,2300,foraged coastal,demo_generated
+The Flower Field,florals,Kildare,1300,2700,classic elegant,demo_generated
+The Velvet Sessions,music,Dublin,2200,3500,soul and pop,demo_generated
+Shannonside Trad Band,music,Limerick,1800,2800,traditional Irish,demo_generated
+Coast Road Collective,music,Galway,2000,3200,indie acoustic,demo_generated
+The Hartwell Band,music,Kildare,2100,3300,classic covers,demo_generated
+Nightowl DJs,dj,Dublin,700,1200,modern party,demo_generated
+Rebel Beats DJ,dj,Cork,600,1000,mixed-era,demo_generated
+Bay City Discos,dj,Galway,650,1100,crowd-pleaser,demo_generated
+Feast & Co. Catering,catering,Dublin,9000,15000,contemporary Irish,demo_generated
+Saltwater Kitchen,catering,Cork,8000,13000,farm-to-table,demo_generated
+Galway Bay Catering,catering,Galway,8500,14000,seasonal local,demo_generated
+Meadow & Oak Catering,catering,Meath,8000,13500,rustic feast,demo_generated
+Sugar & Lace Cakes,cake,Dublin,350,700,classic tiered,demo_generated
+The Cork Cakery,cake,Cork,300,600,modern minimal,demo_generated
+Buttercup Bakes,cake,Meath,320,650,rustic naked,demo_generated
+Glow Bridal Studio,hair_makeup,Dublin,400,850,natural glam,demo_generated
+Belle & Beauty Cork,hair_makeup,Cork,350,750,soft romantic,demo_generated
+Galway Glam Co.,hair_makeup,Galway,380,800,editorial,demo_generated
+Heritage Wedding Cars,transport,Dublin,450,900,vintage classic,demo_generated
+Rebel Rides,transport,Cork,400,800,modern luxury,demo_generated
+Humanist Ceremonies East,officiant,Dublin,400,500,humanist personal,demo_generated
+Cork Civil Celebrants,officiant,Cork,380,480,civil warm,demo_generated
+Wild Atlantic Ceremonies,officiant,Galway,400,500,humanist outdoorsy,demo_generated
+Inkwell & Co.,stationery,Dublin,450,1100,modern calligraphy,demo_generated
+Paper Daisy Studio,stationery,Kildare,400,950,botanical illustrated,demo_generated
