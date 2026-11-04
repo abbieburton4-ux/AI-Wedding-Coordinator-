@@ -2,6 +2,7 @@ import json
 import logging
 import httpx
 from app.config import settings
+from app.api.v1.internal import internal_headers
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ async def enqueue_agent_task(task_name: str, payload: dict) -> bool:
             "httpRequest": {
                 "httpMethod": "POST",
                 "url": worker_url,
-                "headers": {"Content-Type": "application/json"},
+                "headers": {"Content-Type": "application/json", **internal_headers()},
                 "body": httpx.Base64(json.dumps(payload).encode("utf-8")) if hasattr(httpx, "Base64") else None
             }
         }
@@ -54,7 +55,7 @@ async def enqueue_agent_task(task_name: str, payload: dict) -> bool:
             try:
                 async with httpx.AsyncClient() as client:
                     # Run it in the background by posting directly to worker asynchronously
-                    await client.post(worker_url, json=payload, timeout=1.0)
+                    await client.post(worker_url, json=payload, headers=internal_headers(), timeout=1.0)
                     logger.info(f"Directly triggered worker for task '{task_name}' (bypass emulator).")
                     return True
             except httpx.TimeoutException:

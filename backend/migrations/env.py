@@ -14,14 +14,14 @@ config = context.config
 
 # Interpret the config file for Python logging
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Import SQLModel and all model classes so they register on metadata
 from sqlmodel import SQLModel
 from app.db.models import (
     User, Wedding, Venue, Supplier, VenueAvailability, SupplierAvailability,
     Booking, Quote, Contract, Payment, Subscription, SupplierPayment,
-    BudgetLine, TimelineItem, Guest, AgentDecisionLog
+    BudgetLine, TimelineItem, Guest, AgentDecisionLog, WeddingMember
 )
 from app.config import settings
 
@@ -29,7 +29,8 @@ from app.config import settings
 target_metadata = SQLModel.metadata
 
 # Overwrite the ini file connection URL with our dynamic sync database URL
-config.set_main_option("sqlalchemy.url", settings.SYNC_DATABASE_URL)
+# Escape % so configparser interpolation leaves URL-encoded passwords alone.
+config.set_main_option("sqlalchemy.url", settings.SYNC_DATABASE_URL.replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:
@@ -55,6 +56,11 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        if connection.dialect.name == "postgresql":
+            # Every app process runs migrations at startup; this lock makes the
+            # others wait instead of racing to create the same tables.
+            connection.exec_driver_sql("SELECT pg_advisory_lock(727304201)")
+            connection.commit()
         context.configure(
             connection=connection, target_metadata=target_metadata
         )

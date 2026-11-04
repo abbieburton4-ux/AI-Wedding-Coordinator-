@@ -14,6 +14,15 @@ erDiagram
     datetime created_at
   }
 
+  WEDDING_MEMBER {
+    string id PK
+    string wedding_id FK
+    string email
+    string level
+    string user_id FK
+    datetime created_at
+  }
+
   WEDDING {
     string id PK
     string couple_user_id FK
@@ -214,6 +223,8 @@ erDiagram
 
   USER ||--o{ WEDDING : "owns (couple)"
   USER ||--o{ WEDDING : "manages (planner)"
+  WEDDING ||--o{ WEDDING_MEMBER : "access list"
+  USER |o--o{ WEDDING_MEMBER : "signs in as"
   USER ||--o{ SUBSCRIPTION : pays
   USER ||--o{ PAYMENT : pays
   VENUE ||--o{ WEDDING : hosts
@@ -238,6 +249,7 @@ erDiagram
 
 ### Identity & billing
 
+- **WeddingMember** — the access list (PD-002). One row per wedding and email (unique together); `level` ∈ `{viewer, editor, owner}`. `user_id` is filled in when that person first signs in with a verified email. The wedding's creator is added as owner. Migration `0002` also backfills each existing `couple_user_id` as owner.
 - **User** — `role` ∈ `{couple, planner, admin}`. The old `venue_admin` role is removed: VenueFlow is not sold to venues.
 - **Subscription** — recurring billing for planners (€199–€499/mo plans). One active subscription per planner user.
 - **Payment** — one-time charges VenueFlow collects via Stripe. `payment_type` ∈ `{coordinator_fee, planner_setup, other}`. Coordinator fees (couples, €299–€999) are the primary one-time revenue stream.

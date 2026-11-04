@@ -17,6 +17,7 @@ Shortcut: `bash scripts/verify-backend.sh` (from the repo root) runs steps 2 and
    GEMINI_API_KEY=dummy .venv/bin/python verify_endpoints.py
    GEMINI_API_KEY=dummy .venv/bin/python verify_agents.py
    GEMINI_API_KEY=dummy .venv/bin/python verify.py
+   .venv/bin/python verify_migrations.py
    ```
    Each must exit 0 and print its success line.
 3. If you changed agent behaviour, `verify_agents.py` must cover the new path. Add a test; never loosen an existing one.

@@ -19,7 +19,7 @@ You are working on AI Wedding Coordinator, which is the same app as VenueFlow: "
 3. Never add real guest names, emails, phone numbers or addresses to code, seed data or tests. Dietary and accessibility notes are sensitive.
 4. Never mark payments as paid, bookings as confirmed or contracts as signed on the couple's behalf, and never take a real payment. Use integer cents or `Decimal` for new money fields.
 5. No secrets in git or in browser code. Gemini keys stay in backend config; never in `frontend/` or a `VITE_` variable.
-6. Don't change the database schema without asking me; there are no migrations yet. Never write to a production database directly.
+6. Don't change the database schema without asking me. Every schema change needs an Alembic migration in `backend/migrations/versions/` (`backend/verify_migrations.py` checks this). Never write to a production database directly.
 7. Every Gemini agent logs a decision row first and changes data last, with guardrails, and is covered in `backend/verify_agents.py`.
 8. Never change a test to make it pass, and don't silence type errors with `any` or `@ts-ignore`.
 9. Don't add a package without telling me why.

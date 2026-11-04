@@ -40,6 +40,8 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
   /** Returns the current bearer token (Firebase ID token, or dev mock token). */
   getToken: () => Promise<string | null>;
+  /** Set when the account signed in but isn't on the wedding's access list. */
+  accessMessage: string | null;
 }
 
 const DEV_UID_KEY = "vf_dev_uid";
@@ -51,20 +53,38 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 /** Fetch the authenticated user's profile/role. Done with a bare fetch (not
  *  useApi) to avoid a circular dependency on this provider. */
 async function fetchMe(token: string): Promise<AuthUser | null> {
+  const { user } = await fetchMeWithStatus(token);
+  return user;
+}
+
+const NOT_ON_LIST =
+  "This account isn't on the wedding's access list yet. Ask the couple to add you, " +
+  "then sign in again.";
+
+async function fetchMeWithStatus(
+  token: string,
+): Promise<{ user: AuthUser | null; denied: string | null }> {
   try {
     const res = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return null;
-    return (await res.json()) as AuthUser;
+    if (res.status === 403) {
+      // The backend says why: not on the list, or email not confirmed yet.
+      const body = (await res.json().catch(() => null)) as { detail?: unknown } | null;
+      const detail = typeof body?.detail === "string" ? body.detail : NOT_ON_LIST;
+      return { user: null, denied: detail };
+    }
+    if (!res.ok) return { user: null, denied: null };
+    return { user: (await res.json()) as AuthUser, denied: null };
   } catch {
-    return null;
+    return { user: null, denied: null };
   }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [accessMessage, setAccessMessage] = useState<string | null>(null);
 
   const getToken = useCallback(async (): Promise<string | null> => {
     if (firebaseEnabled && firebaseAuth) {
@@ -85,8 +105,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!active) return;
         if (fbUser) {
           const token = await fbUser.getIdToken();
-          const me = await fetchMe(token);
-          if (active) setUser(me);
+          const { user: me, denied } = await fetchMeWithStatus(token);
+          if (active) {
+            setUser(me);
+            setAccessMessage(denied);
+          }
+          // Not on the list: sign out of Google too, so they can try another account.
+          if (denied && firebaseAuth) await firebaseSignOut(firebaseAuth);
         } else {
           setUser(null);
         }
@@ -115,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUpEmail = useCallback(async (email: string, password: string) => {
     if (!firebaseAuth) throw new Error("Firebase is not configured.");
     await createUserWithEmailAndPassword(firebaseAuth, email, password);
-    // onAuthStateChanged handles state + /auth/me (auto-creates a couple).
+    // onAuthStateChanged handles state + /auth/me (only listed emails get an account).
   }, []);
 
   const signInEmail = useCallback(async (email: string, password: string) => {
@@ -157,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     devSignIn,
     signOut,
     getToken,
+    accessMessage,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

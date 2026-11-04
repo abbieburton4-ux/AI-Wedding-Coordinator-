@@ -44,7 +44,7 @@ to `/signup`).
 | Service | Port | Notes |
 |---|---|---|
 | frontend | 5173 | Vite dev server; app served under `/VenueFlow/` |
-| api | 8000 | FastAPI; Swagger at `/docs`. Runs migrations/seed on startup |
+| api | 8000 | FastAPI; Swagger at `/docs`. Seeds on startup; builds tables from models in dev mode, applies Alembic migrations otherwise |
 | worker | 8001 | Same app; receives Cloud Tasks pushes at `/tasks/*` |
 | db | 5432 | Postgres 16 (`venueflow` / `venueflow_pass`), data in a named volume |
 | tasks-emulator | 8123 | Cloud Tasks emulator (gRPC) |
@@ -69,6 +69,24 @@ For **production**, set `VITE_FIREBASE_*` (see [frontend/.env.example](frontend/
 and the backend `FIREBASE_PROJECT_ID`; the backend verifies Firebase ID tokens
 against Google's public keys
 ([backend/app/api/v1/endpoints/auth.py](backend/app/api/v1/endpoints/auth.py)).
+
+In production (PD-002), set these in the deployment environment, never in git:
+
+| Variable | What it's for |
+|---|---|
+| `FIREBASE_PROJECT_ID` | The couple's own Firebase project. Unset means Firebase sign-in is refused. |
+| `ACCESS_BOOTSTRAP_EMAILS` | The couple's two sign-in emails, comma-separated. Only these may create the wedding, and both become its owners. |
+| `INTERNAL_TASKS_SECRET` | A long random value. The task dispatcher sends it to the worker `/tasks/*` routes. |
+| `INBOUND_EMAIL_SECRET` | A long random value. Put it on the SendGrid inbound-parse URL as `?token=...`. |
+| `STRIPE_WEBHOOK_SECRET` | Only with `PAYMENTS_PROVIDER=stripe`. Stripe's `whsec_...` signing secret. |
+
+**Never deploy with `DEVELOPMENT_MODE=True`**, even though `backend/.env.example` sets it for local work. It switches off every secret check below and the wedding-creation limit. Leave `DEVELOPMENT_MODE`, `ALLOW_MOCK_AUTH` and `JWT_SECRET` unset; the first two default to off. Outside dev mode, the worker routes and webhooks refuse every call when their secret isn't set. Nobody can sign themselves up. Everyone other than the couple gets in only once they're on the wedding's access list. The team manages that list with `backend/manage_access.py` until the owner's settings screen exists (B22). The owner's setup steps are in [docs/setup-sign-in.md](docs/setup-sign-in.md).
+
+### Migrations
+
+Outside dev mode, the app applies Alembic migrations on startup. On Postgres, an advisory lock stops two processes starting at once from racing.
+- **A database that dev mode built with `create_all`:** tell Alembic where it stands, once, before starting the app. If the database has no `wedding_members` table, run `alembic stamp 0001`; the next start adds the table and makes each couple an owner. If the table is already there, run `alembic stamp head`, then add each couple's owner row with `manage_access.py`.
+- **Never run `alembic downgrade` against a database holding real data.** The downgrades drop tables, including the access list.
 
 ## What happens on intake (the agent flow)
 

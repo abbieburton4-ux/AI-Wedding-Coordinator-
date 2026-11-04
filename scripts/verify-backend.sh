@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Backend half of the verify gate (verify skill steps 2 and 7), as one command so CI,
+# Backend half of the verify gate (verify skill steps 2 and 7, including the migration check), as one command so CI,
 # the autopilot and people all run the same thing. Run from anywhere.
 set -uo pipefail
 
@@ -10,7 +10,7 @@ if [ -x .venv/bin/python ]; then PY=".venv/bin/python"; fi
 export GEMINI_API_KEY="${GEMINI_API_KEY:-dummy}"   # Gemini is mocked in these scripts
 
 status=0
-for script in verify_endpoints.py verify_agents.py verify.py; do
+for script in verify_endpoints.py verify_agents.py verify.py verify_migrations.py; do
   echo "== $script"
   if ! "$PY" "$script"; then
     echo "FAILED: $script"

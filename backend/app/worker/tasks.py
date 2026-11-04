@@ -1,5 +1,6 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
+from app.api.v1.internal import require_internal_caller
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -11,7 +12,8 @@ from app.agents.matcher import run_venue_matcher, run_supplier_matcher
 from app.agents.extractor import run_quote_extractor
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+# Only our own task dispatcher may call these: they run agents and change data.
+router = APIRouter(dependencies=[Depends(require_internal_caller)])
 
 
 async def _run_matcher_cascade(db: AsyncSession, wedding_id: str) -> None:

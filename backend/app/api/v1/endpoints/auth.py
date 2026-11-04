@@ -8,7 +8,8 @@ from pydantic import BaseModel
 from typing import Optional
 from app.config import settings
 from app.db.session import get_db
-from app.db.models import User
+from app.db.models import User, WeddingMember
+from app.api.v1.access import bootstrap_emails, link_memberships
 
 security = HTTPBearer()
 router = APIRouter()
@@ -69,35 +70,33 @@ async def get_current_user(
             
         return user
 
-    # 2. HS256 JWT validation using JWT_SECRET
-    jwt_secret = settings.JWT_SECRET or "dev-jwt-secret-key-change-me-in-production"
+    # 2. HS256 tokens are ours (Firebase tokens are RS256), so they never fall through
+    #    to Firebase. Accepted only with a configured JWT_SECRET, a signature that
+    #    matches, an expiry, and an existing user; the role comes from the database.
     try:
-        claims = jwt.decode(token, jwt_secret, algorithms=["HS256"])
-        user_id = claims.get("sub")
-        if user_id:
-            result = await db.exec(select(User).where(User.id == user_id))
-            user = result.first()
-            
-            if not user:
-                role = claims.get("role", "couple")
-                user = User(
-                    id=user_id,
-                    role=role,
-                    name=claims.get("name", f"Pilot {role.capitalize()} ({user_id})"),
-                    email=claims.get("email", f"{user_id}@venueflow.ie"),
-                    phone="+353870000000"
-                )
-                db.add(user)
-                await db.commit()
-                await db.refresh(user)
-                
-            return user
+        alg = jwt.get_unverified_header(token).get("alg")
     except jwt.PyJWTError:
-        # Not a valid HS256 JWT, fallback to Firebase validation
-        pass
+        raise _unauthorized()
+    if alg == "HS256":
+        if not settings.JWT_SECRET:
+            raise _unauthorized()
+        try:
+            claims = jwt.decode(
+                token, settings.JWT_SECRET, algorithms=["HS256"],
+                options={"require": ["exp", "sub"]},
+            )
+        except jwt.PyJWTError:
+            raise _unauthorized()
+        result = await db.exec(select(User).where(User.id == claims["sub"]))
+        user = result.first()
+        if not user:
+            raise _unauthorized()
+        return user
 
-    # 3. Real Firebase JWT Validation — RS256 signature verified against Google's
-    #    public keys (not just decoded). audience + issuer are enforced by jwt.decode.
+    # 3. Firebase ID token (RS256), verified against Google's public keys for the
+    #    couple's own project. With no project configured, Firebase sign-in is off.
+    if not settings.FIREBASE_PROJECT_ID:
+        raise _unauthorized()
     try:
         firebase_iss = f"https://securetoken.google.com/{settings.FIREBASE_PROJECT_ID}"
         signing_key = _firebase_jwks_client().get_signing_key_from_jwt(token)
@@ -108,31 +107,62 @@ async def get_current_user(
             audience=settings.FIREBASE_PROJECT_ID,
             issuer=firebase_iss,
         )
-        user_id = claims.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token: missing subject")
-        email = claims.get("email", "")
-        name = claims.get("name") or email or "Firebase User"
+    except Exception:
+        raise _unauthorized()
 
-        # Fetch or register user (new Firebase sign-ups default to the couple role)
-        result = await db.exec(select(User).where(User.id == user_id))
-        user = result.first()
-        if not user:
-            user = User(id=user_id, role="couple", name=name, email=email)
-            db.add(user)
-            await db.commit()
-            await db.refresh(user)
+    user_id = claims.get("sub")
+    if not user_id:
+        raise _unauthorized()
+    email = (claims.get("email") or "").strip().lower()
+    email_verified = bool(claims.get("email_verified"))
+    name = claims.get("name") or email or "Firebase User"
 
-        return user
+    # No self sign-up (PD-002): a new account is created only for a verified
+    # email that's on a wedding's access list or in ACCESS_BOOTSTRAP_EMAILS.
+    result = await db.exec(select(User).where(User.id == user_id))
+    user = result.first()
+    if not user:
+        # Verified first, so an unconfirmed account can't probe who is on the list.
+        if not email_verified:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=EMAIL_NOT_VERIFIED)
+        if not await _email_is_allowed(db, email):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NOT_ON_LIST)
+        user = User(id=user_id, role="couple", name=name, email=email)
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid authentication token: {str(e)}",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    if email_verified and await link_memberships(db, user, email):
+        await db.commit()
+
+    return user
+
+
+NOT_ON_LIST = (
+    "This account isn't on the wedding's access list yet. "
+    "Ask the couple to add you, then sign in again."
+)
+EMAIL_NOT_VERIFIED = (
+    "This email address hasn't been confirmed yet. "
+    "Please sign in with Google using the address the couple added."
+)
+
+
+def _unauthorized() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired sign-in. Please sign in again.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+async def _email_is_allowed(db: AsyncSession, email: str) -> bool:
+    if not email:
+        return False
+    if email in bootstrap_emails():
+        return True
+    result = await db.exec(select(WeddingMember.id).where(WeddingMember.email == email))
+    return result.first() is not None
 
 
 @router.get("/me")
@@ -159,7 +189,12 @@ async def planner_login(
     payload: PlannerLoginPayload,
     db: AsyncSession = Depends(get_db)
 ):
-    """Minimal planner login endpoint returning long-lived bearer tokens for developer testing."""
+    """Legacy planner login for local development only.
+
+    It has no password, so it exists only when mock sign-in is on.
+    """
+    if not (settings.DEVELOPMENT_MODE and settings.ALLOW_MOCK_AUTH):
+        raise HTTPException(status_code=404, detail="Not found")
     result = await db.exec(select(User).where(User.email == payload.email))
     user = result.first()
     
@@ -183,25 +218,8 @@ async def planner_login(
     if user.role != "planner":
         raise HTTPException(status_code=403, detail="Access denied. User role is not planner.")
     
-    # Return a fast token
-    if settings.ALLOW_MOCK_AUTH:
-        token = f"mock-{user.id}"
-    else:
-        # Generate long-lived HS256 signed JWT for pilot planners
-        import datetime
-        jwt_secret = settings.JWT_SECRET or "dev-jwt-secret-key-change-me-in-production"
-        token = jwt.encode(
-            {
-                "sub": user.id,
-                "email": user.email,
-                "role": user.role,
-                "name": user.name,
-                "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=30)
-            },
-            jwt_secret,
-            algorithm="HS256"
-        )
-        
+    token = f"mock-{user.id}"
+
     return {
         "token": token,
         "role": "planner",

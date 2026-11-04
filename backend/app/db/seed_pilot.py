@@ -64,7 +64,9 @@ PILOT_PLANNERS = [
 
 def _make_jwt(user: User) -> str:
     """Mint a 30-day HS256 bearer token validated by app.api...auth.get_current_user."""
-    secret = getattr(settings, "JWT_SECRET", None) or "dev-jwt-secret-key-change-me-in-production"
+    secret = getattr(settings, "JWT_SECRET", None)
+    if not secret:
+        raise RuntimeError("Set JWT_SECRET to mint pilot tokens; there is no default.")
     return jwt.encode(
         {
             "sub": user.id,
@@ -112,7 +114,7 @@ def print_planner_tokens(planners: list[User]) -> None:
         # via direct DB lookup (app.api.v1.endpoints.auth.get_current_user, path 1).
         static_token = f"mock-{u.id}"
         # Signed JWT works via the HS256 path (path 2) — survives ALLOW_MOCK_AUTH=False.
-        jwt_token = _make_jwt(u)
+        jwt_token = _make_jwt(u) if settings.JWT_SECRET else "(set JWT_SECRET to mint one)"
         print(f"\n# {u.name}  <{u.email}>  (id={u.id}, role={u.role})")
         print(f"  static : {static_token}")
         print(f"  jwt    : {jwt_token}")

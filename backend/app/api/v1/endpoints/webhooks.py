@@ -7,6 +7,7 @@ from app.config import settings
 from app.db.session import get_db
 from app.db.models import Wedding, Booking
 from app.utils.tasks import enqueue_agent_task
+from app.api.v1.internal import require_inbound_email_token
 from app.api.v1.endpoints.payments import activate_wedding_planning
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,22 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     
     Marks weddings as 'planning' when payment succeeds and enqueues the intake planner task.
     """
-    payload = await request.json()
+    if settings.DEVELOPMENT_MODE:
+        payload = await request.json()
+    else:
+        # Outside dev, only a correctly signed Stripe event is accepted.
+        if settings.PAYMENTS_PROVIDER != "stripe" or not settings.STRIPE_WEBHOOK_SECRET:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        import stripe  # lazy: only installed/needed for real Stripe
+        try:
+            event = stripe.Webhook.construct_event(
+                await request.body(),
+                request.headers.get("stripe-signature", ""),
+                settings.STRIPE_WEBHOOK_SECRET,
+            )
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid signature")
+        payload = event.to_dict() if hasattr(event, "to_dict") else dict(event)
     event_type = payload.get("type")
     
     logger.info(f"Stripe Webhook received event: {event_type}")
@@ -73,7 +89,7 @@ async def debug_stripe_mock(wedding_id: str, db: AsyncSession = Depends(get_db))
     }
 
 
-@router.post("/sendgrid/inbound")
+@router.post("/sendgrid/inbound", dependencies=[Depends(require_inbound_email_token)])
 async def sendgrid_inbound_parse(request: Request, db: AsyncSession = Depends(get_db)):
     """Receives SendGrid Inbound Parse email webhooks.
     

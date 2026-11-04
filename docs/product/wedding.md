@@ -23,10 +23,18 @@ Roles only, no names: "roles only as long as I can assign mulitple people to 1 r
 
 | Person (role) | Access | Notes |
 | :- | :- | :- |
-| Owner (one of the couple) | Makes decisions for the app. Future need: to add people and edit their permissions (backlog B22) | "I am part of the couple and can make the decisions" (2026-11-04). [ASSUMPTION] Their answers count as the couple ratifying, inferred from "can make the decisions". On permissions: "i should be able to add and edit permissions in the future though" (2026-11-04); see backlog B22. Their own edit rights in the app not otherwise stated |
-| Partner (the groom) | Edit everything | Will use the app ("partner and family of the couple", owner, 2026-11-04). Access: "partner edit everything" (owner, 2026-11-04). "groom is my partner" (owner, 2026-11-04) |
+| Owner (one of the couple) | Edit everything. Makes decisions for the app. Adds people and changes their access, shared with the groom (PD-002) | "I am part of the couple and can make the decisions" (2026-11-04). [ASSUMPTION] Their answers count as the couple ratifying, inferred from "can make the decisions". On permissions: "i should be able to add and edit permissions in the future though" (2026-11-04); see backlog B22. Edit everything: "yes to (a) and (b)", answering PD-002 call (b) (owner, 2026-11-04) |
+| Partner (the groom) | Edit everything. Also adds people and changes their access | Will use the app ("partner and family of the couple", owner, 2026-11-04). Access: "partner edit everything" (owner, 2026-11-04). "groom is my partner" (owner, 2026-11-04). Manages access too: PD-002 call (a), "yes" (owner, 2026-11-04) |
 | Family of the couple: parents (4), siblings (2) | View only, including the budget | Will use the app (same answer). Access: "family view only" (owner, 2026-11-04). Budget: "they can see the budget" (owner, 2026-11-04). Who: "parents 4, siblings 2" (owner, 2026-11-04), 6 people. Dietary notes: "family can see dietary notes" (owner, 2026-11-04) |
 | Wedding party (not family) | None for now | "no, just family for now but in the future yes" (owner, 2026-11-04). When they get access, and at what level: [GAP]. The owner will add them later (backlog B22) |
+
+## How the owner works with the team
+
+Owner (one of the couple), 2026-11-04: "dont ask me technical questions as I am not technical and would prefer a user friendly backend with integrations with google suite. route the technical questions to my team but have me approve the recomendation"
+
+- The team (engineering and product agents) settles technical choices. They're brought to the owner as one plain-English recommendation to approve, not as technical questions.
+- The owner still decides couple's calls (money, guests, access, vendor contact, cutting features). Those are asked in plain language, with a recommended default where one makes sense.
+- The owner prefers a user-friendly app with Google suite integrations. Which Google products, and what each integration should do: [GAP], for a later PD.
 
 ## Must-haves before the wedding
 
