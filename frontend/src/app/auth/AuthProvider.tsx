@@ -17,7 +17,7 @@ import {
 import { firebaseAuth, firebaseEnabled } from "./firebase";
 import { API_BASE_URL } from "../api/config";
 
-export type Role = "couple" | "planner" | "admin";
+export type Role = "couple";
 
 export interface AuthUser {
   id: string;
@@ -196,7 +196,5 @@ export function useAuth(): AuthContextValue {
 
 /** Where to send a user after login, based on role. */
 export function homeForRole(role: string | null | undefined): string {
-  if (role === "planner") return "/planner";
-  if (role === "admin") return "/admin";
   return "/wedding";
 }

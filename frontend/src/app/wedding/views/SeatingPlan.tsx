@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { cn } from "../../design-system/cn";
-import { Icon } from "../../planner/Icon";
+import { Icon } from "../../shared/Icon";
 
 const DRAG_TYPE = "GUEST";
 

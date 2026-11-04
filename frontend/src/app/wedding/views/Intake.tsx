@@ -53,8 +53,8 @@ export function Intake() {
       });
       await refetch();
       setActiveWedding(created.id);
-      // The AI planner runs free now and builds the teaser; the dashboard shows the
-      // "building" spinner → preview. Payment (from the teaser) unlocks the rest.
+      // The AI planner builds the budget and timeline now; the dashboard shows the
+      // "building" spinner, then the plan.
       navigate("/wedding", { replace: true });
     } catch {
       // error rendered below via useApi state

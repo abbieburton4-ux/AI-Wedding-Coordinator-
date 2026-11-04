@@ -16,7 +16,7 @@ class User(SQLModel, table=True):
     __tablename__ = "users"
     
     id: str = Field(primary_key=True, description="Firebase authentication UID")
-    role: str = Field(description="Role: couple, planner, admin")
+    role: str = Field(description="Always couple since PD-003 (planner/admin removed)")
     name: str
     email: str = Field(index=True)
     phone: Optional[str] = None

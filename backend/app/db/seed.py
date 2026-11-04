@@ -25,7 +25,6 @@ def seed_database():
             users_to_seed = [
                 User(id="couple_1", role="couple", name="Clara & Sean", email="clara.sean@wedding.ie", phone="+353871234567"),
                 User(id="couple_2", role="couple", name="Priya & David", email="priya.david@gmail.com", phone="+353869876543"),
-                User(id="planner_1", role="planner", name="Mary-Aoife (Wedding Wonders)", email="maryaoife@weddingwonders.ie", phone="+353855551234"),
             ]
             for u in users_to_seed:
                 session.add(u)

@@ -166,10 +166,9 @@ async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = Fa
         )
 
     # 5. Success Path: Mutate Database
-    # The planner runs for FREE at intake to produce the teaser (budget + timeline),
-    # so success lands the wedding in 'preview' — not 'planning'. Payment is what
-    # promotes it to 'planning' and unlocks the (paid) venue/supplier cascade.
-    wedding.status = "preview"
+    # Success moves the wedding into planning: the budget and timeline below are the
+    # couple's full plan (PD-003 removed the paid "preview" stage).
+    wedding.status = "planning"
     db.add(wedding)
     
     # Seed budget lines

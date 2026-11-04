@@ -74,10 +74,6 @@ export function Login() {
             onClick={() => run(() => devSignIn("couple_2"))}>
             Continue as a couple
           </Button>
-          <Button type="button" variant="outline" disabled={busy} className="w-full"
-            onClick={() => run(() => devSignIn("planner_1"))}>
-            Continue as a planner
-          </Button>
         </div>
       )}
     </AuthShell>

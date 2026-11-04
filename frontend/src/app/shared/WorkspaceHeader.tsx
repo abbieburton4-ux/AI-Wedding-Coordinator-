@@ -5,14 +5,12 @@ import { Icon } from "./Icon";
 import { Avatar } from "./Avatar";
 import { useAuth } from "../auth/AuthProvider";
 
-type WorkspaceKey = "admin" | "planner" | "wedding";
+type WorkspaceKey = "wedding";
 
 const WORKSPACES: {
   key: WorkspaceKey; label: string; sub: string; to: string; icon: string; level: number; roles: string[];
 }[] = [
-  { key: "admin", label: "Admin", sub: "Internal ops & submission", to: "/admin", icon: "admin_panel_settings", level: 0, roles: ["admin"] },
-  { key: "planner", label: "Planner", sub: "Manage your weddings", to: "/planner", icon: "business_center", level: 1, roles: ["planner", "admin"] },
-  { key: "wedding", label: "Wedding", sub: "Couple's planning space", to: "/wedding", icon: "celebration", level: 2, roles: ["couple", "planner", "admin"] },
+  { key: "wedding", label: "Wedding", sub: "Your planning space", to: "/wedding", icon: "celebration", level: 0, roles: ["couple"] },
 ];
 
 function initialsOf(name?: string | null): string {
@@ -30,7 +28,7 @@ export function WorkspaceHeader({ profileTo, searchPlaceholder = "Search…" }: 
   const [profileOpen, setProfileOpen] = useState(false);
 
   const accessible = WORKSPACES.filter((w) => role && w.roles.includes(role));
-  const current = WORKSPACES.find((w) => pathname.startsWith(w.to)) ?? accessible[0] ?? WORKSPACES[2];
+  const current = WORKSPACES.find((w) => pathname.startsWith(w.to)) ?? accessible[0] ?? WORKSPACES[0];
 
   async function handleSignOut() {
     setProfileOpen(false);

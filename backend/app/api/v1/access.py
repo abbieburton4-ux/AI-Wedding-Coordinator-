@@ -7,7 +7,7 @@ owners can also manage who has access.
 from typing import Optional
 
 from fastapi import HTTPException
-from sqlmodel import select, or_
+from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -29,12 +29,7 @@ async def wedding_level(db: AsyncSession, wedding: Wedding, user: User) -> Optio
         )
     )
     member = result.first()
-    if member:
-        return member.level
-    # Legacy SaaS planner link: kept working, but never above editor.
-    if wedding.planner_user_id and wedding.planner_user_id == user.id:
-        return "editor"
-    return None
+    return member.level if member else None
 
 
 async def require_wedding_access(
@@ -54,13 +49,9 @@ async def require_wedding_access(
 
 
 async def weddings_for_member(db: AsyncSession, user: User) -> list:
-    """Weddings the user is on the access list for (plus legacy planner links)."""
+    """Weddings the user is on the access list for."""
     member_ids = select(WeddingMember.wedding_id).where(WeddingMember.user_id == user.id)
-    result = await db.exec(
-        select(Wedding).where(
-            or_(Wedding.id.in_(member_ids), Wedding.planner_user_id == user.id)
-        )
-    )
+    result = await db.exec(select(Wedding).where(Wedding.id.in_(member_ids)))
     return list(result.all())
 
 

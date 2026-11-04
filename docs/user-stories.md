@@ -1,5 +1,7 @@
 # VenueFlow — MVP User Stories (Prioritized, AI Wedding Coordinator)
 
+> **Historical (XPRIZE SaaS era).** The billing, planner and admin personas below no longer apply: this is a private app for one wedding (PD-001), and payments, planners and admin were removed (PD-003). Current scope lives in `docs/product/`.
+
 Personas:
 - **Couple** — B2C customer, pays one-time coordinator fee (€299–€999) per wedding.
 - **Planner** — B2B customer, pays monthly subscription (€199–€499/mo), manages multiple client weddings.

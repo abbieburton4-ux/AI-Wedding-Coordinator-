@@ -25,12 +25,6 @@ from app.agents.concierge import run_concierge
 
 router = APIRouter()
 
-# Preview gating: before payment (status 'preview') the budget + timeline endpoints
-# return only a teaser slice. The full data is generated and stored, but withheld at
-# the API until paid — so a blurred UI can't be bypassed via DevTools/network.
-PREVIEW_BUDGET_LINES = 3
-PREVIEW_TIMELINE_ITEMS = 2
-
 # Schema for creating a wedding profile
 class WeddingCreate(BaseModel):
     guest_count_estimate: int
@@ -52,11 +46,9 @@ async def create_wedding(
 ):
     """Submits a couple's wedding profile (Intake Form).
 
-    Runs the intake_planner immediately as a FREE preview (1 cheap call → budget +
-    timeline), landing the wedding in 'preview' so the couple sees real value before
-    paying. The expensive venue/supplier cascade is gated: it runs inline here only
-    when payment isn't required (``REQUIRE_PAYMENT=False``, dev/tests); otherwise
-    checkout triggers it via the plan-cascade task.
+    Runs the intake_planner to build the budget and timeline. Venue and supplier
+    matching doesn't run automatically: the catalogue doesn't cover this wedding's
+    area yet (B11), so it runs only when the couple ask for it (PD-003).
 
     This app plans one wedding (PD-001), so only the couple's own sign-in emails
     (ACCESS_BOOTSTRAP_EMAILS) may create it, and nobody can create a second one.
@@ -112,12 +104,11 @@ async def create_wedding(
     await db.commit()
     await db.refresh(wedding)
 
-    # Run the free preview now (budget + timeline). Include the paid matcher cascade
-    # inline only when payment isn't required; otherwise checkout runs it later.
+    # Build the budget and timeline now. Matching waits until the couple ask (PD-003).
     try:
         await enqueue_agent_task(
             "intake-planner",
-            {"wedding_id": wedding.id, "with_cascade": not settings.REQUIRE_PAYMENT},
+            {"wedding_id": wedding.id},
         )
     except Exception as e:
         # Log error but don't fail the request since DB record is committed
@@ -195,8 +186,7 @@ async def list_weddings(
 ):
     """Lists weddings for the authenticated user.
     
-    Weddings the user is on the access list for (PD-002), plus any legacy planner
-    links (`planner_user_id == current_user.id`).
+    Weddings the user is on the access list for (PD-002).
     """
     return await weddings_for_member(db, current_user)
 
@@ -223,11 +213,7 @@ async def get_wedding_budget(
     budget_result = await db.exec(
         select(BudgetLine).where(BudgetLine.wedding_id == wedding_id).order_by(BudgetLine.allocated_amount.desc())
     )
-    rows = budget_result.all()
-    # Teaser slice until paid (top allocations only).
-    if wedding.status == "preview":
-        return rows[:PREVIEW_BUDGET_LINES]
-    return rows
+    return budget_result.all()
 
 
 @router.get("/{wedding_id}/timeline", response_model=List[TimelineItem])
@@ -242,11 +228,7 @@ async def get_wedding_timeline(
     timeline_result = await db.exec(
         select(TimelineItem).where(TimelineItem.wedding_id == wedding_id).order_by(TimelineItem.due_at.asc())
     )
-    rows = timeline_result.all()
-    # Teaser slice until paid (earliest milestones only).
-    if wedding.status == "preview":
-        return rows[:PREVIEW_TIMELINE_ITEMS]
-    return rows
+    return timeline_result.all()
 
 
 class BookingDetail(BaseModel):

@@ -13,15 +13,15 @@ VenueFlow was built as an XPRIZE submission: a SaaS for many couples and planner
 - **Frontend** (`frontend/`): React + Vite SPA that calls the backend at `VITE_API_URL`. `localStorage` holds only the active wedding id and the dev sign-in state (the user id and a `mock-<id>` token).
 - **Sample data on the couple's own screens**: the guest list (`wedding/views/Guests.tsx`) and seating plan (`SeatingPlan.tsx`) render hard-coded sample guests and tables, not data from the backend, and don't say so (backlog B19).
 - **No send path**: agents only draft inquiry text (`draft_inquiry_email`), which the couple sends themselves. Nothing in the backend sends mail; `webhooks.py` handles inbound mail only.
-- **Auth and access** (PD-002, step 1): Firebase sign-in with Google. Email and password is planned as a fallback, but it doesn't work yet because there's no email-confirmation step (B22). A new account is created only for a verified email on a wedding's access list (`wedding_members`) or in `ACCESS_BOOTSTRAP_EMAILS`, the couple's own emails. Only those emails may create the wedding, both become owners, and nobody can create a second wedding. Levels are viewer, editor and owner, enforced in `app/api/v1/access.py`. Viewers can read but not edit or run agents. `DEVELOPMENT_MODE` and `ALLOW_MOCK_AUTH` default to `False`; local `.env` and docker-compose turn them on, and only then does a `mock-<id>` token work. There's no settings screen yet (B22); the team edits the list with `backend/manage_access.py`. Outside dev mode, the worker `/tasks/*` routes, the Stripe webhook and the inbound-email webhook each need their own secret, and refuse every call without it (see RUNBOOK).
-- **Payments**: `PAYMENTS_PROVIDER` defaults to `mock`; `REQUIRE_PAYMENT` gates the app behind the legacy checkout.
+- **Auth and access** (PD-002, step 1): Firebase sign-in with Google. Email and password is planned as a fallback, but it doesn't work yet because there's no email-confirmation step (B22). A new account is created only for a verified email on a wedding's access list (`wedding_members`) or in `ACCESS_BOOTSTRAP_EMAILS`, the couple's own emails. Only those emails may create the wedding, both become owners, and nobody can create a second wedding. Levels are viewer, editor and owner, enforced in `app/api/v1/access.py`. Viewers can read but not edit or run agents. `DEVELOPMENT_MODE` and `ALLOW_MOCK_AUTH` default to `False`; local `.env` and docker-compose turn them on, and only then does a `mock-<id>` token work. There's no settings screen yet (B22); the team edits the list with `backend/manage_access.py`. Outside dev mode, the worker `/tasks/*` routes and the inbound-email webhook each need their own secret, and refuse every call without it (see RUNBOOK).
+- **No payments** (PD-003): checkout, the payment gate, Stripe and the mock €299 payment were removed. The empty `payments` and `subscriptions` tables remain in the schema.
 - **Vendor catalogue** (`backend/app/db/seed_data_real.py`): all 25 venues have a checked date. 10 of the 26 suppliers are unchecked (`_verify: True`), and 3 of those are `_template` placeholders, not real businesses (B20). All prices are indicative (`_indicative: True`), not quotes. Regions are Irish counties; money is EUR.
 - **Stale material**: `streamlit_mock/` (the first prototype), the `.xlsx` trackers, and the XPRIZE framing in `README.md`, `docs/runway.md`, `docs/strategic-memo.md` and `docs/reviews/`. Don't take direction from them.
 
 **Where the current truth lives:**
 - **Facts about the wedding** (date, place, budget, guest count, who has access) live in [docs/product/wedding.md](../docs/product/wedding.md). Never infer or invent them. If a fact you need is marked `[GAP]` or missing, ask.
 - **Settled product decisions** are in [docs/product/decisions.md](../docs/product/decisions.md); the work queue is [docs/backlog.md](../docs/backlog.md).
-- **Legacy SaaS surfaces** (payment gate + checkout, planner and admin roles, subscriptions, marketing landing): don't extend them. Removing them is a product decision, not a cleanup.
+- **Legacy SaaS surfaces were removed** (PD-003): checkout, the planner and admin areas, subscriptions, the marketing landing and the planner role. Opening the app goes to sign-in, then the wedding. Don't bring them back without a new decision.
 
 ## Two lanes
 
@@ -71,7 +71,7 @@ uvicorn app.main:app --reload            # local API; set WORKER_BASE_URL=http:/
 
 Frontend (from `frontend/`): `npm ci`, `npm run dev`, `npm run build`. The build is the only compile check; there is no typecheck script, linter or test runner.
 
-Full stack: `docker compose` per [RUNBOOK.md](../RUNBOOK.md). Local flags: `REQUIRE_PAYMENT=False` skips the legacy payment gate; `ALLOW_MOCK_AUTH`/`DEVELOPMENT_MODE` are dev-only and must be off anywhere real data lives.
+Full stack: `docker compose` per [RUNBOOK.md](../RUNBOOK.md). Local flags: `ALLOW_MOCK_AUTH`/`DEVELOPMENT_MODE` are dev-only and must be off anywhere real data lives.
 
 ## Codebase map and traps
 
@@ -81,7 +81,7 @@ Full stack: `docker compose` per [RUNBOOK.md](../RUNBOOK.md). Local flags: `REQU
 - Python: PEP 8, about 100 columns. Comments only when the *why* is non-obvious; never reference the current task.
 - `docs/architecture.md` (agent contract, flows), `docs/ERD.md` (schema), `docs/agent-decision-log.md` (log vocabulary).
 - Frontend traps:
-  - Routes live in `src/app/App.tsx`. The couple's workspace is `src/app/wedding/`; `planner/` and `admin/` are legacy SaaS surfaces.
+  - Routes live in `src/app/App.tsx`. The couple's workspace is `src/app/wedding/`; it's the only workspace.
   - The app uses `react-router` v7, not `react-router-dom`.
   - Tailwind v4 has no config file; theme tokens are in `src/styles/theme.css`. Use semantic utilities (`bg-background`, `text-primary`), not hex.
   - Brand primitives live in `src/app/design-system/primitives.tsx`; shadcn components live in `src/app/components/ui/`.

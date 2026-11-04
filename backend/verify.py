@@ -33,7 +33,7 @@ def run_verification():
         # Check users
         users = session.exec(select(User)).all()
         print(f"   * Users seeded: {len(users)}")
-        assert len(users) == 3, f"Expected 3 users, got {len(users)}"
+        assert len(users) == 2, f"Expected 2 users, got {len(users)}"  # demo planner removed (PD-003)
         
         # Check venues
         venues = session.exec(select(Venue)).all()

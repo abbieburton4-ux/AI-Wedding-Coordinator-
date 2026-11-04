@@ -109,6 +109,12 @@ async def run_async_verification():
             print(f"   * Intake planner audit logs: {len(logs)}")
             assert len(logs) == 1
             assert logs[0].status == "success"
+
+            # Success moves the wedding straight to planning; there's no paid preview (PD-003).
+            w_after = (await db.exec(select(Wedding).where(Wedding.id == "wedding_intake_test"))).first()
+            await db.refresh(w_after)
+            assert w_after.status == "planning", w_after.status
+            print("   * Wedding status after a successful plan: planning")
             
             
             # --- TEST 2: INTAKE PLANNER GUARDRAIL BLOCK (UNREALISTIC BUDGET) ---
@@ -148,6 +154,9 @@ async def run_async_verification():
             # Verify no budget lines or timeline items were inserted
             bl_result = await db.exec(select(BudgetLine).where(BudgetLine.wedding_id == "wedding_intake_test"))
             assert len(bl_result.all()) == 0
+            w_blocked = (await db.exec(select(Wedding).where(Wedding.id == "wedding_intake_test"))).first()
+            await db.refresh(w_blocked)
+            assert w_blocked.status == "intake", w_blocked.status
             
             # Verify audit log reflects guardrail block
             log_result = await db.exec(

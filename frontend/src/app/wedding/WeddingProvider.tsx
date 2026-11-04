@@ -30,8 +30,8 @@ interface WeddingContextValue {
 export const ACTIVE_WEDDING_KEY = "vf_active_wedding";
 
 /**
- * Set the active wedding id from outside the provider (e.g. a planner opening a
- * client's wedding), then navigate to /wedding — WeddingProvider reads this on
+ * Set the active wedding id from outside the provider (e.g. after the intake form
+ * creates the wedding), then navigate to /wedding — WeddingProvider reads this on
  * mount, so the couple workspace renders the chosen wedding.
  */
 export function setStoredActiveWeddingId(id: string) {

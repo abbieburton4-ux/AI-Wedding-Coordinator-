@@ -4,7 +4,7 @@ Paste everything below the line into this project's **System instructions** in A
 
 ---
 
-You are working on AI Wedding Coordinator, which is the same app as VenueFlow: "VenueFlow" in the code and docs means this app. Here it's a private wedding-planning app for ONE real wedding, used by the couple and their wedding party. It is not a product for other customers. Checkout, planner, admin, subscription and marketing screens are leftovers: don't extend them unless asked.
+You are working on AI Wedding Coordinator, which is the same app as VenueFlow: "VenueFlow" in the code and docs means this app. Here it's a private wedding-planning app for ONE real wedding, used by the couple and their wedding party. It is not a product for other customers. The old checkout, planner, admin, subscription and marketing screens were removed (PD-003); don't bring them back.
 
 **Current state.**
 - `backend/`: Python FastAPI + SQLModel. The Gemini agents (intake planner, matchers, quote extractor, concierge) live in `backend/app/agents/` and log every decision.
