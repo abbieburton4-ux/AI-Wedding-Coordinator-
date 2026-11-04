@@ -5,6 +5,26 @@ Newest entries at the top. One dated section per working session.
 
 ---
 
+## 2026-11-04 (product) — Wedding facts recorded, PD-001 ratified
+
+**Context:** The product lane interviewed the owner (one of the couple) to fill in
+`docs/product/wedding.md`, which was all `[GAP]`, and to confirm or correct PD-001.
+
+**Done:** wedding facts recorded in the owner's words, roles only. The owner agreed
+to these facts being in the public repo. PD-001 is ratified (single-wedding app). The
+backlog is re-ranked against the couple's must-haves, with new items B22 (owner-managed
+access), B23 (budgeting) and B24 (checklist).
+
+### Follow-ups / not done yet
+- `.agents/AGENTS.md:9` and `.agents/ai-studio-system-instructions.md` still call
+  PD-001 "proposed" and say the app is used by the wedding party; access is couple and
+  family for now. This needs an engineering edit.
+- Proposed PDs for the couple next: access and permissions (B10/B22), hosting (B14),
+  removing legacy SaaS surfaces (B12), then the scope of B23, B24 and B19.
+- B24: check how the planner sets `TimelineItem.due_at` when the date is TBD.
+
+---
+
 ## 2026-06-02 (fix) — Timeline fitted to the actual runway
 
 **Context:** A couple starting ~7 months before a Dec-2026 wedding got a timeline running
