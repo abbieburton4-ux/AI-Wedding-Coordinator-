@@ -6,6 +6,10 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 ---
 
+## Next up
+
+*(Empty. The first autopilot run turns the ranking under "Open" into this ordered list, each item marked `ready` or `needs-owner: <question>`. See `docs/autonomy.md`.)*
+
 ## Open
 
 Items B6–B21 come from the 2026-11-04 agent-setup audit, re-checked against the restored backend.
@@ -20,7 +24,7 @@ Ranked against the couple's must-haves in `wedding.md` (1. in depth budgeting, 2
 4. **Must-have 3, guest planning:** B19.
 5. **Vendor catalogue for Chicago:** the rest of B11, then B20. These rank below the must-haves because the couple are choosing a venue off their own shortlist and didn't list vendor matching as a must-have.
 6. **Honesty fixes for data the couple will see:** B8.
-7. **Housekeeping:** B6 (an owner call, quick), B16, B17, B21, B15, B13.
+7. **Housekeeping:** B6 (an owner call, quick), B17, B15, B13.
 
 Within each tier, how a must-have gets built is still to be decided. Each one needs a short proposed PD on scope before engineering starts.
 
@@ -35,7 +39,6 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
   - *Depends on:* PD-002 (ratified). The email-confirmation step approved by the owner, 2026-11-04, since it's an email to a family member (raised at the 2026-11-04 checkpoint).
 - **B19 — Guest planning (must-have 3), but the guest list and seating plan show unlabelled sample data.** `frontend/src/app/wedding/views/Guests.tsx:9` (`GUESTS`, made-up names with dietary tags) and `SeatingPlan.tsx:13` (`GUESTS`, `INITIAL_TABLES`) are hard-coded and never call the API, on the couple's own workspace (rule 10). The backend has a `Guest` table (`backend/app/db/models.py:322`: name, email, phone, RSVP status, `dietary`, plus-one, table number), but no guest endpoint exists in `api/v1/endpoints/`. *Why it matters:* the couple listed "guest planning (list, food, seating)" as must-have 3, for 225 invited guests. Today nothing they enter would be saved. The "food" part includes dietary needs, which are health data (AGENTS.md rule 3). They must never appear in git, fixtures, issues, logs or `AgentDecisionLog` payloads. In the app, family (view only) can see them: "family can see dietary notes" (owner, 2026-11-04, `wedding.md`). *Fix:* label the sample data as sample now, as a quick and separate step. Then a proposed PD on guest-planning scope (what "food" covers, what seating needs), then backend guest endpoints and wiring. How it's built is not yet decided. *Depends on:* B10/B22 before real guest data goes in, and that PD.
 - **B20 — The catalogue and its docstring overstate what's verified.** In `backend/app/db/seed_data_real.py`, 10 of 26 suppliers are unchecked (`_verify: True`) and 3 are `_template` placeholders with made-up names (lines 340–361). The docstring (lines 26–28) promises that inquiries route through `agents.resolve_inquiry_recipient` to an owner-controlled inbox, but no such function exists. *Fix:* check or remove the unchecked rows (`add-vendors` skill), keep templates out of recommendations, and correct the docstring.
-- **B21 — The `sqlmodel` ceiling isn't enforced.** AGENTS.md rule 9 says to keep `sqlmodel` below 0.0.25 until the naive datetimes are fixed, but `backend/requirements.txt:3` is `sqlmodel>=0.0.16`, so a fresh install can pull a newer version. *Fix:* pin `sqlmodel>=0.0.16,<0.0.25`, after confirming which version the verify scripts pass on.
 
 ### Making it fit this wedding
 
@@ -48,9 +51,16 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B13 — Stale material from the prototype and the XPRIZE.** `streamlit_mock/` (still referenced by `README.md`, `CONTRIBUTING.md`, `docs/runway.md`, `docs/reviews/2026-05-27.md` and `scripts/build_tracker.py`), the `.xlsx` trackers, and the XPRIZE framing in `README.md`, `docs/runway.md`, `docs/strategic-memo.md` and `docs/reviews/`. *Fix:* archive or delete them (owner's call).
 - **B14 — The deploy workflow would publish a frontend with no backend.** `.github/workflows/deploy.yml` publishes `frontend/` to GitHub Pages at VenueFlow's domain, `venueflow.ie` (`frontend/public/CNAME`), on every push to `main`. It sets no `VITE_API_URL`, so the published site would have no backend. No runs are recorded on this repo. *Fix:* decide where the app and its backend are hosted, then point the workflow at that. Keep or drop the domain as part of that decision. *Depends on:* a PD on hosting (couple's call).
-- **B15 — No CI on pull requests.** Nothing runs the backend verify scripts or the frontend build on PRs. *Fix:* a small workflow running the `verify` skill's steps.
-- **B16 — `greenlet` is missing from `requirements.txt`.** SQLAlchemy's async engine needs it, and it isn't installed automatically on Apple Silicon, so `verify_endpoints.py` and `verify_agents.py` crash there. *Fix:* add it, with the one-line reason rule 9 asks for.
+- **B15 — CI is new and untested.** `.github/workflows/ci.yml` runs the backend verify scripts and the frontend build on every PR. *Fix:* confirm the first run passes, then make `CI / backend` and `CI / frontend` required checks (see `docs/autonomy.md`).
 - **B17 — The verify scripts rewrite tracked files.** `backend/endpoints_test.db` and its `-shm`/`-wal` files are committed, and every run of `verify_endpoints.py` changes them; the other scripts leave untracked `-shm`/`-wal` files. `.gitignore` already lists `endpoints_test.db*`, but the files were committed before that. *Fix:* `git rm --cached` them and widen the ignore rule to `backend/*_test.db*`.
+- **B25 — Unattended agents need a first test.** `.github/workflows/claude-agents.yml` is new, and its third-party plugins aren't pinned to a version. Known gaps from its review (2026-11-04):
+  - Nothing scans agent commits for secrets: the gitleaks hook runs only locally, and CI has no gitleaks step.
+  - The tool list allows `git push origin agent/x --delete` and edits to `.claude/hooks/`.
+  - The "Next up" list carries no date, so "older than 14 days" can't be checked.
+  - With no open PR, there's nowhere to post `[BLOCKED]`.
+  - The `reply` job installs no dependencies, so it can't run the verify gate.
+  
+  *Fix:* follow the test checklist in `docs/autonomy.md` before relying on it, then close these gaps.
 
 Not carried over from the audit, because the restored backend already covers them: invented concierge prices in the old `mockService.ts` (the concierge now calls Gemini through the backend), data living in one browser (the backend has a database), and "no real AI" (the agents call Gemini).
 
@@ -63,6 +73,8 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-04 | **B21** — `sqlmodel` ceiling not enforced (CI pulled 0.0.48 and the verify scripts failed on naive datetimes) | #6 |
+| 2026-11-04 | **B16** — `greenlet` missing from `requirements.txt` (backend verify crashed on Apple Silicon and in CI) | #6 |
 | 2026-11-04 | **B12** — legacy SaaS screens, the payment gate and the mock €299 payment, removed per PD-003 | `fd3157b5` (PD-003) |
 | 2026-11-04 | **B9** — hard-coded admin agent log: moot, the admin console was removed (PD-003) | `fd3157b5` (PD-003) |
 | 2026-11-04 | **B18** — metrics reporting 0.0 confidence: moot, `/metrics` was removed (PD-003) | `fd3157b5` (PD-003) |
