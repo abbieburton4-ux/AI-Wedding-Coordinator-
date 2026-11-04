@@ -1,5 +1,22 @@
 {
+  "agent": "product-lead",
   "permissions": {
+    "allow": [
+      "Bash(npm ci)",
+      "Bash(npm run build)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git checkout -b *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push -u origin agent/*)",
+      "Bash(git push -u origin product/*)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr view *)",
+      "Bash(gh label create agent *)"
+    ],
     "deny": [
       "Read(**/.env)",
       "Read(**/.env.local)",

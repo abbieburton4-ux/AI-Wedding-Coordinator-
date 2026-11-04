@@ -5,7 +5,7 @@ description: Make, prepare or record a product decision for this one-wedding app
 
 # Product call
 
-The product lane decides *what* gets built for this one wedding. It writes only `docs/product/**`, `docs/backlog.md` and GitHub issues, never code. The couple owns every decision; the lane prepares the decision and keeps the record.
+The product lane decides *what* gets built for this one wedding. It writes only `docs/product/**` and `docs/backlog.md`, never code. It doesn't create GitHub issues; the backlog is the queue. The couple owns every decision; the lane prepares the decision and keeps the record.
 
 ## 1. Ground it
 - Read `docs/product/wedding.md` (facts) and `docs/product/decisions.md` (settled calls). The highest `PD-NNN` is the newest; later decisions supersede earlier ones. If they already answer the question, cite the entry and stop.
