@@ -10,7 +10,8 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 *Updated 2026-11-04 by the product lane. Re-rank if this date is more than 14 days old.*
 
-0. **B31** — point the autopilot workflow at the owner's Claude subscription. `ready` (owner connected it 2026-11-04)
+0. **B31** — point the autopilot workflow at the owner's Claude subscription. `needs-owner: agents may not change .github/; the owner makes this edit or runs it in their own engineer session`
+0b. **B32** — two Claude reply bots and an automatic PR review. `needs-owner: (a) turn off the extra reply bot? (b) keep the automatic review on every PR?`
 1. **B28** — label every sample figure on the couple's screens as sample. `ready`
 2. **B26** — stop seeding demo couples and weddings outside dev mode. `ready`
 3. **B22** — PD-002 step 2: access settings screen, owner-only access changes, email confirmation for password sign-in. `ready` (PD-002 ratified)
@@ -84,6 +85,8 @@ Not carried over from the audit, because the restored backend already covers the
 ---
 
 - **B31 — The autopilot can't sign in to Claude.** The owner connected their Claude subscription with `/install-github-app` (2026-11-04), which stored `CLAUDE_CODE_OAUTH_TOKEN`. The workflow (`.github/workflows/claude-agents.yml`, lines 52 and 112) still reads `ANTHROPIC_API_KEY`, which doesn't exist, so every run fails. *Fix:* switch both lines to `claude_code_oauth_token`, per `docs/autonomy.md` step 3. *Depends on:* nothing.
+
+- **B32 — Two "@claude" reply bots, and an automatic review on every PR.** `/install-github-app` opened PR #11, which the owner merged on 2026-11-04. It added `.github/workflows/claude.yml`, which answers any "@claude" comment, and `claude-code-review.yml`, which reviews every PR when it's opened or updated. `claude-agents.yml` already answers "@claude" with the repo's autopilot rules, so once B31 is fixed, each owner comment would start two separate runs. Only one of them follows this repo's rules. The automatic review also uses subscription allowance on every agent PR, which the repo's own reviewer already checks. *Fix (recommended):* turn off `claude.yml`. Whether to keep the automatic review is the owner's call. *Depends on:* the owner's answer. It's a `.github/` change, so it needs an owner-run session.
 
 - **B26 — Demo data is seeded into every database.** `seed_database()` (`backend/app/db/seed.py`) runs on every startup, production included. It adds demo users (`couple_1`, `couple_2`, `planner_1`) and demo weddings when the database is empty. *Why it matters:* the real database would hold made-up couples, and `planner_1`'s email may belong to a real business (rule 3). *Fix:* seed only in `DEVELOPMENT_MODE`; keep the vendor catalogue seed separate.
 - **B27 — The migration check can't see Postgres-only drift.** `verify_migrations.py` runs on SQLite, which doesn't compare CHECK constraints or server defaults. `env.py` has no `render_as_batch` and no constraint naming convention, so the first migration that alters or drops a column or constraint may fail on SQLite or can't name the FK. *Fix:* add a naming convention and `render_as_batch=True` before the next schema change, and run the migration check against Postgres in CI once hosting is decided (B14).
