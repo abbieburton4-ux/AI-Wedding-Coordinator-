@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
 from typing import Optional
 from app.config import settings
 from app.db.session import get_db
@@ -56,7 +55,7 @@ async def get_current_user(
         
         if not user:
             # Auto-create mock user to prevent FK violations during debug
-            role = "planner" if "planner" in user_id else "couple"
+            role = "couple"
             user = User(
                 id=user_id,
                 role=role,
@@ -167,61 +166,11 @@ async def _email_is_allowed(db: AsyncSession, email: str) -> bool:
 
 @router.get("/me")
 async def read_me(current_user: User = Depends(get_current_user)):
-    """Returns the authenticated user's profile + role.
-
-    The frontend calls this right after sign-in to decide which workspace to route
-    to (couple -> /wedding, planner -> /planner, admin -> /admin).
-    """
+    """Returns the authenticated user's profile. The frontend calls it right after
+    sign-in; everyone goes to the wedding workspace (PD-003)."""
     return {
         "id": current_user.id,
         "role": current_user.role,
         "name": current_user.name,
         "email": current_user.email,
-    }
-
-
-class PlannerLoginPayload(BaseModel):
-    email: str
-
-
-@router.post("/planner")
-async def planner_login(
-    payload: PlannerLoginPayload,
-    db: AsyncSession = Depends(get_db)
-):
-    """Legacy planner login for local development only.
-
-    It has no password, so it exists only when mock sign-in is on.
-    """
-    if not (settings.DEVELOPMENT_MODE and settings.ALLOW_MOCK_AUTH):
-        raise HTTPException(status_code=404, detail="Not found")
-    result = await db.exec(select(User).where(User.email == payload.email))
-    user = result.first()
-    
-    if not user:
-        if settings.DEVELOPMENT_MODE and settings.ALLOW_MOCK_AUTH:
-            # Auto-onboard the pilot planner to streamline distribution
-            user_id = payload.email.split("@")[0] + "_planner"
-            user = User(
-                id=user_id,
-                role="planner",
-                name=f"Pilot Planner ({payload.email.split('@')[0]})",
-                email=payload.email,
-                phone="+353871111111"
-            )
-            db.add(user)
-            await db.commit()
-            await db.refresh(user)
-        else:
-            raise HTTPException(status_code=404, detail="Planner profile not found. Contact administration.")
-            
-    if user.role != "planner":
-        raise HTTPException(status_code=403, detail="Access denied. User role is not planner.")
-    
-    token = f"mock-{user.id}"
-
-    return {
-        "token": token,
-        "role": "planner",
-        "name": user.name
     }

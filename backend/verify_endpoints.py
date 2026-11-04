@@ -37,21 +37,21 @@ def test_api_suite():
         assert res.status_code == 200
         assert res.json()["status"] == "healthy"
         
-        # 3. Auth Router
-        print("3. Verifying planner auth login endpoints...")
-        # Success Auth Path
-        res = c.post("/api/v1/auth/planner", json={"email": "maryaoife@weddingwonders.ie"})
+        # 3. Auth Router (the legacy planner login was removed in PD-003)
+        print("3. Verifying dev sign-in and that the legacy business routes are gone...")
+        token = "mock-couple_test"
+        res = c.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
         assert res.status_code == 200
-        auth_data = res.json()
-        assert "token" in auth_data
-        assert auth_data["role"] == "planner"
-        token = auth_data["token"]
-        print(f"   * Login Success: Obtained token '{token}'")
-        
-        # Unauthorized check: invalid roles
-        res = c.post("/api/v1/auth/planner", json={"email": "clara.sean@wedding.ie"})
-        assert res.status_code == 403
-        print("   * Login Safeguard: Successfully blocked non-planner email login")
+        assert res.json()["role"] == "couple"
+        print(f"   * Login Success: dev sign-in as '{token}'")
+        assert c.post("/api/v1/auth/planner", json={"email": "x@example.test"}).status_code == 404
+        assert c.post("/api/v1/payments/checkout", json={"wedding_id": "x"},
+                      headers={"Authorization": f"Bearer {token}"}).status_code == 404
+        assert c.get("/api/v1/metrics", headers={"Authorization": f"Bearer {token}"}).status_code == 404
+        assert c.post("/api/v1/webhooks/stripe", json={}).status_code == 404
+        assert c.post("/api/v1/webhooks/debug/stripe-mock?wedding_id=x").status_code == 404
+        assert c.post("/tasks/plan-cascade", json={"wedding_id": "x"}).status_code == 404
+        print("   * Removed: planner login, checkout, metrics and the Stripe webhook (PD-003)")
         
         # 4. Weddings CRUD & Auto-trigger Intake Planner
         print("4. Verifying Wedding creations (P0 Intake Trigger)...")
@@ -63,8 +63,22 @@ def test_api_suite():
             "ceremony_type": "Civil/Humanist",
             "style_notes": "Modern minimalist aesthetic with rustic touches."
         }
-        res = c.post("/api/v1/weddings/", json=wedding_payload, headers=headers)
+        # Creating a wedding queues only the planner, never automatic vendor matching (PD-003, B11).
+        from app.api.v1.endpoints import weddings as weddings_module
+        queued = []
+        real_enqueue = weddings_module.enqueue_agent_task
+
+        async def _record(task, payload):
+            queued.append((task, payload))
+            return True
+
+        weddings_module.enqueue_agent_task = _record
+        try:
+            res = c.post("/api/v1/weddings/", json=wedding_payload, headers=headers)
+        finally:
+            weddings_module.enqueue_agent_task = real_enqueue
         assert res.status_code == 201
+        assert queued == [("intake-planner", {"wedding_id": res.json()["id"]})], queued
         wedding = res.json()
         wedding_id = wedding["id"]
         assert wedding["status"] == "intake"
@@ -115,7 +129,7 @@ def test_api_suite():
         logs = res.json()
         print(f"   * Logs read: Fetched {len(logs)} decision log traces")
         
-        # Export Redacted CSV (use dynamically created wedding owned by our planner)
+        # Export Redacted CSV (the wedding our test couple created)
         res = c.get(f"/api/v1/weddings/{wedding_id}/decisions/export", headers=headers)
         assert res.status_code == 200
         assert "text/csv" in res.headers["content-type"]
@@ -168,12 +182,10 @@ def test_api_suite():
 
         settings.ALLOW_MOCK_AUTH = False
         try:
-            res = c.post("/api/v1/auth/planner", json={"email": "maryaoife@weddingwonders.ie"})
-            assert res.status_code == 404
             assert c.get("/api/v1/auth/me", headers=viewer_headers).status_code == 401
         finally:
             settings.ALLOW_MOCK_AUTH = True
-        print("   * Sign-in: planner login and mock tokens are off when mock sign-in is off")
+        print("   * Sign-in: mock tokens are off when mock sign-in is off")
 
         import asyncio
         from app.db.session import async_session_maker
@@ -205,14 +217,12 @@ def test_api_suite():
         asyncio.run(_signup_rules())
         print("   * Sign-up: only listed or bootstrap emails may create an account; list rows link on sign-in")
 
-        # More viewer limits: replan, supplier matching, checkout and the voice agent.
+        # More viewer limits: replan, supplier matching and the voice agent.
         assert c.post(f"/api/v1/weddings/{wedding_id}/replan", headers=viewer_headers).status_code == 403
         assert c.post(f"/api/v1/weddings/{wedding_id}/suppliers", json={"category": "photography"},
                       headers=viewer_headers).status_code == 403
-        assert c.post("/api/v1/payments/checkout", json={"wedding_id": wedding_id},
-                      headers=viewer_headers).status_code == 403
         assert c.get("/api/v1/voice/token", headers=viewer_headers).status_code == 403
-        print("   * Viewer: blocked from replan, supplier matching, checkout and the voice agent")
+        print("   * Viewer: blocked from replan, supplier matching and the voice agent")
 
         # HS256 tokens: only with a configured secret, a matching signature and an expiry.
         import datetime as _dt
@@ -280,8 +290,6 @@ def test_api_suite():
             settings.INTERNAL_TASKS_SECRET = "internal-test-secret"
             assert c.post("/tasks/quote-extractor", json={"booking_id": "x", "email_body": "y"},
                           headers={"X-Internal-Token": "wrong"}).status_code == 403
-            assert c.post("/api/v1/webhooks/stripe", json={"type": "checkout.session.completed"}
-                          ).status_code == 403
             assert c.post("/api/v1/webhooks/sendgrid/inbound",
                           data={"to": "booking-x@inbox.venueflow.ie", "text": "EUR 1"}).status_code == 403
             print("   * Worker routes and webhooks refuse calls without their secret")
@@ -291,16 +299,6 @@ def test_api_suite():
             settings.DEVELOPMENT_MODE = True
             settings.ACCESS_BOOTSTRAP_EMAILS = ""
             settings.INTERNAL_TASKS_SECRET = None
-
-        # 8. Operational Telemetry Metrics
-        print("8. Verifying metrics dashboard calculations...")
-        res = c.get("/api/v1/metrics", headers=headers)
-        assert res.status_code == 200
-        metrics = res.json()
-        assert "total_weddings" in metrics
-        assert "total_decisions_executed" in metrics
-        assert "conversions" in metrics
-        print(f"   * Telemetry success: Total Weddings={metrics['total_weddings']}, Decisions={metrics['total_decisions_executed']}")
         
     print("\n--- ALL API SURFACE ENDPOINT INTEGRATION TESTS PASSED ---")
 

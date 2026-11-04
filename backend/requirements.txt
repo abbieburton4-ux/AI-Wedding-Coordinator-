@@ -15,5 +15,3 @@ pytest>=7.0.0
 pytest-mock>=3.6.0
 pandas>=2.0.0
 plotly>=5.15.0
-# Only used when PAYMENTS_PROVIDER=stripe; mock checkout works without it (lazy import).
-stripe>=8.0.0

@@ -26,8 +26,3 @@ export const POLL_INTERVAL_MS = 2000;
  */
 export const POLL_TIMEOUT_MS = 60000;
 
-/**
- * One-time coordinator fee shown on the couple checkout (display only — the
- * authoritative amount is set server-side by COUPLE_PRICE_EUR).
- */
-export const COUPLE_PRICE_EUR = 299;

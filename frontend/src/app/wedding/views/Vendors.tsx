@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Icon } from "../../planner/Icon";
+import { Icon } from "../../shared/Icon";
 import { IMG } from "../../design-system/assets";
 import { useWedding, useAgentMatcher, useApi, USE_FASTAPI_BACKEND } from "../../../app/api";
 import { useActiveWedding } from "../WeddingProvider";

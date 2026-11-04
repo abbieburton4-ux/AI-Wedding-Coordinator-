@@ -1,5 +1,5 @@
 /**
- * Shared image assets used across Landing and Experience views.
+ * Shared image assets.
  * Local JPGs in src/assets/images/ — Vite handles hashing and bundling at build time.
  */
 import heroCouple from "../../assets/images/heroCouple.jpg";
