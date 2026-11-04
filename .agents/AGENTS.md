@@ -1,10 +1,12 @@
-# AI Wedding Coordinator — agent instructions
+# AI Wedding Coordinator (VenueFlow) — agent instructions
 
 Shared by every agent that works on this repo. Claude Code imports this file. Google AI Studio can't read it, so a condensed copy lives in [ai-studio-system-instructions.md](ai-studio-system-instructions.md); keep the two in sync. Keep this file tool-neutral.
 
 ## What this is
 
-A private wedding-planning app for **one wedding**, used by the couple and their wedding party. It is a hard fork of VenueFlow, an XPRIZE submission built as a SaaS for many couples and planners; upstream is not merged back. A later single-page rewrite (36d78515) was reverted in #1, so the FastAPI backend is the real app again.
+**AI Wedding Coordinator and VenueFlow are the same app.** This repo, `abbieburton4-ux/AI-Wedding-Coordinator-`, is the owner's copy of VenueFlow (a GitHub fork of `alanmaizon/VenueFlow`, homepage `venueflow.ie`). "VenueFlow" in the code, docs and history means this app, not a separate product. Changes here aren't merged back to `alanmaizon/VenueFlow`.
+
+VenueFlow was built as an XPRIZE submission: a SaaS for many couples and planners. Here it's a private wedding-planning app for **one wedding**, used by the couple and their wedding party (PD-001, proposed). A later single-page rewrite (36d78515) was reverted in #1, so the FastAPI backend is the real app again.
 
 **What's actually there today:**
 - **Backend** (`backend/`): FastAPI + SQLModel. Gemini agents (intake planner, venue and supplier matchers, quote extractor, concierge) run behind `run_agent` and write an `AgentDecisionLog` row per decision. Tests mock Gemini.
@@ -34,7 +36,7 @@ These exist because the data and people are real. They override convenience and 
 2. **Never invent vendor or wedding facts.** That includes prices, contact details, availability, dates and policies. Real vendor rows carry a source and a checked date (see the `add-vendors` skill). Indicative prices are shown as indicative, never as quotes. `source="demo_generated"` vendors must never appear in this wedding's plan.
 3. **Guest and party data is personal data.** Never commit real names, emails, phones or addresses. Never paste them into issues, commit messages, logs or test fixtures; seeds and tests stay fictional. Dietary and accessibility notes are health data. Keep `AgentDecisionLog` payloads to IDs and the minimum context the decision needs.
 4. **Money and commitments belong to the couple.** Agents never mark a payment paid, a booking confirmed, or a contract accepted or signed, and never create a real charge (`PAYMENTS_PROVIDER` stays `mock`). Amounts are floats today: don't add compounding float arithmetic, and use integer cents or `Decimal` for new money fields.
-5. **No secrets in git or in the browser**, not even commented out. Anything in `frontend/src/` or a `VITE_*` variable ships to every visitor, so Gemini and other private keys live only in backend config. The Firebase web config is public by design; service-account keys are not. The gitleaks pre-commit hook stays on; never use `--no-verify`. A Gemini key exists in upstream history and is compromised; never reuse it.
+5. **No secrets in git or in the browser**, not even commented out. Anything in `frontend/src/` or a `VITE_*` variable ships to every visitor, so Gemini and other private keys live only in backend config. The Firebase web config is public by design; service-account keys are not. The gitleaks pre-commit hook stays on; never use `--no-verify`. A Gemini key exists in this repo's git history and is compromised; never reuse it.
 6. **Real data needs a migration path.** There are no Alembic migrations yet; tables come from `create_all`. Before any schema change once real data exists, stop and surface: the first such change must introduce migrations. Agents never write to a production database directly.
 7. **Every Gemini agent follows the decision-log contract** (`agent-features` skill): log row first, domain mutation last, guardrails enforced, covered in `verify_agents.py`.
 8. **Never change a test or check to make it pass**, and never silence a type error with `any` or `@ts-ignore`. If one looks wrong, surface the conflict.
