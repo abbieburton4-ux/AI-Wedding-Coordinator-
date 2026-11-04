@@ -15,7 +15,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 1. **B28** — label every sample figure on the couple's screens as sample. `ready`
 2. **B26** — stop seeding demo couples and weddings outside dev mode. `ready`
 3. **B22** — PD-002 step 2: access settings screen, owner-only access changes, email confirmation for password sign-in. `ready` (PD-002 ratified)
-4. **B23** — in depth budgeting. `ready` for the scope ratified in PD-004 (option C). `needs-owner: PD-004 call (b), AI-suggested starting split` blocks only that part
+4. **B23** — in depth budgeting. `ready` (PD-004 ratified: option C, plus an AI-suggested starting split)
 5. **B14** — where the app and its data live, and what that costs. `needs-owner: approve the hosting recommendation (the product lane writes the PD next, with costs)`
 6. **B24** — planning checklist. `needs-owner: checklist scope PD (unfixed date; which Jewish traditions), to be proposed`
 7. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
