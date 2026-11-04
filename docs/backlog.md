@@ -8,7 +8,8 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 ## Open
 
-*(nothing currently — last sweep closed B1–B5 on 2026-05-27)*
+- **B6 — A third party's contacts are in a public repo** (added 2026-11-04). `planner-targets.xlsx` (added in `3d728ff3`) is upstream's sales prospect list: named people at real planning businesses, with contact details. *Why it matters:* it's other people's personal data, published. *Fix:* the owner decides whether to delete it; if deleted, it stays in git history unless history is rewritten.
+- **B7 — Unmeasured confidence is logged as 1.0** (added 2026-11-04). `backend/app/agents/orchestrator.py:65` defaults `confidence_score` to `1.0` when an agent returns no score, so the decision log shows full confidence that was never measured (AGENTS.md rule 10). *Fix:* default to `None`; the column is already `Optional[float]` (`backend/app/db/models.py:360`), so no schema change is needed.
 
 ---
 
