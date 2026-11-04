@@ -8,7 +8,18 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 ## Next up
 
-*(Empty. The first autopilot run turns the ranking under "Open" into this ordered list, each item marked `ready` or `needs-owner: <question>`. See `docs/autonomy.md`.)*
+*Updated 2026-11-04 by the product lane. Re-rank if this date is more than 14 days old.*
+
+1. **B28** — label every sample figure on the couple's screens as sample. `ready`
+2. **B26** — stop seeding demo couples and weddings outside dev mode. `ready`
+3. **B22** — PD-002 step 2: access settings screen, owner-only access changes, email confirmation for password sign-in. `ready` (PD-002 ratified)
+4. **B23** — in depth budgeting. `needs-owner: PD-004 calls (a) scope A, B or C, and (b) AI-suggested starting split`
+5. **B14** — where the app and its data live, and what that costs. `needs-owner: approve the hosting recommendation (the product lane writes the PD next, with costs)`
+6. **B24** — planning checklist. `needs-owner: checklist scope PD (unfixed date; which Jewish traditions), to be proposed`
+7. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
+8. **B8** — record missing token counts as empty, not 0. `ready`
+9. **B17** — stop tracking the test database files. `ready`
+10. **B6** — delete `planner-targets.xlsx` (other people's contacts). `needs-owner: delete it?`
 
 ## Open
 
@@ -38,6 +49,7 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
   - **Email and password fallback:** PD-002 ratified it, but it doesn't work yet. New accounts need a verified email, and the app has no "confirm your email" step, so family without a Google account can't get in. Adding that step means Firebase sends a confirmation email when the person asks for one, in the same way as the password reset PD-002 already accepts. Until it exists, the setup guide tells the couple to turn on Google sign-in only.
   - *Depends on:* PD-002 (ratified). The email-confirmation step approved by the owner, 2026-11-04, since it's an email to a family member (raised at the 2026-11-04 checkpoint).
 - **B19 — Guest planning (must-have 3), but the guest list and seating plan show unlabelled sample data.** `frontend/src/app/wedding/views/Guests.tsx:9` (`GUESTS`, made-up names with dietary tags) and `SeatingPlan.tsx:13` (`GUESTS`, `INITIAL_TABLES`) are hard-coded and never call the API, on the couple's own workspace (rule 10). The backend has a `Guest` table (`backend/app/db/models.py:322`: name, email, phone, RSVP status, `dietary`, plus-one, table number), but no guest endpoint exists in `api/v1/endpoints/`. *Why it matters:* the couple listed "guest planning (list, food, seating)" as must-have 3, for 225 invited guests. Today nothing they enter would be saved. The "food" part includes dietary needs, which are health data (AGENTS.md rule 3). They must never appear in git, fixtures, issues, logs or `AgentDecisionLog` payloads. In the app, family (view only) can see them: "family can see dietary notes" (owner, 2026-11-04, `wedding.md`). *Fix:* label the sample data as sample now, as a quick and separate step. Then a proposed PD on guest-planning scope (what "food" covers, what seating needs), then backend guest endpoints and wiring. How it's built is not yet decided. *Depends on:* B10/B22 before real guest data goes in, and that PD.
+- **B28 — Sample data on the couple's screens looks real.** The guest list (`Guests.tsx`, `GUESTS`), seating plan (`SeatingPlan.tsx`, `GUESTS`, `INITIAL_TABLES`), budget fallback (`Budget.tsx`, `STATIC_CATEGORIES` and the "$24,500 of $35,000" totals) and checklist fallback (`Timeline.tsx`, `STATIC_ITEMS`) show made-up content with no label (rule 10). *Why it matters:* the couple and family could mistake made-up guests or dollar totals for their own. *Fix:* a clear, visible "Sample data, not your wedding" label on each of these screens wherever sample content shows. No new features and no data changes. This is the quick first step split out of B19, B23 and B24. *Depends on:* nothing (rule 10).
 - **B20 — The catalogue and its docstring overstate what's verified.** In `backend/app/db/seed_data_real.py`, 10 of 26 suppliers are unchecked (`_verify: True`) and 3 are `_template` placeholders with made-up names (lines 340–361). The docstring (lines 26–28) promises that inquiries route through `agents.resolve_inquiry_recipient` to an owner-controlled inbox, but no such function exists. *Fix:* check or remove the unchecked rows (`add-vendors` skill), keep templates out of recommendations, and correct the docstring.
 
 ### Making it fit this wedding
