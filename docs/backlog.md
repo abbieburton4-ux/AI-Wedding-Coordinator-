@@ -24,7 +24,7 @@ Ranked against the couple's must-haves in `wedding.md` (1. in depth budgeting, 2
 4. **Must-have 3, guest planning:** B19.
 5. **Vendor catalogue for Chicago:** the rest of B11, then B20. These rank below the must-haves because the couple are choosing a venue off their own shortlist and didn't list vendor matching as a must-have.
 6. **Honesty fixes for data the couple will see:** B18, B8. Then B9, which depends on B12.
-7. **Housekeeping:** B6 (an owner call, quick), B17, B21, B15, B13.
+7. **Housekeeping:** B6 (an owner call, quick), B17, B15, B13.
 
 Within each tier, how a must-have gets built is still to be decided. Each one needs a short proposed PD on scope before engineering starts.
 
@@ -38,7 +38,6 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 - **B18 — Metrics report 0.0 confidence when none was measured.** `backend/app/api/v1/endpoints/metrics.py:33` falls back to `0.0` when every row's confidence is NULL, which reads as "measured zero" (rule 10). *Fix:* return `null` and show "no data" in the UI.
 - **B19 — Guest planning (must-have 3), but the guest list and seating plan show unlabelled sample data.** `frontend/src/app/wedding/views/Guests.tsx:9` (`GUESTS`, made-up names with dietary tags) and `SeatingPlan.tsx:13` (`GUESTS`, `INITIAL_TABLES`) are hard-coded and never call the API, on the couple's own workspace (rule 10). The backend has a `Guest` table (`backend/app/db/models.py:322`: name, email, phone, RSVP status, `dietary`, plus-one, table number), but no guest endpoint exists in `api/v1/endpoints/`. *Why it matters:* the couple listed "guest planning (list, food, seating)" as must-have 3, for 225 invited guests. Today nothing they enter would be saved. The "food" part includes dietary needs, which are health data (AGENTS.md rule 3). They must never appear in git, fixtures, issues, logs or `AgentDecisionLog` payloads. In the app, family (view only) can see them: "family can see dietary notes" (owner, 2026-11-04, `wedding.md`). *Fix:* label the sample data as sample now, as a quick and separate step. Then a proposed PD on guest-planning scope (what "food" covers, what seating needs), then backend guest endpoints and wiring. How it's built is not yet decided. *Depends on:* B10/B22 before real guest data goes in, and that PD.
 - **B20 — The catalogue and its docstring overstate what's verified.** In `backend/app/db/seed_data_real.py`, 10 of 26 suppliers are unchecked (`_verify: True`) and 3 are `_template` placeholders with made-up names (lines 340–361). The docstring (lines 26–28) promises that inquiries route through `agents.resolve_inquiry_recipient` to an owner-controlled inbox, but no such function exists. *Fix:* check or remove the unchecked rows (`add-vendors` skill), keep templates out of recommendations, and correct the docstring.
-- **B21 — The `sqlmodel` ceiling isn't enforced.** AGENTS.md rule 9 says to keep `sqlmodel` below 0.0.25 until the naive datetimes are fixed, but `backend/requirements.txt:3` is `sqlmodel>=0.0.16`, so a fresh install can pull a newer version. *Fix:* pin `sqlmodel>=0.0.16,<0.0.25`, after confirming which version the verify scripts pass on.
 
 ### Making it fit this wedding
 
@@ -60,7 +59,6 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
   - The "Next up" list carries no date, so "older than 14 days" can't be checked.
   - With no open PR, there's nowhere to post `[BLOCKED]`.
   - The `reply` job installs no dependencies, so it can't run the verify gate.
-  - CI installs whatever `sqlmodel` resolves to (B21).
   
   *Fix:* follow the test checklist in `docs/autonomy.md` before relying on it, then close these gaps.
 
@@ -72,6 +70,7 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-04 | **B21** — `sqlmodel` ceiling not enforced (CI pulled 0.0.48 and the verify scripts failed on naive datetimes) | this PR (#6) |
 | 2026-11-04 | **B16** — `greenlet` missing from `requirements.txt` (backend verify crashed on Apple Silicon and in CI) | this PR (#6) |
 | 2026-11-04 | **B7** — unmeasured confidence logged as 1.0 (also 0.8 and 0.0 in each agent) | `ab3ef135` |
 | 2026-05-27 | Tab 1 plotly Gold crash | `2032afa6` |

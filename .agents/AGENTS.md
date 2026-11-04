@@ -40,7 +40,7 @@ These exist because the data and people are real. They override convenience and 
 6. **Real data needs a migration path.** There are no Alembic migrations yet; tables come from `create_all`. Before any schema change once real data exists, stop and surface: the first such change must introduce migrations. Agents never write to a production database directly.
 7. **Every Gemini agent follows the decision-log contract** (`agent-features` skill): log row first, domain mutation last, guardrails enforced, covered in `verify_agents.py`.
 8. **Never change a test or check to make it pass**, and never silence a type error with `any` or `@ts-ignore`. If one looks wrong, surface the conflict.
-9. **No new dependency without a one-line reason in the commit.** Keep `sqlmodel` below 0.0.25 until the naive datetimes are fixed. `requirements.txt` doesn't enforce that yet (B21), so don't upgrade it.
+9. **No new dependency without a one-line reason in the commit.** Keep `sqlmodel` below 0.0.25 until the naive datetimes are fixed. `backend/requirements.txt` pins it; don't raise the ceiling.
 10. **Never fabricate metrics or pass simulated output off as real.** Decision-log confidence, latency and token counts are measured or left empty (`None`); don't add hard-coded or default values. Mock, demo or template output shown in the UI is labelled as such.
 11. **`localStorage` is not a system of record.** Anything the wedding party shares or can't afford to lose goes through the backend.
 

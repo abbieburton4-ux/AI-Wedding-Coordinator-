@@ -1,6 +1,6 @@
 fastapi>=0.110.0
 uvicorn>=0.28.0
-sqlmodel>=0.0.16
+sqlmodel>=0.0.16,<0.0.25  # naive datetimes break on 0.0.25+ (AGENTS.md rule 9, B21)
 psycopg2-binary>=2.9.9
 asyncpg>=0.29.0
 aiosqlite>=0.19.0
