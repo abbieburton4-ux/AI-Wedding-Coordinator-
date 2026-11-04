@@ -4,27 +4,36 @@ Source of truth for facts about this one wedding, for agents in Claude Code and 
 
 This repo is public. Keep personal details out of git: no guest names, emails, phones or addresses here.
 
+The owner (one of the couple) is fine with the wedding date, venue and budget being visible in this public repo: "yes, thats fine" (2026-11-04). That answer covers those three facts only. A second answer covers the city (Chicago), the ceremony type (Jewish), the guest count (225 invited), the family make-up (4 parents, 2 siblings) and the partner being the groom: "having this info public is fine" (owner, 2026-11-04). Guest names, emails, phones and addresses still stay out of git.
+
 | Fact | Value | Source / checked | Notes |
 | :- | :- | :- | :- |
-| Date | [GAP] | | The hard deadline everything is ranked against |
-| Place (city / venue) | [GAP] | | The vendor catalogue and regions are Ireland-only today |
-| Currency | [GAP] | | The app assumes EUR |
-| Ceremony type / tradition | [GAP] | | Drives the budget split and timeline |
-| Budget | [GAP] | | A range is fine if you'd rather not publish it |
-| Guest count (estimate) | [GAP] | | |
-| Venue status | [GAP] | | Booked / shortlisted / searching |
-| Who has access (roles, not names) | [GAP] | | Details in "Who uses the app" below |
+| Date | Not fixed yet. Months under consideration: August, September or October 2027 | Owner (one of the couple), 2026-11-04: "august, september, october 2027" | The hard deadline everything is ranked against. Exact date [GAP] |
+| Place (city / venue) | Country: United States. City: Chicago, IL. Venue: none chosen yet (see Venue status) | Owner (one of the couple), 2026-11-04: "united states, chicago, IL" | The vendor catalogue and regions are Ireland-only today, so they don't cover this location (backlog B11) |
+| Currency | US dollars (USD) | Owner (one of the couple), 2026-11-04: "US dollars" | The app currently assumes EUR (backlog B11) |
+| Ceremony type / tradition | Jewish ceremony, at the venue (not booked yet). Traditions: "the usual jewish traditions" | Owner (one of the couple), 2026-11-04: "a jewish ceremony at the venue. we want the usual jewish traditions" | Drives the budget split and timeline. Which specific traditions, the officiant and the denomination: [GAP], ask the couple when the plan needs them |
+| Budget | [GAP] (still being decided) | Owner (one of the couple), 2026-11-04: "budget is still being determined. i will add that in later" | The owner will add it later. A range is fine. The owner has agreed it can be public |
+| Guest count (estimate) | 225 invited | Owner (one of the couple), 2026-11-04: "inviting 225" | Number of people invited, not an attendance estimate. Expected attendance [GAP] |
+| Venue status | Not booked. Still looking, with a shortlist; the couple are visiting the shortlisted venues the week of 2026-11-04 | Owner (one of the couple), 2026-11-04: "no venue yet, still looking but have a short list and visiting them this week. hope to have 1 booked soon" | Shortlisted venues not named. No booking or booking date yet. The couple hope to book one soon |
+| Who has access (roles, not names) | The owner, the partner, and family of the couple | Owner (one of the couple), 2026-11-04: "partner and family of the couple" | Details and open gaps in "Who uses the app" below |
 
 ## Who uses the app
 
-Roles and first names only.
+Roles only, no names: "roles only as long as I can assign mulitple people to 1 role" (owner, 2026-11-04). In the app, one role can hold several people (backlog B22).
 
 | Person (role) | Access | Notes |
 | :- | :- | :- |
-| [GAP] | [GAP] | e.g. full edit / budget hidden / view only |
+| Owner (one of the couple) | Makes decisions for the app. Future need: to add people and edit their permissions (backlog B22) | "I am part of the couple and can make the decisions" (2026-11-04). [ASSUMPTION] Their answers count as the couple ratifying, inferred from "can make the decisions". On permissions: "i should be able to add and edit permissions in the future though" (2026-11-04); see backlog B22. Their own edit rights in the app not otherwise stated |
+| Partner (the groom) | Edit everything | Will use the app ("partner and family of the couple", owner, 2026-11-04). Access: "partner edit everything" (owner, 2026-11-04). "groom is my partner" (owner, 2026-11-04) |
+| Family of the couple: parents (4), siblings (2) | View only, including the budget | Will use the app (same answer). Access: "family view only" (owner, 2026-11-04). Budget: "they can see the budget" (owner, 2026-11-04). Who: "parents 4, siblings 2" (owner, 2026-11-04), 6 people. Dietary notes: "family can see dietary notes" (owner, 2026-11-04) |
+| Wedding party (not family) | None for now | "no, just family for now but in the future yes" (owner, 2026-11-04). When they get access, and at what level: [GAP]. The owner will add them later (backlog B22) |
 
 ## Must-haves before the wedding
 
 Ranked, in the couple's words.
 
-1. [GAP]
+Owner (one of the couple), 2026-11-04: "in depth budgeting, overall planning checklist, guest planning (list, food, seating)"
+
+1. in depth budgeting
+2. overall planning checklist
+3. guest planning (list, food, seating)
