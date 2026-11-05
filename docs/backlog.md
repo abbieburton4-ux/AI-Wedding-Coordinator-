@@ -19,7 +19,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 6. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
 7. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
 8. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-9. **B14** — host the app on Replit (PD-008, ratified: "i am choosing replit"). `needs-owner: PD-008 calls (a) paid AI tier, (b) spending alert, (d) web address`
+9. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47). `needs-owner: keep guest names and dietary notes out of the free AI? (PD-008 follow-up, recommended yes)`
 10. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
 11. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
 12. **B34** — database-level guard against the same email being added twice. `ready`
