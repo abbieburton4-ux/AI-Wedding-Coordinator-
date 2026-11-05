@@ -43,12 +43,24 @@ async def sendgrid_inbound_parse(request: Request, db: AsyncSession = Depends(ge
         return {"status": "ignored", "reason": "booking_not_found"}
 
     # Enqueue the quote extractor task with the raw email body and booking id
-    await enqueue_agent_task("quote-extractor", {
-        "booking_id": booking.id,
-        "email_body": email_body,
-        "sender": sender,
-        "subject": subject
-    })
-    
+    try:
+        await enqueue_agent_task("quote-extractor", {
+            "booking_id": booking.id,
+            "email_body": email_body,
+            "sender": sender,
+            "subject": subject
+        })
+    except HTTPException as exc:
+        if exc.status_code != 422:
+            raise
+        # A guardrail block is final and already in the decision log; an error
+        # status would only make SendGrid redeliver and hit the same block. Other
+        # failures (502: the AI call failed) stay errors so SendGrid retries, which
+        # is safe because a failed run changes nothing.
+        logger.warning(
+            f"SendGrid webhook: quote extraction blocked for booking {booking_id}"
+        )
+        return {"status": "not_processed", "booking_id": booking_id}
+
     logger.info(f"SendGrid webhook: enqueued quote-extractor for booking {booking_id}")
     return {"status": "success", "booking_id": booking_id}

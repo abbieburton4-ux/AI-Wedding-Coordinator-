@@ -18,7 +18,7 @@ router = APIRouter()
 # keys; the network fetch only happens for real Firebase tokens, so local dev
 # (which uses mock- tokens) never touches the network.
 FIREBASE_JWKS_URL = (
-    "https://www.googleapis.com/service_accounts/v1/jwks/"
+    "https://www.googleapis.com/service_accounts/v1/jwk/"
     "securetoken@system.gserviceaccount.com"
 )
 

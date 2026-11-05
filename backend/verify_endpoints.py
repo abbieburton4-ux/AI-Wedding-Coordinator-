@@ -7,6 +7,8 @@ os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./endpoints_test.db"
 os.environ["SYNC_DATABASE_URL"] = "sqlite:///./endpoints_test.db"
 os.environ["DEVELOPMENT_MODE"] = "True"
 os.environ["ALLOW_MOCK_AUTH"] = "True"
+# Never copy real deployment access-list addresses into fictional test fixtures.
+os.environ["ACCESS_BOOTSTRAP_EMAILS"] = ""
 
 # Inject backend source into paths
 sys.path.insert(0, os.path.realpath(os.path.dirname(__file__)))
@@ -1082,6 +1084,18 @@ def test_api_suite():
             }, rsa_key, algorithm="RS256")
             return {"Authorization": f"Bearer {tok}"}
 
+        # Pin the real public-key endpoint too: mocked JWTs alone did not catch
+        # the old /jwks/ typo, which made every real sign-in fail with HTTP 401.
+        assert auth_module.FIREBASE_JWKS_URL == (
+            "https://www.googleapis.com/service_accounts/v1/jwk/"
+            "securetoken@system.gserviceaccount.com"
+        )
+        from unittest.mock import patch
+        auth_module._firebase_jwks_client.cache_clear()
+        with patch.object(auth_module.jwt, "PyJWKClient") as key_client:
+            auth_module._firebase_jwks_client()
+            key_client.assert_called_once_with(auth_module.FIREBASE_JWKS_URL)
+        auth_module._firebase_jwks_client.cache_clear()
         real_jwks = auth_module._firebase_jwks_client
         auth_module._firebase_jwks_client = lambda: _FakeJwks()
         settings.FIREBASE_PROJECT_ID = "test-project"

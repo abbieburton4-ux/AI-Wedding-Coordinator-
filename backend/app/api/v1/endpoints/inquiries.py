@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from typing import Optional
 
+from app.config import settings
 from app.db.session import get_db
 from app.db.models import Booking, User
 from app.api.v1.endpoints.auth import get_current_user
@@ -36,4 +37,8 @@ async def trigger_quote_extractor(
     if not enqueued:
         raise HTTPException(status_code=500, detail="Failed to enqueue quote extractor task")
         
-    return {"status": "pending", "message": "Quote extraction agent enqueued successfully."}
+    return {
+        "status": "completed" if settings.DIRECT_AGENT_EXECUTION else "pending",
+        "message": "Quote extraction finished." if settings.DIRECT_AGENT_EXECUTION
+        else "Quote extraction agent enqueued successfully.",
+    }

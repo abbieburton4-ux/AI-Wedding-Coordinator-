@@ -10,6 +10,26 @@ import { useAuth } from "../auth/AuthProvider";
  *   const { request, loading, error } = useApi();
  *   const data = await request("/weddings", { method: "GET" });
  */
+/**
+ * FastAPI's `detail` can be a string, an object such as `{ message, error_kind }`
+ * (a blocked AI action), or a list of validation errors. Turn each into text a
+ * person can read, never "[object Object]".
+ */
+function errorMessage(detail: unknown): string | null {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((d) => (d && typeof d === "object" && "msg" in d ? String(d.msg) : null))
+      .filter((m): m is string => Boolean(m));
+    return parts.length ? parts.join("; ") : null;
+  }
+  if (detail && typeof detail === "object" && "message" in detail) {
+    const message = (detail as { message: unknown }).message;
+    return typeof message === "string" ? message : null;
+  }
+  return null;
+}
+
 export function useApi() {
   const { getToken } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -41,7 +61,8 @@ export function useApi() {
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
           throw new Error(
-            errData.detail || `Request failed with status ${response.status}`
+            errorMessage(errData.detail) ||
+              `Request failed with status ${response.status}`
           );
         }
 

@@ -1,5 +1,22 @@
 # VenueFlow — Architecture (MVP, AI Wedding Coordinator)
 
+## Replit real-access configuration
+
+The Replit production entrypoint is `app.production:app`: FastAPI serves the built
+React SPA and API together, using Firebase access checks and managed PostgreSQL.
+Demo/mock flags are disabled and the disposable SQLite demo database is separate.
+Startup runs `alembic upgrade head` on that environment's database, as every
+non-development deployment does (rule 6), and refuses a schema Alembic didn't build.
+
+With `DIRECT_AGENT_EXECUTION=True`, intake/replan/matching/extraction dispatch
+awaits the existing decorated agent in an independent session within the HTTP
+request. Provider failures are explicit HTTP errors with recorded decision logs;
+guardrail blocks are returned as blocks, not fake queued successes. The profile
+is saved before initial planning, so failed intake remains recoverable via the
+existing replan flow. No external queue or worker HTTP secret is needed for this
+configuration. It is request-bound execution, not a durable asynchronous queue.
+The Docker emulator path remains development-only. See `replit.md`.
+
 > [!NOTE]
 > **Implementation Status**:
 > - **Current Implementation**: A Vite + React frontend communicating with a **FastAPI backend** over REST endpoints. Database schemas are managed using **SQLModel** with SQLite for local development, and Postgres ready. Asynchronous agent task execution uses a Google Cloud Tasks structure, with a local Tasks Emulator and direct background invocation fallback for development.

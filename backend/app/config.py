@@ -1,10 +1,18 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+from pydantic import model_validator
+from sqlalchemy.engine import make_url
 
 class Settings(BaseSettings):
     # Databases: async for FastAPI, sync for Alembic/seeding
     DATABASE_URL: str = "postgresql+asyncpg://venueflow:venueflow_pass@db/venueflow"
-    SYNC_DATABASE_URL: str = "postgresql+psycopg2://venueflow:venueflow_pass@db/venueflow"
+    SYNC_DATABASE_URL: Optional[str] = None
+    # Set by the Replit run script: real data, so demo flags are refused at startup.
+    REPLIT_MANAGED_DATABASE: bool = False
+    FRONTEND_DIST_DIR: Optional[str] = None
+    # Request-bound execution requires no external queue and never acknowledges
+    # work before it runs. The Docker development emulator remains available.
+    DIRECT_AGENT_EXECUTION: bool = False
     
     # API Keys & Auth
     GEMINI_API_KEY: Optional[str] = None
@@ -46,6 +54,24 @@ class Settings(BaseSettings):
     PROJECT_ID: str = "venueflow-dev"
     LOCATION: str = "europe-west1"
     QUEUE_ID: str = "agent-tasks"
+
+    @model_validator(mode="after")
+    def configure_database_drivers(self):
+        url = make_url(self.DATABASE_URL)
+        if url.get_backend_name() in ("postgres", "postgresql"):
+            sync_url = url.set(drivername="postgresql+psycopg2")
+            async_url = url.set(drivername="postgresql+asyncpg")
+            query = dict(async_url.query)
+            # asyncpg accepts ssl, not libpq's sslmode/channel_binding arguments.
+            if "sslmode" in query:
+                query["ssl"] = query.pop("sslmode")
+            query.pop("channel_binding", None)
+            self.DATABASE_URL = async_url.set(query=query).render_as_string(hide_password=False)
+            if not self.SYNC_DATABASE_URL:
+                self.SYNC_DATABASE_URL = sync_url.render_as_string(hide_password=False)
+        elif not self.SYNC_DATABASE_URL:
+            self.SYNC_DATABASE_URL = self.DATABASE_URL.replace("sqlite+aiosqlite:", "sqlite:")
+        return self
 
     class Config:
         env_file = ".env"

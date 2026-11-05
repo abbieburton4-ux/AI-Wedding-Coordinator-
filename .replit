@@ -1,0 +1,47 @@
+modules = ["nodejs-20", "web", "python-3.12", "bash", "postgresql-16"]
+
+[nix]
+channel = "stable-25_05"
+packages = ["glibcLocales", "postgresql"]
+
+[agent]
+expertMode = true
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/replit-production.sh"
+waitForPort = 5000
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["bash", "scripts/replit-production.sh"]
+build = ["bash", "scripts/replit-build.sh"]
+
+[userenv]
+
+[userenv.shared]
+GEMINI_FAST_MODEL = "gemini-3.5-flash"
+GEMINI_PLANNING_MODEL = "gemini-3.5-flash"

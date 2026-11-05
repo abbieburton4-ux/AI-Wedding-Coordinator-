@@ -7,20 +7,45 @@ from app.api.v1.internal import internal_headers
 logger = logging.getLogger(__name__)
 
 async def enqueue_agent_task(task_name: str, payload: dict) -> bool:
-    """Enqueues an asynchronous agent task to Google Cloud Tasks.
-    
-    In production, this routes through GCP Cloud Tasks.
-    Locally, it routes through the Tasks Emulator, which will push the task
-    to our Worker service (http://worker:8001/tasks/{task_name}).
+    """Execute within the request on Replit, or use the local Docker emulator.
+
+    Direct execution completes (or fails explicitly) before returning. There is
+    no production queue placeholder and no background work after a response.
     """
+    if settings.DIRECT_AGENT_EXECUTION:
+        from app.utils.direct_tasks import execute_agent_task
+        from fastapi import HTTPException
+
+        try:
+            result = await execute_agent_task(task_name, payload)
+        except Exception:
+            # run_agent records the real error. Do not leak provider details or
+            # pretend a failed run was queued successfully.
+            logger.error("Direct agent task failed: %s", task_name)
+            raise HTTPException(
+                status_code=502,
+                detail="The AI action failed. Check the decision log and try again.",
+            ) from None
+        if result.get("status") == "blocked":
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": result.get("warning") or "This action was blocked by a safety check.",
+                    "error_kind": result.get("error_kind"),
+                },
+            )
+        return True
+    if not settings.DEVELOPMENT_MODE:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=503,
+            detail="Agent execution is not configured. Enable direct execution.",
+        )
+
     queue_path = f"projects/{settings.PROJECT_ID}/locations/{settings.LOCATION}/queues/{settings.QUEUE_ID}"
     
     # Target URL on our worker container (Cloud Run endpoint in production)
-    if settings.DEVELOPMENT_MODE:
-        worker_url = f"{settings.WORKER_BASE_URL}/tasks/{task_name}"
-    else:
-        # In production Cloud Run, the worker runs on its own private service URL
-        worker_url = f"https://worker-private-service-url/tasks/{task_name}"
+    worker_url = f"{settings.WORKER_BASE_URL}/tasks/{task_name}"
 
     task_payload = {
         "task": {
@@ -64,9 +89,3 @@ async def enqueue_agent_task(task_name: str, payload: dict) -> bool:
             except Exception as ex:
                 logger.warning(f"Fallback worker also unreachable: {ex}. Task '{task_name}' accepted (will execute when worker is available).")
                 return True
-    else:
-        # Production GCP Cloud Tasks HTTP API call
-        # In production, we'd use the official google-cloud-tasks SDK or standard GCP service account REST call.
-        # This keeps the code functional for our XPRIZE sandbox.
-        logger.info(f"Production task enqueued: {task_name} -> {worker_url}")
-        return True

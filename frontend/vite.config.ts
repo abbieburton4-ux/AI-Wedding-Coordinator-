@@ -36,8 +36,24 @@ function gitHubPagesSpaFallback() {
 // Local fallback keeps the project-page path for https://alanmaizon.github.io/VenueFlow/
 const base = process.env.VITE_BASE ?? '/VenueFlow/'
 
+// Replit's preview (scripts/replit-demo.sh) serves the dev server on port 5000
+// behind its own *.replit.dev hostname and proxies /api to the local backend.
+// Elsewhere the dev server keeps Vite's defaults (port 5173, localhost only).
+const replitDevServer = process.env.REPL_ID
+  ? {
+      host: '0.0.0.0',
+      port: 5000,
+      strictPort: true,
+      allowedHosts: ['.replit.dev', '.repl.co'],
+      proxy: {
+        '/api': 'http://127.0.0.1:8000',
+      },
+    }
+  : undefined
+
 export default defineConfig({
   base,
+  server: replitDevServer,
   plugins: [
     figmaAssetResolver(),
     // The React and Tailwind plugins are both required for Make, even if
