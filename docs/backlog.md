@@ -10,7 +10,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 *Updated 2026-11-05 by the product lane. Re-rank if this date is more than 14 days old.*
 
-0. **B31** — point the autopilot workflow at the owner's Claude subscription. `needs-owner: agents may not change .github/; the owner makes this edit or runs it in their own engineer session`
+0. **B31** — point the autopilot workflow at the owner's Claude subscription. The owner made the edit on GitHub, 2026-11-05. In review, PR #19 (the owner merges it)
 0b. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B38** — block either owner from removing or demoting the other on the access screen (PD-002 note, 2026-11-05). In review, PR #18
 1b. **B39** — stop look-alike email addresses passing as the couple's at sign-in. `needs-owner: approve a fix to sign-in?`
