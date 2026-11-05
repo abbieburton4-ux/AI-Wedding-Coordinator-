@@ -91,13 +91,13 @@ async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = Fa
 
     skip_reason = _skip_reason(wedding)
     if skip_reason:
-        # No model call, so there is no model, confidence or token count to record.
+        # No model call, so there is no model, prompt, confidence or token count to record.
         wedding.status = "planning"
         db.add(wedding)
         return (
             {"budget_check": "skipped", "skip_reason": skip_reason,
              "rationale_summary": SKIP_SUMMARIES[skip_reason]},
-            None, None, prompt_version, [],
+            None, None, None, [],
         )
 
     # 2. Formulate context payload. The couple's names stay out (PD-009, rule 3).

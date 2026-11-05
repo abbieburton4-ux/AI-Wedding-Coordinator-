@@ -599,6 +599,7 @@ async def run_async_verification():
             log = (await setup_logs())[0]
             assert log.status == "success"
             assert log.model_id is None and log.confidence_score is None, "no call, no metrics"
+            assert log.prompt_version is None, "no prompt was sent"
             assert (log.tokens_input, log.tokens_output) == (None, None)
             assert log.external_api_calls == []
             print("   * Blank budget: no model call, wedding moves to planning, no invented metrics")
@@ -621,6 +622,15 @@ async def run_async_verification():
             context = await _build_context(db, w_setup)
             assert "Total budget: not set yet." in context and "€" not in context, context
             print("   * Concierge context: a blank budget reads 'not set yet', not 0")
+
+            # The couple's own dollar total wins over an older intake figure, in dollars.
+            w_setup.budget_total = 40000.0
+            w_setup.budget_total_cents = 5_000_050
+            db.add(w_setup)
+            await db.commit()
+            context = await _build_context(db, w_setup)
+            assert "Total budget: $50,000.50 (US dollars)." in context and "€" not in context, context
+            print("   * Concierge context: the couple's dollar total, never shown in euros")
 
     # The production path must reach the same decorated agent, not an HTTP stub.
     print("\nTEST 13: Direct production dispatch uses the decorated agent...")

@@ -30,9 +30,21 @@ SYSTEM_INSTRUCTION = (
     "rates and tell them clearly whether it fits.\n"
     "- NEVER invent vendors, prices, or commitments that aren't in the context. If the info isn't there, "
     "say so plainly and suggest the next step (e.g. 'run the matcher', 'log the quote').\n"
-    "- Use € and Irish context. Don't recite the whole context back — just answer the question.\n"
+    "- Give amounts in the currency the context shows them in; never convert or relabel them. "
+    "Don't recite the whole context back — just answer the question.\n"
     "Return valid JSON conforming to the response schema."
 )
+
+
+def _total_budget_text(wedding: Wedding) -> str:
+    """The couple's own total in dollars (PD-004) when set; otherwise an older euro
+    intake estimate, labelled as one; otherwise "not set yet", never 0 (PD-009)."""
+    cents = wedding.budget_total_cents
+    if cents is not None:
+        return f"${cents // 100:,}" + (f".{cents % 100:02d}" if cents % 100 else "") + " (US dollars)"
+    if wedding.budget_total is not None and (wedding.currency or "").upper() == "EUR":
+        return f"€{wedding.budget_total:,.0f} (euros, an estimate from the setup form)"
+    return "not set yet"
 
 
 async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
@@ -55,10 +67,7 @@ async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
         f"Wedding: {wedding.guest_count_estimate} guests · {wedding.ceremony_type} · {wedding.region} · "
         f"date {wedding.wedding_date or 'TBD'}."
     )
-    if wedding.budget_total is None:
-        lines.append(f"Total budget: not set yet. Plan status: {wedding.status}.")
-    else:
-        lines.append(f"Total budget: €{wedding.budget_total:,.0f}. Plan status: {wedding.status}.")
+    lines.append(f"Total budget: {_total_budget_text(wedding)}. Plan status: {wedding.status}.")
 
     if budget:
         lines.append("Budget lines (allocated / spent):")

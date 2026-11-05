@@ -163,7 +163,7 @@ async def create_wedding(
 
 class WeddingUpdate(BaseModel):
     guest_count_estimate: Optional[int] = None
-    budget_total: Optional[float] = None
+    budget_total: Optional[float] = PydField(default=None, gt=0)  # never 0 (PD-009)
     region: Optional[str] = None
     ceremony_type: Optional[str] = None
     style_notes: Optional[str] = None

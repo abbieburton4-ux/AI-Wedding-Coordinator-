@@ -20,8 +20,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Only relaxes NOT NULL: every existing value is kept. On Postgres this is a plain
-    # ALTER COLUMN; on SQLite, batch mode copies the table (foreign keys are off there
-    # during migrations, so no child rows are touched).
+    # ALTER COLUMN; on SQLite, batch mode copies the table. That is safe only because
+    # nothing turns on PRAGMA foreign_keys (session.py, env.py): with it on, dropping the
+    # old table would cascade-delete child rows.
     with op.batch_alter_table('weddings', schema=None) as batch_op:
         batch_op.alter_column('budget_total', existing_type=sa.Float(), nullable=True)
 

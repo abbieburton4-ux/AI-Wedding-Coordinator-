@@ -119,6 +119,8 @@ def test_api_suite():
         res = c.patch(f"/api/v1/weddings/{setup['id']}",
                       json={"guest_count_estimate": 230}, headers=setup_headers)
         assert res.status_code == 200 and res.json()["budget_total"] is None
+        assert c.patch(f"/api/v1/weddings/{setup['id']}", json={"budget_total": 0},
+                       headers=setup_headers).status_code == 422, "0 never stands in for blank"
         res = c.get(f"/api/v1/weddings/{setup['id']}/budget/overview", headers=setup_headers)
         assert res.status_code == 200 and res.json()["totals"]["total_cents"] is None
         # A budget given on the form is the couple's own total, in whole cents.
