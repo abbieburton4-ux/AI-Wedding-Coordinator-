@@ -14,7 +14,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 0b. **B32** — two Claude reply bots and an automatic PR review. `needs-owner: (a) turn off the extra reply bot? (b) keep the automatic review on every PR?`
 1. **B28** — label every sample figure on the couple's screens as sample. `ready`
 2. **B26** — stop seeding demo couples and weddings outside dev mode. `ready`
-3. **B22** — PD-002 step 2: access settings screen, owner-only access changes, email confirmation for password sign-in. `ready` (PD-002 ratified)
+3. **B22** — in review, PR #14. `needs-owner: (1) may one of the couple remove the other's power to manage access (built as allowed, with a warning)? (2) may the screen make anyone else an access manager (built as no)?`
 3b. **B6** — delete `planner-targets.xlsx` and the real-looking contacts in `streamlit_mock/` (PD-005). `ready`
 4. **B23** — in depth budgeting. `ready` (PD-004 ratified: option C, plus an AI-suggested starting split)
 5. **B14** — where the app and its data live, and what that costs. `needs-owner: approve the hosting recommendation (the product lane writes the PD next, with costs)`
@@ -22,6 +22,10 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 7. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
 8. **B8** — record missing token counts as empty, not 0. `ready`
 9. **B17** — stop tracking the test database files. `ready`
+9b. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+9c. **B34** — database-level guard against the same email being added twice. `ready`
+9d. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+9e. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy after B22, B26 and B28. `needs-owner: guardrail files need a session the owner runs`
 10. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
 11. **B30** — the budget ring always shows 65% spent. `ready` (could fold into B23)
 
@@ -88,6 +92,11 @@ Not carried over from the audit, because the restored backend already covers the
 - **B31 — The autopilot can't sign in to Claude.** The owner connected their Claude subscription with `/install-github-app` (2026-11-04), which stored `CLAUDE_CODE_OAUTH_TOKEN`. The workflow (`.github/workflows/claude-agents.yml`, lines 52 and 112) still reads `ANTHROPIC_API_KEY`, which doesn't exist, so every run fails. *Fix:* switch both lines to `claude_code_oauth_token`, per `docs/autonomy.md` step 3. *Depends on:* nothing.
 
 - **B32 — Two "@claude" reply bots, and an automatic review on every PR.** `/install-github-app` opened PR #11, which the owner merged on 2026-11-04. It added `.github/workflows/claude.yml`, which answers any "@claude" comment, and `claude-code-review.yml`, which reviews every PR when it's opened or updated. `claude-agents.yml` already answers "@claude" with the repo's autopilot rules, so once B31 is fixed, each owner comment would start two separate runs. Only one of them follows this repo's rules. The automatic review also uses subscription allowance on every agent PR, which the repo's own reviewer already checks. *Fix (recommended):* turn off `claude.yml`. Whether to keep the automatic review is the owner's call. *Depends on:* the owner's answer. It's a `.github/` change, so it needs an owner-run session.
+
+- **B33 — The backend allows calls from VenueFlow's original website.** Found in PR #14. The list of websites allowed to call the backend still includes the upstream author's address. *Fix:* remove it, and add the real address once hosting is decided (B14).
+- **B34 — No database-level guard on duplicate access entries.** Found in PR #14. The app checks for an email already on the access list, but the `wedding_members` table doesn't enforce it. *Fix:* a unique constraint per wedding and email, through a migration (rule 6, see B27).
+- **B35 — Sign-in setup should turn on email-enumeration protection.** Found in PR #14. Firebase can hide whether an email has an account. *Fix:* add the step to `docs/setup-sign-in.md`.
+- **B36 — The shared agent instructions describe the app as it was before B22, B26 and B28.** "What's actually there today" in `.agents/AGENTS.md` and `ai-studio-system-instructions.md` is out of date. Agents may not edit their own instructions, so this needs a session the owner runs.
 
 - **B26 — Demo data is seeded into every database.** *In review: PR #13. No real copy of the app has run yet (PD-002 call (c); hosting is undecided, B14), so there's no old demo data to clean up. [ASSUMPTION] Confirm with the owner when hosting is set up.* `seed_database()` (`backend/app/db/seed.py`) runs on every startup, production included. It adds demo users (`couple_1`, `couple_2`, `planner_1`) and demo weddings when the database is empty. *Why it matters:* the real database would hold made-up couples, and `planner_1`'s email may belong to a real business (rule 3). *Fix:* seed only in `DEVELOPMENT_MODE`; keep the vendor catalogue seed separate.
 - **B27 — The migration check can't see Postgres-only drift.** `verify_migrations.py` runs on SQLite, which doesn't compare CHECK constraints or server defaults. `env.py` has no `render_as_batch` and no constraint naming convention, so the first migration that alters or drops a column or constraint may fail on SQLite or can't name the FK. *Fix:* add a naming convention and `render_as_batch=True` before the next schema change, and run the migration check against Postgres in CI once hosting is decided (B14).
