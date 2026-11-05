@@ -20,8 +20,8 @@ from app.db.session import get_db
 
 router = APIRouter()
 
-# Owners are set up with the wedding (the couple). The screen adds and switches
-# people between these two levels only; it never makes someone an owner.
+# Owners are set up with the wedding (the couple). The API adds and switches
+# people between these two levels only; it never makes someone an owner (PD-002).
 AssignableLevel = Literal["viewer", "editor"]
 
 # ASCII only, so lower-casing can't fold a look-alike character into someone else's address.
@@ -29,9 +29,9 @@ _EMAIL_RE = re.compile(r"^[!-?A-~]+@[A-Za-z0-9.-]+\.[A-Za-z0-9-]+$")
 
 ALREADY_LISTED = "That email already has access"
 
-LAST_OWNER = (
-    "This is the only person who can manage access and has signed in, so they can't "
-    "be removed or changed. Otherwise nobody could manage the list."
+OWNER_PROTECTED = (
+    "People who manage access can't be removed or changed in the app. If that ever "
+    "needs to change, ask the team to do it for you."
 )
 
 
@@ -64,6 +64,9 @@ async def _member(db: AsyncSession, wedding_id: str, member_id: str) -> WeddingM
         select(WeddingMember).where(
             WeddingMember.id == member_id, WeddingMember.wedding_id == wedding_id
         )
+        # Locked so a team change to this row (manage_access.py) can't land between
+        # the owner check and the write.
+        .with_for_update()
     )
     row = result.first()
     if not row:
@@ -71,24 +74,15 @@ async def _member(db: AsyncSession, wedding_id: str, member_id: str) -> WeddingM
     return row
 
 
-async def _refuse_if_last_owner(db: AsyncSession, row: WeddingMember) -> None:
-    """Keep at least one owner who has signed in, so the couple can't lock themselves out.
+def _refuse_if_owner(row: WeddingMember) -> None:
+    """Owner rows are fixed in the app (PD-002 note, 2026-11-05).
 
-    A partner's owner row stays unlinked until they first sign in, and may never link
-    if the address is wrong, so it doesn't count as someone who can still manage access.
-    The owner rows are locked (FOR UPDATE on Postgres) so two owners demoting each
-    other at the same moment can't both succeed.
+    Neither partner can remove or demote the other, nor themselves, so the wedding
+    always keeps both people who manage access. The team can still change an owner
+    with manage_access.py when the couple ask.
     """
-    if row.level != "owner":
-        return
-    result = await db.exec(
-        select(WeddingMember)
-        .where(WeddingMember.wedding_id == row.wedding_id, WeddingMember.level == "owner")
-        .with_for_update()
-    )
-    others = [m for m in result.all() if m.id != row.id and m.user_id is not None]
-    if not others:
-        raise HTTPException(status_code=409, detail=LAST_OWNER)
+    if row.level == "owner":
+        raise HTTPException(status_code=409, detail=OWNER_PROTECTED)
 
 
 @router.get("/{wedding_id}/my-access", response_model=MyAccess)
@@ -161,8 +155,8 @@ async def change_member_level(
 ):
     await require_wedding_access(db, wedding_id, current_user, "owner")
     row = await _member(db, wedding_id, member_id)
+    _refuse_if_owner(row)
     if row.level != payload.level:
-        await _refuse_if_last_owner(db, row)
         row.level = payload.level
         db.add(row)
         await db.commit()
@@ -179,7 +173,7 @@ async def remove_member(
 ):
     await require_wedding_access(db, wedding_id, current_user, "owner")
     row = await _member(db, wedding_id, member_id)
-    await _refuse_if_last_owner(db, row)
+    _refuse_if_owner(row)
     await db.delete(row)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
