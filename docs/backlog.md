@@ -15,6 +15,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 1. **B28** — label every sample figure on the couple's screens as sample. `ready`
 2. **B26** — stop seeding demo couples and weddings outside dev mode. `ready`
 3. **B22** — PD-002 step 2: access settings screen, owner-only access changes, email confirmation for password sign-in. `ready` (PD-002 ratified)
+3b. **B6** — delete `planner-targets.xlsx` and the real-looking contacts in `streamlit_mock/` (PD-005). `ready`
 4. **B23** — in depth budgeting. `ready` (PD-004 ratified: option C, plus an AI-suggested starting split)
 5. **B14** — where the app and its data live, and what that costs. `needs-owner: approve the hosting recommendation (the product lane writes the PD next, with costs)`
 6. **B24** — planning checklist. `needs-owner: checklist scope PD (unfixed date; which Jewish traditions), to be proposed`
@@ -23,7 +24,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 9. **B17** — stop tracking the test database files. `ready`
 10. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
 11. **B30** — the budget ring always shows 65% spent. `ready` (could fold into B23)
-12. **B6, B13** — delete `planner-targets.xlsx` and the old prototype folder, both holding contacts that look real. `needs-owner: delete them?`
+
 
 ## Open
 

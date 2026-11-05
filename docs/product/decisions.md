@@ -130,3 +130,12 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 **Rejected because:**
 - A leaves out who is contributing, which the couple want.
 - B has no payments or due dates, so deposits would be tracked somewhere else.
+
+## PD-005 — Delete the old sales list and the real-looking contacts in the prototype
+
+**Date:** 2026-11-05 · **Status:** ratified (by the owner, one of the couple, 2026-11-05: "yes, you can delete the contact details and ols sales spreadsheet")
+**Context:** Backlog B6 and B13. `planner-targets.xlsx` is VenueFlow's old sales prospect list: named people at real planning businesses, with their contact details. `streamlit_mock/` (the first prototype) holds demo emails and Irish mobile numbers that look real (found in PR #13). Both are in this public repo, and both may be other people's personal data (rule 3).
+**Options:** A: delete them. B: keep them.
+**Decision:** A. Delete `planner-targets.xlsx`. Remove or replace the real-looking emails and phone numbers in `streamlit_mock/` with obviously fictional ones (for example `@example.com`, no phone numbers). The rest of the prototype folder stays: whether to archive it all is still the owner's call (B13).
+**Technical choices settled by the team:** deleting a file doesn't remove it from git history, so old copies stay visible in the repo's past commits. Erasing them from history needs a force-push, which the guardrails block, and it would be a separate owner decision. It isn't part of this decision.
+**Rejected because:** B keeps other people's contact details published.
