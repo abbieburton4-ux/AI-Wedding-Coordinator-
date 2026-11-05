@@ -14,7 +14,7 @@ real Firebase access backed by Replit PostgreSQL, leaving demo SQLite untouched.
 - One Uvicorn process serves the built SPA and API on `0.0.0.0:5000` (or `PORT`).
   It does not run Vite in production. Browser API requests stay same-origin.
 - Publishing is configured for Autoscale but requires the user's Publish action.
-  Before publishing, resolve the npm dependency advisories (a backlog item),
+  Before publishing, resolve the npm dependency advisories (backlog B47),
   configure the bootstrap access list, follow "When you publish" below, and add the published hostname to Firebase's
   Authentication authorized domains. The preview hostname also needs authorization
   for Google sign-in from the preview.
@@ -95,7 +95,7 @@ aligned with `backend/requirements.txt` (CI and Docker install that file), and
 keep `sqlmodel` below 0.0.25. Restore with `uv sync --active`.
 Frontend dependencies stay in `frontend/package.json` / `package-lock.json`.
 Patched `websocket-driver` and `tar` overrides unblock the imported dependencies;
-the remaining npm audit findings are handed to the product lane for the backlog.
+the remaining npm audit findings are backlog B47.
 
 Run `bash scripts/verify-backend.sh`: the five backend verify scripts
 (including `verify_production.py`) and the sign-in test
