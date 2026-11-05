@@ -3,6 +3,7 @@ import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import { Icon } from "../shared/Icon";
 import { useApi } from "../api/useApi";
 import { useActiveWedding, type WeddingSummary } from "./WeddingProvider";
+import { formatCents } from "./views/budget/money";
 
 /**
  * Live voice call with Aurelia (the ElevenLabs Conversational AI agent), running
@@ -18,12 +19,13 @@ import { useActiveWedding, type WeddingSummary } from "./WeddingProvider";
 // having to pre-configure dynamic variables on the ElevenLabs side.
 function buildContext(w: WeddingSummary | null): string {
   if (!w) return "";
-  const euro = (n: number) => `€${Math.round(n).toLocaleString()}`;
+  // The couple's own total (PD-004); blank reads "not set yet", never $0 (PD-009).
+  const total = w.budget_total_cents != null ? formatCents(w.budget_total_cents) : "not set yet";
   const facts = [
     `Region: ${w.region}`,
     `Ceremony type: ${w.ceremony_type}`,
     `Estimated guests: ${w.guest_count_estimate}`,
-    `Total budget: ${euro(w.budget_total)}`,
+    `Total budget: ${total}`,
     w.wedding_date ? `Wedding date: ${w.wedding_date}` : null,
     `Planning status: ${w.status}`,
   ].filter(Boolean);

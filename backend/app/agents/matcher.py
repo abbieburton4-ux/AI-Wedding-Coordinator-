@@ -58,6 +58,12 @@ SUPPLIER_SYSTEM_INSTRUCTION_TEMPLATE = (
 )
 
 
+def _share(total, fraction):
+    """A rough share of the intake total, or None (sent as null) when no budget is set
+    yet (PD-009), so the model is never told the budget is 0."""
+    return None if total is None else total * fraction
+
+
 @run_agent("venue_matcher", "venue_match")
 async def run_venue_matcher(db: AsyncSession, wedding_id: str):
     """Matches available venues against the wedding profile and creates shortlisted bookings."""
@@ -76,7 +82,7 @@ async def run_venue_matcher(db: AsyncSession, wedding_id: str):
         select(BudgetLine).where(BudgetLine.wedding_id == wedding_id, BudgetLine.category == "venue")
     )
     venue_budget_row = budget_result.first()
-    venue_budget = venue_budget_row.allocated_amount if venue_budget_row else wedding.budget_total * 0.4
+    venue_budget = venue_budget_row.allocated_amount if venue_budget_row else _share(wedding.budget_total, 0.4)
     
     guest_count = wedding.guest_count_estimate
     preferred_region = wedding.region
@@ -219,7 +225,7 @@ async def run_supplier_matcher(db: AsyncSession, wedding_id: str, category: str)
         select(BudgetLine).where(BudgetLine.wedding_id == wedding_id, BudgetLine.category == category)
     )
     cat_budget_row = budget_result.first()
-    cat_budget = cat_budget_row.allocated_amount if cat_budget_row else wedding.budget_total * 0.1
+    cat_budget = cat_budget_row.allocated_amount if cat_budget_row else _share(wedding.budget_total, 0.1)
     
     guest_count = wedding.guest_count_estimate
     preferred_region = wedding.region

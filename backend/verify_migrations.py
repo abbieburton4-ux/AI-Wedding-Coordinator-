@@ -119,6 +119,27 @@ def main() -> None:
     assert [tuple(r) for r in kept] == [("ti1",)], "the import merges these, not the migration"
     assert tasks == 0, tasks
 
+    print("3d. Checking that 0005 keeps budgets and allows a blank one (PD-009)...")
+    with engine.begin() as conn:
+        kept_budget = conn.execute(text(
+            "SELECT budget_total FROM weddings WHERE id = 'w1'")).scalar()
+        conn.execute(text(
+            "INSERT INTO weddings (id, couple_user_id, region, ceremony_type, "
+            "guest_count_estimate, budget_total, currency, status, created_at) "
+            "VALUES ('w3', 'u1', 'Placeholder', 'Jewish', 10, NULL, 'USD', 'intake', "
+            "'2026-01-01')"
+        ))
+    assert kept_budget == 1000.0, kept_budget
+    try:
+        command.downgrade(cfg, "0004")
+        raise AssertionError("downgrading past 0005 must refuse while a budget is blank")
+    except RuntimeError as exc:
+        assert "no intake budget" in str(exc), exc
+    with engine.begin() as conn:
+        still_there = conn.execute(text("SELECT COUNT(*) FROM weddings")).scalar()
+        conn.execute(text("DELETE FROM weddings WHERE id = 'w3'"))
+    assert still_there == 2, "a refused downgrade leaves every row in place"
+
     print("4. Downgrading to the start and back up again...")
     command.downgrade(cfg, "base")
     command.upgrade(cfg, "head")

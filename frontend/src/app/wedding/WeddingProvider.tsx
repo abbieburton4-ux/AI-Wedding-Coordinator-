@@ -14,7 +14,10 @@ export interface WeddingSummary {
   status: string;
   region: string;
   ceremony_type: string;
-  budget_total: number;
+  /** The intake estimate; null when the couple left the budget blank (PD-009). */
+  budget_total: number | null;
+  /** The couple's own total in whole US cents (PD-004); null until they set it. */
+  budget_total_cents?: number | null;
   guest_count_estimate: number;
   wedding_date?: string;
 }

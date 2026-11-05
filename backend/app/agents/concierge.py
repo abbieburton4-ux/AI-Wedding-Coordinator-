@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from google.genai import types
-from app.db.models import Wedding, User, BudgetLine, ChecklistTask, Booking, Quote, Supplier, Venue
+from app.db.models import Wedding, BudgetLine, ChecklistTask, Booking, Quote, Supplier, Venue
 from app.utils.checklist import STAGE_BY_KEY, STAGE_KEYS, stage_due
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
@@ -37,7 +37,6 @@ SYSTEM_INSTRUCTION = (
 
 async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
     """Assembles a compact, factual snapshot of the couple's wedding for grounding."""
-    couple = (await db.exec(select(User).where(User.id == wedding.couple_user_id))).first()
     budget = (await db.exec(
         select(BudgetLine).where(BudgetLine.wedding_id == wedding.id).order_by(BudgetLine.allocated_amount.desc())
     )).all()
@@ -51,12 +50,15 @@ async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
     bookings = (await db.exec(select(Booking).where(Booking.wedding_id == wedding.id))).all()
 
     lines: list[str] = []
-    lines.append(f"Couple: {couple.name if couple else 'the couple'}")
+    # The couple's names stay out of the prompt (PD-009, rule 3).
     lines.append(
         f"Wedding: {wedding.guest_count_estimate} guests · {wedding.ceremony_type} · {wedding.region} · "
         f"date {wedding.wedding_date or 'TBD'}."
     )
-    lines.append(f"Total budget: €{wedding.budget_total:,.0f}. Plan status: {wedding.status}.")
+    if wedding.budget_total is None:
+        lines.append(f"Total budget: not set yet. Plan status: {wedding.status}.")
+    else:
+        lines.append(f"Total budget: €{wedding.budget_total:,.0f}. Plan status: {wedding.status}.")
 
     if budget:
         lines.append("Budget lines (allocated / spent):")

@@ -1,14 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import List, Literal, Optional
 from datetime import date
+from decimal import Decimal
 import re
 import json
 from io import StringIO
 from fastapi.responses import StreamingResponse
 import pandas as pd
-from pydantic import BaseModel
+from pydantic import BaseModel, Field as PydField
 
 from app.config import settings
 from app.utils.email_match import UnsafeEmailError, normalise_email
@@ -17,6 +18,7 @@ from app.db.models import (
     User, Wedding, WeddingMember, BudgetCategory, BudgetLine, AgentDecisionLog,
     Booking, Venue, Supplier, Quote,
 )
+from app.api.v1.endpoints.budget import MAX_CENTS
 from app.utils.budget_compare import compare_quote
 from app.utils import checklist as checklist_rules
 from app.api.v1.access import (
@@ -28,17 +30,35 @@ from app.agents.concierge import run_concierge
 
 router = APIRouter()
 
-# Schema for creating a wedding profile
+# Schema for creating a wedding profile (the setup form, PD-009)
 class WeddingCreate(BaseModel):
-    guest_count_estimate: int
-    budget_total: float
-    region: str
-    ceremony_type: str
-    couple_name: Optional[str] = None  # e.g. "Priya & David" — personalizes the plan + vendor emails
+    guest_count_estimate: int = PydField(gt=0)
+    # The budget can be left blank while the couple decide it (PD-009). The setup form
+    # sends the couple's own total in whole US cents, which the budget screen shows
+    # (PD-004). The older float field is only the intake estimate, as before.
+    budget_total_cents: Optional[int] = PydField(default=None, gt=0, le=MAX_CENTS)
+    budget_total: Optional[float] = PydField(default=None, gt=0, le=MAX_CENTS / 100)
+    currency: Literal["USD"] = "USD"
+    region: str = PydField(min_length=1, max_length=120)
+    ceremony_type: str = PydField(min_length=1, max_length=60)
+    # Saved on the couple's profile only; not sent to the AI (PD-009, rule 3).
+    couple_name: Optional[str] = None
     style_notes: Optional[str] = None
     wedding_date: Optional[date] = None
     wedding_date_start: Optional[date] = None
     wedding_date_end: Optional[date] = None
+
+
+def _intake_budget(payload: WeddingCreate) -> tuple[Optional[int], Optional[float]]:
+    """The budget as (couple's total in cents, intake estimate in dollars). Both are
+    None when it's left blank, never 0. Only a total sent in cents is the couple's own
+    total; the dollars-only field stays an estimate, as PD-004 set it up."""
+    if payload.budget_total_cents is not None and payload.budget_total is not None:
+        raise HTTPException(status_code=422, detail="Send the budget once, in cents or dollars")
+    if payload.budget_total_cents is not None:
+        # One exact conversion for the older readers (planner, matchers, concierge).
+        return payload.budget_total_cents, float(Decimal(payload.budget_total_cents) / 100)
+    return None, payload.budget_total
 
 
 @router.post("/", response_model=Wedding, status_code=status.HTTP_201_CREATED)
@@ -49,7 +69,7 @@ async def create_wedding(
 ):
     """Submits a couple's wedding profile (Intake Form).
 
-    Runs the intake_planner to draft the budget. Venue and supplier
+    Runs the intake_planner to check the profile. Venue and supplier
     matching doesn't run automatically: the catalogue doesn't cover this wedding's
     area yet (B11), so it runs only when the couple ask for it (PD-003).
 
@@ -83,12 +103,20 @@ async def create_wedding(
         # Same rule as the checklist's date control.
         raise HTTPException(status_code=422, detail="Please pick a date that hasn't passed yet")
 
+    region = payload.region.strip()
+    ceremony_type = payload.ceremony_type.strip()
+    if not region or not ceremony_type:
+        raise HTTPException(status_code=422, detail="Please fill in the place and the ceremony")
+
+    total_cents, total_float = _intake_budget(payload)
     wedding = Wedding(
         couple_user_id=current_user.id,
         guest_count_estimate=payload.guest_count_estimate,
-        budget_total=payload.budget_total,
-        region=payload.region,
-        ceremony_type=payload.ceremony_type,
+        budget_total=total_float,
+        budget_total_cents=total_cents,
+        currency=payload.currency,
+        region=region,
+        ceremony_type=ceremony_type,
         style_notes=payload.style_notes,
         wedding_date=payload.wedding_date,
         # The checklist's "Catch up" group counts from the day the date was set (PD-007).
@@ -108,8 +136,8 @@ async def create_wedding(
         # Linked to an account at that partner's next verified sign-in.
         db.add(WeddingMember(wedding_id=wedding.id, email=email, level="owner"))
 
-    # Capture the couple's names on their profile so the planner agent and the
-    # draft vendor emails address them by name (dev signup leaves a placeholder).
+    # The couple's names go on their profile only (dev signup leaves a placeholder).
+    # No agent prompt includes them (PD-009, rule 3).
     if payload.couple_name and current_user.name != payload.couple_name:
         current_user.name = payload.couple_name
         db.add(current_user)

@@ -80,7 +80,10 @@ async def run_async_verification():
                 "confidence_score": 0.95
             }
             
+            planner_prompts = []
+
             async def mock_generate_content_success(*args, **kwargs):
+                planner_prompts.append(kwargs.get("contents"))
                 return MockResponse(json.dumps(planner_response))
                 
             mock_models.generate_content = mock_generate_content_success
@@ -95,6 +98,9 @@ async def run_async_verification():
             
             print(f"   * Status returned: {res_planner.get('status') or 'success'}")
             assert res_planner.get("is_budget_realistic") is True
+            # The couple's names never reach the model (PD-009, rule 3).
+            assert len(planner_prompts) == 1
+            assert "Clara" not in planner_prompts[0] and "couple_name" not in planner_prompts[0]
             
             # Verify records were inserted
             bl_result = await db.exec(select(BudgetLine).where(BudgetLine.wedding_id == "wedding_intake_test"))
@@ -558,6 +564,63 @@ async def run_async_verification():
             assert "Placeholder finished task" not in context, "done tasks are left out"
             assert "Private placeholder note" not in context, "notes stay out of the prompt"
             print("   * Unfinished tasks in stage order; done tasks and notes left out")
+            assert "Clara" not in context, "the couple's names stay out of the prompt (PD-009)"
+            assert "Total budget: €30,000" in context
+
+            print("\nTEST 12b: A setup-form wedding: blank budget, US dollars (PD-009)...")
+            model_calls = []
+
+            async def must_not_call(*args, **kwargs):
+                model_calls.append(kwargs)
+                raise AssertionError("the planner must not call the model here")
+
+            mock_models.generate_content = must_not_call
+            db.add(Wedding(
+                id="wedding_setup_test", couple_user_id="couple_1", status="intake",
+                budget_total=None, currency="USD", region="Placeholder City, ST, Country",
+                ceremony_type="Jewish", guest_count_estimate=225,
+            ))
+            await db.commit()
+
+            async def setup_logs():
+                return (await db.exec(
+                    select(AgentDecisionLog)
+                    .where(AgentDecisionLog.wedding_id == "wedding_setup_test",
+                           AgentDecisionLog.agent_id == "intake_planner")
+                    .order_by(AgentDecisionLog.timestamp.desc())
+                )).all()
+
+            out = await run_intake_planner(db, "wedding_setup_test")
+            assert out["budget_check"] == "skipped" and out["skip_reason"] == "no_budget", out
+            assert "budget_lines" not in out, "no split is drafted without a budget"
+            w_setup = (await db.exec(select(Wedding).where(Wedding.id == "wedding_setup_test"))).first()
+            await db.refresh(w_setup)
+            assert w_setup.status == "planning", "a blank budget never leaves setup stuck"
+            log = (await setup_logs())[0]
+            assert log.status == "success"
+            assert log.model_id is None and log.confidence_score is None, "no call, no metrics"
+            assert (log.tokens_input, log.tokens_output) == (None, None)
+            assert log.external_api_calls == []
+            print("   * Blank budget: no model call, wedding moves to planning, no invented metrics")
+
+            # A dollar budget isn't judged against the Irish euro price guide (B11).
+            w_setup.budget_total = 40000.0
+            w_setup.status = "intake"
+            db.add(w_setup)
+            await db.commit()
+            out = await run_intake_planner(db, "wedding_setup_test")
+            assert out["skip_reason"] == "not_irish_pricing", out
+            await db.refresh(w_setup)
+            assert w_setup.status == "planning"
+            assert model_calls == [], "the model was never called for this wedding"
+            print("   * Dollar budget: Irish price check skipped, no Irish-priced split")
+
+            w_setup.budget_total = None
+            db.add(w_setup)
+            await db.commit()
+            context = await _build_context(db, w_setup)
+            assert "Total budget: not set yet." in context and "€" not in context, context
+            print("   * Concierge context: a blank budget reads 'not set yet', not 0")
 
     # The production path must reach the same decorated agent, not an HTTP stub.
     print("\nTEST 13: Direct production dispatch uses the decorated agent...")
