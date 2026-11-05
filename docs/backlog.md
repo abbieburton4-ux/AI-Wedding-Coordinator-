@@ -69,7 +69,6 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 - **B13 — Stale material from the XPRIZE.** The prototype and both sales lists are gone (B6, PR #15; B37, PR #20). Left: the `.xlsx` trackers and the XPRIZE framing in `README.md`, `docs/runway.md`, `docs/strategic-memo.md` and `docs/reviews/`. *Fix:* archive or delete them (owner's call). See B40 for the prospects' first names.
 - **B40 — Past sales prospects' first names remain.** Found in PR #20. Four first names, one linked to a business, in `docs/runway.md`, `scripts/build_tracker.py` and probably `runway-tracker.xlsx` (rule 3). *Fix:* remove or replace them with roles. *Depends on:* owner's go-ahead (extends PD-005).
 - **B14 — The deploy workflow would publish a frontend with no backend.** `.github/workflows/deploy.yml` publishes `frontend/` to GitHub Pages at VenueFlow's domain, `venueflow.ie` (`frontend/public/CNAME`), on every push to `main`. It sets no `VITE_API_URL`, so the published site would have no backend. No runs are recorded on this repo. *Fix:* decide where the app and its backend are hosted, then point the workflow at that. Keep or drop the domain as part of that decision. *Depends on:* a PD on hosting (couple's call).
-- **B15 — CI is new and untested.** `.github/workflows/ci.yml` runs the backend verify scripts and the frontend build on every PR. *Fix:* confirm the first run passes, then make `CI / backend` and `CI / frontend` required checks (see `docs/autonomy.md`).
 - **B17 — The verify scripts rewrite tracked files.** `backend/endpoints_test.db` and its `-shm`/`-wal` files are committed, and every run of `verify_endpoints.py` changes them; the other scripts leave untracked `-shm`/`-wal` files. `.gitignore` already lists `endpoints_test.db*`, but the files were committed before that. *Fix:* `git rm --cached` them and widen the ignore rule to `backend/*_test.db*`.
 - **B25 — Unattended agents need a first test.** `.github/workflows/claude-agents.yml` is new, and its third-party plugins aren't pinned to a version. Known gaps from its review (2026-11-04):
   - Nothing scans agent commits for secrets: the gitleaks hook runs only locally, and CI has no gitleaks step.
@@ -99,6 +98,7 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-05 | **B15** — CI passes on PRs. `main` is protected by the owner: PR required, `backend` and `frontend` checks required, applies to admins, no force pushes or deletion | repo settings (owner) |
 | 2026-11-05 | **B22** — access settings screen, owner-only access changes, email confirmation (PD-002 step 2) | #14 |
 | 2026-11-05 | **B27** — migration naming convention and batch mode | #16 |
 | 2026-11-05 | **B6** — sales prospect list deleted, prototype contacts made fictional (PD-005) | #15 |
