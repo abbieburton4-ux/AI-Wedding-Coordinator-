@@ -668,19 +668,19 @@ def test_inquiry_guard_pilot_mode_always_routes_to_founder_inbox():
     """Pilot guard: even when we hold a CONFIRMED venue email, pilot mode must
     route to the founder inbox. The system never emails a real venue until it
     opts in — 'confirmed real' is not 'contactable'."""
-    confirmed = json.dumps({"website": "x", "email": "real@venue.ie"})  # no _verify → confirmed
+    confirmed = json.dumps({"website": "x", "email": "real@venue.example.com"})  # no _verify → confirmed
     recipient, note = agents.resolve_inquiry_recipient(confirmed)  # pilot_mode defaults True
     assert recipient == agents.PILOT_INQUIRY_INBOX
     assert "pilot mode" in note.lower()
     # The intended real address is surfaced for the audit trail.
-    assert "real@venue.ie" in note
+    assert "real@venue.example.com" in note
 
 
 def test_inquiry_guard_verify_flag_blocks_populated_email():
     """The exact failure mode from the seed reconciliation: a populated email
     flagged _verify:true is NOT confirmed. Even in live mode it must route to
     the founder inbox, never to the guessed address."""
-    guessed = json.dumps({"website": "x", "email": "weddings@adaremanor.com", "_verify": True})
+    guessed = json.dumps({"website": "x", "email": "weddings@guessed-venue.example.com", "_verify": True})
     recipient, note = agents.resolve_inquiry_recipient(guessed, pilot_mode=False)
     assert recipient == agents.PILOT_INQUIRY_INBOX, (
         "A _verify:true email must never be used as a real recipient"
@@ -690,9 +690,9 @@ def test_inquiry_guard_verify_flag_blocks_populated_email():
 
 def test_inquiry_guard_live_mode_uses_confirmed_email():
     """In live mode, a confirmed address (present + no _verify) is the recipient."""
-    confirmed = json.dumps({"email": "events@confirmed.ie"})
+    confirmed = json.dumps({"email": "events@confirmed.example.com"})
     recipient, note = agents.resolve_inquiry_recipient(confirmed, pilot_mode=False)
-    assert recipient == "events@confirmed.ie"
+    assert recipient == "events@confirmed.example.com"
     assert "confirmed" in note.lower()
 
 

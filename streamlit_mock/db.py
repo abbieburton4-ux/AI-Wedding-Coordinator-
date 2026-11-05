@@ -312,9 +312,9 @@ def init_db(force=False):
 def seed_data(cursor):
     # 1. Users
     users = [
-        ("couple_1", "couple", "Clara & Sean", "clara.sean@wedding.ie", "+353871234567"),
-        ("couple_2", "couple", "Priya & David", "priya.david@gmail.com", "+353869876543"),
-        ("planner_1", "planner", "Mary-Aoife (Wedding Wonders)", "maryaoife@weddingwonders.ie", "+353855551234"),
+        ("couple_1", "couple", "Clara & Sean", "clara.sean@example.com", None),
+        ("couple_2", "couple", "Priya & David", "priya.david@example.com", None),
+        ("planner_1", "planner", "Mary-Aoife (Example Planning)", "mary-aoife@example.com", None),
     ]
     cursor.executemany("INSERT INTO users (id, role, name, email, phone) VALUES (?, ?, ?, ?, ?)", users)
 
