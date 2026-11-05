@@ -38,6 +38,15 @@ const base = process.env.VITE_BASE ?? '/VenueFlow/'
 
 export default defineConfig({
   base,
+  server: {
+    host: '0.0.0.0',
+    port: 5000,
+    strictPort: true,
+    allowedHosts: true,
+    proxy: {
+      '/api': 'http://127.0.0.1:8000',
+    },
+  },
   plugins: [
     figmaAssetResolver(),
     // The React and Tailwind plugins are both required for Make, even if

@@ -33,6 +33,10 @@ You are working on AI Wedding Coordinator, which is the same app as VenueFlow: "
 **Ask me first** about anything that sends, money, sign-in or access, deleting data, how data is stored, or a product choice not covered in `docs/product/`.
 
 **Code conventions:**
+- Replit's demo-only workflow runs `bash scripts/replit-demo.sh`: Vite port 5000
+  proxies `/api` to FastAPI port 8000, with `VITE_BASE=/` and `VITE_API_URL=""`.
+  It enables existing dev/mock flags and disposable SQLite data; never enter
+  real data or publish this demo configuration. See `replit.md`.
 - Use `react-router` (not `react-router-dom`); routes live in `frontend/src/app/App.tsx`.
 - Tailwind v4 has no config file; tokens are in `frontend/src/styles/theme.css`. Use semantic classes (`bg-background`, `text-primary`), not hex colours.
 - Brand components are in `frontend/src/app/design-system/primitives.tsx`; shadcn components are in `frontend/src/app/components/ui/`.

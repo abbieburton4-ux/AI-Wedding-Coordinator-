@@ -6,6 +6,19 @@ Vite frontend) behind one script.
 
 ## Prerequisites
 
+### Replit demo preview (without Docker)
+
+Run `bash scripts/replit-demo.sh` using the **Start application** workflow.
+Open `/login` and choose **Continue as a couple**. This is the existing demo
+mode with fictional data, simulated sign-in and a disposable SQLite database;
+never enter real information or publish it. Vite serves port 5000 and proxies
+`/api` to FastAPI on port 8000. `VITE_BASE=/` and an empty `VITE_API_URL` keep
+browser requests on the preview's own origin. Live AI requires a server-side
+`GEMINI_API_KEY` Secret; voice requires `ELEVENLABS_API_KEY`. See
+[replit.md](replit.md) for dependency installation, limitations and verification.
+
+The Docker instructions below remain available for non-Replit development.
+
 - **Docker Desktop** running (the script checks this). First build pulls ~3 base
   images and runs `npm ci` + `pip install`, so budget a few minutes.
 - **A Gemini Developer API key** (`AIza…`) for the AI agents — get one at

@@ -1,0 +1,1 @@
+- [Replit package installation](replit-package-installation.md) — check Node compatibility and transitive fixes before adopting a new Firebase major.

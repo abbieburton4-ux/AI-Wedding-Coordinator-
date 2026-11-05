@@ -75,6 +75,12 @@ The owner doesn't write issues; the backlog is the queue. The "Next up" list at 
 
 ## Commands
 
+Replit demo preview: `bash scripts/replit-demo.sh` (workflow **Start application**).
+Frontend port 5000 proxies `/api` to backend port 8000; `VITE_BASE=/` and
+`VITE_API_URL=""` keep browser requests same-origin. This explicitly enables
+existing dev/mock flags with disposable SQLite data. Never use real data or
+publish that configuration. See `replit.md`; the non-Replit commands below remain.
+
 Backend (from `backend/`; Gemini is mocked in tests, so a dummy key works):
 ```bash
 python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt

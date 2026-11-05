@@ -89,6 +89,10 @@ Not carried over from the audit, because the restored backend already covers the
 - **B36 — The shared agent instructions describe the app as it was before B22, B26 and B28.** "What's actually there today" in `.agents/AGENTS.md` and `ai-studio-system-instructions.md` is out of date. Agents may not edit their own instructions, so this needs a session the owner runs. It also covers removing their references to `streamlit_mock/` (B37).
 
 
+<!-- New engineering finding; the product lane can rank it against the queue. -->
+
+- **B43 — Resolve frontend dependency advisories before real hosting.** Replit demo setup on 2026-11-05 found 13 npm audit findings (10 high, 2 moderate, 1 low), including Vite, react-router and Firebase transitive packages. `frontend/package.json` now overrides blocked `websocket-driver` and `tar` versions so installation succeeds, but this is not a clean security audit. *Why it matters:* the demo uses simulated sign-in and must not be published; real hosting also needs maintained dependencies. *Fix:* update compatible direct dependencies and transitive lockfile versions, review Firebase/Node engine requirements before any major upgrade, then run the backend verification scripts, frontend build and sign-in smoke checks. Do not run an unreviewed `npm audit fix --force`. No product decision required.
+
 ## Recently closed
 
 | Closed | Item | Resolved by |
