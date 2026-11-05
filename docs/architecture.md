@@ -182,7 +182,7 @@ sequenceDiagram
   Q->>W: deliver job
   W->>Gem: intake_planner(wedding_id)
   Gem-->>W: timeline + budget plan
-  W->>PG: Insert TimelineItem, BudgetLine, AgentDecisionLog
+  W->>PG: Insert TimelineItem, AgentDecisionLog (draft budget split stays in the log, B42)
   W->>Gem: venue_matcher + supplier_matcher (parallel)
   Gem-->>W: ranked shortlists
   W->>PG: Insert Booking (status=shortlisted), AgentDecisionLog

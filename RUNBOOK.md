@@ -186,7 +186,7 @@ node e2e.mjs        # screenshots are written next to it
 
 - **Wired to real data:** couple signup → intake → dashboard /
   budget / timeline / vendors; the vendor **quote loop** (log a reply → quote_extractor →
-  live budget + over-budget alert); the couple **AI Concierge** (Aurelia, grounded in the
+  compared with the matching category's planned dollars on the budget screen, B42); the couple **AI Concierge** (Aurelia, grounded in the
   couple's real budget/timeline/vendors).
 - **Still mock / next slices:** SendGrid inbound-email
   auto-ingest of vendor replies.

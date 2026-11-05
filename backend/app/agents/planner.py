@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from google.genai import types
-from app.db.models import Wedding, User, BudgetLine, TimelineItem
+from app.db.models import Wedding, User, TimelineItem
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
 from app.utils.constants import ALLOWED_BUDGET_CATEGORIES, normalize_category
@@ -61,7 +61,7 @@ SYSTEM_INSTRUCTION = (
 
 @run_agent("intake_planner", "timeline_generate")
 async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = False):
-    """Orchestrates intake analysis and seeds timeline & budget allocations.
+    """Orchestrates intake analysis and seeds the timeline.
 
     When ``force`` is True the budget-realism guardrail is acknowledged rather
     than blocking: the warning is still recorded on the decision log (so the
@@ -171,18 +171,10 @@ async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = Fa
     wedding.status = "planning"
     db.add(wedding)
     
-    # Seed budget lines
-    for line in result_dict.get("budget_lines", []):
-        cat = normalize_category(line["category"])
-        budget_line = BudgetLine(
-            id=f"bl_{uuid.uuid4().hex[:10]}",
-            wedding_id=wedding.id,
-            category=cat,
-            allocated_amount=line["allocated_amount"],
-            spent_amount=0.0
-        )
-        db.add(budget_line)
-        
+    # The draft budget lines stay in the decision log only. The couple's budget is the
+    # PD-004 dollar tables, which they fill in themselves (or from the AI split they ask
+    # for); the old euro BudgetLine rows are no longer created (B42).
+
     # Seed timeline items
     wedding_date_str = wedding.wedding_date or wedding.wedding_date_start
     if wedding_date_str:

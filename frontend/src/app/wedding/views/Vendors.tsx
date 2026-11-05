@@ -3,6 +3,7 @@ import { Icon } from "../../shared/Icon";
 import { IMG } from "../../design-system/assets";
 import { useWedding, useAgentMatcher, useApi, USE_FASTAPI_BACKEND } from "../../../app/api";
 import { useActiveWedding } from "../WeddingProvider";
+import { formatCents } from "./budget/money";
 
 // Real vendors carry no photography, so we cycle a few brand images for warmth.
 const CARD_IMAGES = [IMG.showroom, IMG.weddingConfetti, IMG.fineDining];
@@ -19,12 +20,24 @@ interface VendorBooking {
   quote_total?: number | null;
   quote_currency?: string | null;
   quote_rationale?: string | null;
-  allocated_amount?: number | null;
+  budget_category_name?: string | null;
+  budget_match_key?: string | null;
+  planned_cents?: number | null;
+  budget_comparison?: BudgetComparison | null;
   over_budget?: boolean | null;
+  over_by_cents?: number | null;
 }
 
-/** Quote loop: paste a vendor's email reply → quote_extractor parses it → the live
- *  budget updates and an over-budget alert fires. Polls until the agent's result lands. */
+type BudgetComparison =
+  | "over"
+  | "within"
+  | "no_category"
+  | "no_planned_amount"
+  | "currency_mismatch"
+  | "no_quote";
+
+/** Quote loop: paste a vendor's email reply → quote_extractor parses it → the card
+ *  compares it with the couple's budget. Polls until the agent's result lands. */
 function QuoteLogger({ booking, refetch }: { booking: VendorBooking; refetch: () => Promise<void> }) {
   const { request } = useApi();
   const [open, setOpen] = useState(false);
@@ -115,15 +128,53 @@ function QuoteLogger({ booking, refetch }: { booking: VendorBooking; refetch: ()
   );
 }
 
-/** Shows the AI-extracted quote vs the budget allocated to this category. */
+/** The quote in its own currency, e.g. "€4,500" or "$3,000.50". Display only. */
+function formatQuote(amount: number, currency?: string | null): string {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: (currency || "").trim().toUpperCase(),
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    return `${amount.toLocaleString("en-US")} ${currency ?? ""}`.trim();
+  }
+}
+
+/** How the quote compares with the couple's own budget for this category (PD-004). */
+function budgetLine(booking: VendorBooking): string | null {
+  // The name the backend matched on ("venue" for every venue), not the venue's type.
+  const key = booking.budget_match_key;
+  const category =
+    booking.budget_category_name ?? (key ? key.charAt(0).toUpperCase() + key.slice(1) : "this");
+  const planned = booking.planned_cents;
+  switch (booking.budget_comparison) {
+    case "over":
+      return planned != null && booking.over_by_cents != null
+        ? `${formatCents(booking.over_by_cents)} over the ${formatCents(planned)} planned for ${category}`
+        : null;
+    case "within":
+      return planned != null ? `Within the ${formatCents(planned)} planned for ${category}` : null;
+    case "no_category":
+      return `Not compared: your budget has no ${category} category.`;
+    case "no_planned_amount":
+      return `Not compared: no planned amount for ${category} in your budget yet.`;
+    case "currency_mismatch":
+      return `Not compared: this quote is in ${booking.quote_currency || "another currency"} and your budget is in US dollars.`;
+    default:
+      return null;
+  }
+}
+
+/** Shows the AI-read quote and how it compares with the couple's budget. */
 function QuotePanel({ booking }: { booking: VendorBooking }) {
-  const cur = booking.quote_currency === "EUR" ? "€" : "";
-  const total = booking.quote_total ?? 0;
-  const allocated = booking.allocated_amount ?? null;
+  const over = booking.budget_comparison === "over";
+  const note = budgetLine(booking);
   return (
     <div
       className={`rounded-2xl p-3 border ${
-        booking.over_budget
+        over
           ? "bg-error-container/15 border-error-container/40"
           : "bg-primary-container/10 border-primary-container/20"
       }`}
@@ -132,22 +183,16 @@ function QuotePanel({ booking }: { booking: VendorBooking }) {
         <p className="font-label-caps text-[10px] tracking-widest uppercase text-on-surface-variant">
           AI-read quote
         </p>
-        {booking.over_budget && (
+        {over && (
           <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-error">
             <Icon name="warning" size={13} /> Over budget
           </span>
         )}
       </div>
       <p className="font-title-lg text-title-lg text-on-surface mt-1 leading-tight">
-        {cur}{total.toLocaleString()}
+        {formatQuote(booking.quote_total ?? 0, booking.quote_currency)}
       </p>
-      {allocated != null && (
-        <p className="text-xs text-on-surface-variant">
-          {booking.over_budget
-            ? `${cur}${Math.round(total - allocated).toLocaleString()} over the ${cur}${allocated.toLocaleString()} allocated`
-            : `within the ${cur}${allocated.toLocaleString()} allocated`}
-        </p>
-      )}
+      {note && <p className="text-xs text-on-surface-variant">{note}</p>}
       {booking.quote_rationale && (
         <p className="text-xs text-on-surface-variant mt-2 leading-relaxed">{booking.quote_rationale}</p>
       )}
@@ -239,7 +284,7 @@ function VendorCard({ booking, img, refetch }: { booking: VendorBooking; img: st
           </div>
         )}
 
-        {/* Quote loop: log a vendor reply → AI extracts the quote → live budget */}
+        {/* Quote loop: log a vendor reply → AI reads the quote → compared with the budget */}
         <div className="pt-1">
           {booking.quote_total != null ? (
             <QuotePanel booking={booking} />

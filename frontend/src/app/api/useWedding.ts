@@ -34,8 +34,12 @@ interface Booking {
   quote_total?: number | null;
   quote_currency?: string | null;
   quote_rationale?: string | null;
-  allocated_amount?: number | null;
+  budget_category_name?: string | null;
+  budget_match_key?: string | null;
+  planned_cents?: number | null;
+  budget_comparison?: string | null;
   over_budget?: boolean | null;
+  over_by_cents?: number | null;
 }
 
 interface WeddingData {

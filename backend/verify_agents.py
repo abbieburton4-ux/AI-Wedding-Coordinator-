@@ -83,6 +83,11 @@ async def run_async_verification():
                 
             mock_models.generate_content = mock_generate_content_success
             
+            # An old euro row from before B42 must survive a planner run untouched.
+            db.add(BudgetLine(id="bl_pre_b42", wedding_id="wedding_intake_test",
+                              category="venue", allocated_amount=12000.0))
+            await db.commit()
+
             # Run the planner agent
             res_planner = await run_intake_planner(db, "wedding_intake_test")
             
@@ -92,8 +97,11 @@ async def run_async_verification():
             # Verify records were inserted
             bl_result = await db.exec(select(BudgetLine).where(BudgetLine.wedding_id == "wedding_intake_test"))
             budget_lines = bl_result.all()
-            print(f"   * Budget lines created: {len(budget_lines)}")
-            assert len(budget_lines) == 3
+            # B42: the planner no longer writes old euro BudgetLine rows; its draft split
+            # stays in the decision log, and the couple's budget is the PD-004 tables.
+            print(f"   * Old budget lines after the run: {len(budget_lines)} (expected 1, B42)")
+            assert [bl.id for bl in budget_lines] == ["bl_pre_b42"]
+            assert budget_lines[0].allocated_amount == 12000.0
             
             tl_result = await db.exec(select(TimelineItem).where(TimelineItem.wedding_id == "wedding_intake_test"))
             timeline_items = tl_result.all()
@@ -109,6 +117,7 @@ async def run_async_verification():
             print(f"   * Intake planner audit logs: {len(logs)}")
             assert len(logs) == 1
             assert logs[0].status == "success"
+            assert len(logs[0].output_payload.get("budget_lines", [])) == 3
 
             # Success moves the wedding straight to planning; there's no paid preview (PD-003).
             w_after = (await db.exec(select(Wedding).where(Wedding.id == "wedding_intake_test"))).first()
