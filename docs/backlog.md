@@ -11,23 +11,23 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-05 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B48** — the "Dates are provisional" note on the checklist. `needs-owner: should it disappear once the date is confirmed? (recommended: yes, with a "this date is confirmed" switch)`
-0a. **B46** — make the owner's Replit branch (`agent/fix-firebase-sign-in`, includes the Google sign-in fix) merge-ready: independent review, a PR, clashes with B24 and the duplicate B43 number. In progress: the review found it not merge-ready (frontend install fails outside Replit; production would skip the migrations); the engineer is fixing it on a new branch
-0b. **B47** — fix the frontend's security advisories (13, 10 high) before real data goes in. `ready` (after B46)
-1a. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
-2. **B44** — move the other parts that still read the old euro budget lines to the new budget. `ready`
-3. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
-4. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-5. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-6. **B14** — host the app on Replit (PD-008, ratified: "i am choosing replit"). `needs-owner: PD-008 calls (a) paid AI tier, (b) spending alert, (d) web address`
-7. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
-8. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
-9. **B34** — database-level guard against the same email being added twice. `ready`
-10. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
-11. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
-12. **B8** — record missing token counts as empty, not 0. `ready`
-13. **B17** — stop tracking the test database files. `ready`
-14. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy. `needs-owner: guardrail files need a session the owner runs`
+1. **B46** — make the owner's Replit branch (`agent/fix-firebase-sign-in`, includes the Google sign-in fix) merge-ready: independent review, a PR, clashes with B24 and the duplicate B43 number. In progress: the review found it not merge-ready (frontend install fails outside Replit; production would skip the migrations); the engineer is fixing it on a new branch
+2. **B47** — fix the frontend's security advisories (13, 10 high) before real data goes in. `ready` (after B46)
+3. **B48** — the "Dates are provisional" note on the checklist. `needs-owner: should it disappear once the date is confirmed? (recommended: yes, with a "this date is confirmed" switch)`
+4. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
+5. **B44** — move the other parts that still read the old euro budget lines to the new budget. `ready`
+6. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
+7. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+8. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
+9. **B14** — host the app on Replit (PD-008, ratified: "i am choosing replit"). `needs-owner: PD-008 calls (a) paid AI tier, (b) spending alert, (d) web address`
+10. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
+11. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+12. **B34** — database-level guard against the same email being added twice. `ready`
+13. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+14. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
+15. **B8** — record missing token counts as empty, not 0. `ready`
+16. **B17** — stop tracking the test database files. `ready`
+17. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy. `needs-owner: guardrail files need a session the owner runs`
 
 ## Open
 
@@ -39,7 +39,7 @@ Ranked against the couple's must-haves in `wedding.md` (1. in depth budgeting, 2
 
 1. **Before the wedding party puts real data in:** B22 (owner-managed access; step 1 done) and a hosting and storage PD (B14). Real guest data, including dietary notes, shouldn't go into an app anyone can sign in to. Before the first schema change on tables holding real data, migrations come first (AGENTS.md rule 6). The must-haves below will probably need schema changes.
 2. **Must-have 1, in depth budgeting:** B23, plus the currency part of B11 (amounts shown in USD).
-3. **Must-have 2, overall planning checklist:** B24.
+3. **Must-have 2, overall planning checklist:** B24 (done, #32); the tasks load after hosting (B14, B46).
 4. **Must-have 3, guest planning:** B19.
 5. **Vendor catalogue for Chicago:** the rest of B11, then B20. These rank below the must-haves because the couple are choosing a venue off their own shortlist and didn't list vendor matching as a must-have.
 6. **Honesty fixes for data the couple will see:** B8.
