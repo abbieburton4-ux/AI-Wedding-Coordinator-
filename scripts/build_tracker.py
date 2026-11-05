@@ -4,9 +4,6 @@ Build runway-tracker.xlsx — the live execution tracker for the Aug 17 submissi
 Usage (from repo root):
     python scripts/build_tracker.py
 
-Or with the streamlit_mock venv:
-    streamlit_mock/.venv/bin/python scripts/build_tracker.py
-
 Source of truth for the plan: docs/runway.md. If you edit the plan, edit
 this script in parallel and regenerate the xlsx.
 """
