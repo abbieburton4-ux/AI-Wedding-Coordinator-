@@ -13,10 +13,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.api.v1.access import normalise_email, require_wedding_access, wedding_level
+from app.api.v1.access import require_wedding_access, wedding_level
 from app.api.v1.endpoints.auth import get_current_user
 from app.db.models import User, WeddingMember
 from app.db.session import get_db
+from app.utils.email_match import UnsafeEmailError, normalise_email
 
 router = APIRouter()
 
@@ -24,10 +25,15 @@ router = APIRouter()
 # people between these two levels only; it never makes someone an owner (PD-002).
 AssignableLevel = Literal["viewer", "editor"]
 
-# ASCII only, so lower-casing can't fold a look-alike character into someone else's address.
+# Checked on the normalised (ASCII-only) address; see app.utils.email_match.
 _EMAIL_RE = re.compile(r"^[!-?A-~]+@[A-Za-z0-9.-]+\.[A-Za-z0-9-]+$")
 
 ALREADY_LISTED = "That email already has access"
+
+UNSAFE_NEW_EMAIL = (
+    "That address has letters we can't check safely, such as a letter from another "
+    "alphabet that looks like an English one. Type it again in plain letters."
+)
 
 OWNER_PROTECTED = (
     "People who manage access can't be removed or changed in the app. If that ever "
@@ -120,10 +126,12 @@ async def add_member(
 ):
     """Adds an email to the list. Sends nothing: the owner lets the person know."""
     await require_wedding_access(db, wedding_id, current_user, "owner")
-    # Checked before lower-casing, which would turn some look-alikes into ASCII.
-    if not _EMAIL_RE.match(payload.email.strip()):
+    try:
+        email = normalise_email(payload.email)
+    except UnsafeEmailError:
+        raise HTTPException(status_code=422, detail=UNSAFE_NEW_EMAIL)
+    if not _EMAIL_RE.match(email):
         raise HTTPException(status_code=422, detail="That doesn't look like an email address")
-    email = normalise_email(payload.email)
     existing = await db.exec(
         select(WeddingMember.id).where(
             WeddingMember.wedding_id == wedding_id, WeddingMember.email == email

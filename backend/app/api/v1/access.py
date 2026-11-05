@@ -4,6 +4,7 @@ Every wedding endpoint goes through ``require_wedding_access`` so the rule lives
 one place: viewers can read, editors can also change things and run agents, and
 owners can also manage who has access.
 """
+import logging
 from typing import Optional
 
 from fastapi import HTTPException
@@ -12,6 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db.models import ACCESS_LEVELS, User, Wedding, WeddingMember
+from app.utils.email_match import UnsafeEmailError, normalise_email
+
+logger = logging.getLogger(__name__)
 
 _RANK = {level: i for i, level in enumerate(ACCESS_LEVELS)}
 
@@ -68,21 +72,41 @@ async def has_level_anywhere(db: AsyncSession, user: User, minimum: str) -> bool
     return result.first() is not None
 
 
-def normalise_email(email: Optional[str]) -> str:
-    return (email or "").strip().lower()
+UNSAFE_EMAIL = (
+    "This email address has letters we can't check safely, such as a letter from another "
+    "alphabet that looks like an English one. Use the address the couple added, typed in "
+    "plain letters."
+)
 
 
 def bootstrap_emails() -> set:
-    """The couple's own sign-in emails (ACCESS_BOOTSTRAP_EMAILS), normalised."""
-    return {normalise_email(e) for e in settings.ACCESS_BOOTSTRAP_EMAILS.split(",") if e.strip()}
+    """The couple's own sign-in emails (ACCESS_BOOTSTRAP_EMAILS), normalised.
+
+    An entry that can't be compared safely is left out, so it never matches anyone.
+    """
+    emails = set()
+    for entry in settings.ACCESS_BOOTSTRAP_EMAILS.split(","):
+        try:
+            email = normalise_email(entry)
+        except UnsafeEmailError:
+            # The address itself stays out of the log (personal data).
+            logger.warning("Ignored an ACCESS_BOOTSTRAP_EMAILS entry with non-ASCII characters")
+            continue
+        if email:
+            emails.add(email)
+    return emails
 
 
 async def link_memberships(db: AsyncSession, user: User, email: str) -> bool:
     """Attach pending access-list rows for this verified email to the user.
 
-    Returns True if the email is on any wedding's list.
+    Returns True if the email is on any wedding's list. An address that can't be
+    compared safely never links.
     """
-    email = normalise_email(email)
+    try:
+        email = normalise_email(email)
+    except UnsafeEmailError:
+        return False
     if not email:
         return False
     result = await db.exec(select(WeddingMember).where(WeddingMember.email == email))

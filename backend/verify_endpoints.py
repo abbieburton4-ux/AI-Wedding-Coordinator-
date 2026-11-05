@@ -243,8 +243,11 @@ def test_api_suite():
         assert c.patch(f"{members_url}/{owner_member['id']}", json={"level": "editor"},
                        headers=headers).status_code == 409
         assert c.delete(f"{members_url}/{owner_member['id']}", headers=headers).status_code == 409
-        assert c.post(members_url, json={"email": "Kate@example.test", "level": "viewer"},
-                      headers=headers).status_code == 422
+        # Look-alike letters (B39): a Kelvin sign, Cyrillic and fullwidth letters.
+        for lookalike in ("\u212aate@example.test", "p\u0430rtner@example.test",
+                          "\uff50artner@example.test"):
+            res = c.post(members_url, json={"email": lookalike, "level": "viewer"}, headers=headers)
+            assert res.status_code == 422 and "can't check safely" in res.json()["detail"], res.text
         for level in ("editor", "viewer"):
             res = c.patch(f"{members_url}/{partner_id}", json={"level": level}, headers=headers)
             assert res.status_code == 409 and "ask the team" in res.json()["detail"], res.text
@@ -258,7 +261,12 @@ def test_api_suite():
             with mock_patch.object(sys, "argv", ["manage_access.py", *argv, "--wedding", wedding_id]):
                 manage_access.main()
 
-        _team("set", "--email", "partner@example.test", "--level", "editor")
+        try:
+            _team("set", "--email", "p\u0430rtner@example.test", "--level", "viewer")
+            raise AssertionError("manage_access accepted a look-alike address")
+        except SystemExit as exc:
+            assert "can't be matched safely" in str(exc), exc
+        _team("set", "--email", " Partner@Example.test ", "--level", "editor")
         with Session(sync_engine) as s:
             assert s.get(WeddingMember, partner_id).level == "editor"
         _team("set", "--email", "partner@example.test", "--level", "owner")
@@ -331,6 +339,49 @@ def test_api_suite():
         asyncio.run(_signup_rules())
         print("   * Sign-up: only listed or bootstrap emails may create an account; list rows link on sign-in")
 
+        # One strict comparison rule everywhere (B39): case and outer spaces only.
+        from app.utils.email_match import UnsafeEmailError, normalise_email
+        from app.api.v1.access import bootstrap_emails
+        assert normalise_email("viewer_1@example.test") == "viewer_1@example.test"
+        assert normalise_email(" \tViewer_1@EXAMPLE.test \n") == "viewer_1@example.test"
+        assert normalise_email(None) == "" and normalise_email("   ") == ""
+        lookalikes = [
+            "vi\u0435wer_1@example.test",      # Cyrillic ie
+            "viewer_1@ex\u0430mple.test",      # Cyrillic a, in the domain
+            "vi\u03b5wer_1@example.test",      # Greek epsilon
+            "viewer_1@example.t\u03bfst",      # Greek omicron
+            "\u212aate@example.test",          # Kelvin sign, which lower() turns into "k"
+            "\uff56iewer_1@example.test",      # fullwidth v, which NFKC turns into "v"
+            "viewer\uff3f1@example.test",      # fullwidth low line
+            "\u0130viewer_1@example.test",     # dotted capital I
+            "viewer_1@example.test\u00a0",     # trailing no-break space
+            "viewer_1@exa\u200bmple.test",     # zero-width space
+        ]
+        for lookalike in lookalikes:
+            try:
+                normalise_email(lookalike)
+                raise AssertionError(f"compared unsafely: {lookalike!r}")
+            except UnsafeEmailError:
+                pass
+
+        async def _lookalike_rules():
+            async with async_session_maker() as db:
+                for lookalike in lookalikes:
+                    assert not await _email_is_allowed(db, lookalike), lookalike
+                assert await _email_is_allowed(db, " VIEWER_1@example.test ")
+                settings.ACCESS_BOOTSTRAP_EMAILS = "kate@example.test, \u212aate@example.test"
+                try:
+                    assert bootstrap_emails() == {"kate@example.test"}
+                    assert not await _email_is_allowed(db, "\u212aate@example.test")
+                    assert await _email_is_allowed(db, "Kate@Example.test")
+                finally:
+                    settings.ACCESS_BOOTSTRAP_EMAILS = ""
+                user = await db.get(UserModel, "new_member")
+                assert not await link_memberships(db, user, "p\u0435nding@example.test")
+
+        asyncio.run(_lookalike_rules())
+        print("   * Sign-in: emails match only letter for letter; look-alike letters never match")
+
         # More viewer limits: replan, supplier matching and the voice agent.
         assert c.post(f"/api/v1/weddings/{wedding_id}/replan", headers=viewer_headers).status_code == 403
         assert c.post(f"/api/v1/weddings/{wedding_id}/suppliers", json={"category": "photography"},
@@ -387,12 +438,16 @@ def test_api_suite():
             assert res.status_code == 403 and "isn't on the wedding's access list" in res.json()["detail"]
             res = c.get("/api/v1/auth/me", headers=firebase_headers("fb_fam", "FAM@example.test", False))
             assert res.status_code == 403 and "hasn't been confirmed" in res.json()["detail"]
-            fam = firebase_headers("fb_fam", "FAM@example.test", True)
+            for uid, lookalike in (("fb_cyr", "f\u0430m@example.test"),
+                                   ("fb_wide", "\uff46am@example.test")):
+                res = c.get("/api/v1/auth/me", headers=firebase_headers(uid, lookalike, True))
+                assert res.status_code == 403 and "can't check safely" in res.json()["detail"], res.text
+            fam = firebase_headers("fb_fam", " FAM@example.test ", True)
             assert c.get("/api/v1/auth/me", headers=fam).status_code == 200
             assert c.get(f"/api/v1/weddings/{wedding_id}", headers=fam).status_code == 200
             assert c.patch(f"/api/v1/weddings/{wedding_id}", json={"guest_count_estimate": 1},
                            headers=fam).status_code == 403
-            print("   * Firebase: unlisted and unconfirmed emails refused; a listed viewer links and reads only")
+            print("   * Firebase: unlisted, unconfirmed and look-alike emails refused; a listed viewer links and reads only")
 
             assert c.post("/api/v1/weddings/", json=wedding_payload, headers=fam).status_code == 403
             couple = firebase_headers("fb_newcouple", "newcouple@example.test", True)
