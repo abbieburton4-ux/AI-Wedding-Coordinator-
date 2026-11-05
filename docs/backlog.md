@@ -11,7 +11,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-05 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B31** — point the autopilot workflow at the owner's Claude subscription. `needs-owner: agents may not change .github/; the owner makes this edit or runs it in their own engineer session`
-0b. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". `needs-owner: the owner disables the "Claude Code" and "Claude Code Review" workflows in the Actions tab (agents may not change .github/)`
+0b. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B38** — block either owner from removing or demoting the other on the access screen (PD-002 note, 2026-11-05). `ready`
 2. **B37** — delete `outreach-list.xlsx` and `streamlit_mock/`, and fix the references to them (PD-005, extended). `ready`
 3. **B23** — in depth budgeting (PD-004 ratified: option C, plus an AI-suggested starting split). Fold in B30. `ready`
