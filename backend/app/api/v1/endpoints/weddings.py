@@ -14,9 +14,10 @@ from app.config import settings
 from app.utils.email_match import UnsafeEmailError, normalise_email
 from app.db.session import get_db
 from app.db.models import (
-    User, Wedding, WeddingMember, BudgetLine, TimelineItem, AgentDecisionLog, Booking, Venue,
-    Supplier, Quote,
+    User, Wedding, WeddingMember, BudgetCategory, BudgetLine, TimelineItem, AgentDecisionLog,
+    Booking, Venue, Supplier, Quote,
 )
+from app.utils.budget_compare import compare_quote
 from app.api.v1.access import (
     UNSAFE_EMAIL, bootstrap_emails, require_wedding_access, weddings_for_member,
 )
@@ -253,8 +254,15 @@ class BookingDetail(BaseModel):
     quote_total: Optional[float] = None
     quote_currency: Optional[str] = None
     quote_rationale: Optional[str] = None
-    allocated_amount: Optional[float] = None  # budget allocated to this vendor's category
-    over_budget: Optional[bool] = None        # quote_total > allocated_amount
+    # The matching category in the couple's budget (PD-004), and how the quote compares
+    # with its planned amount. See app/utils/budget_compare.py.
+    budget_category_name: Optional[str] = None
+    budget_match_key: Optional[str] = None
+    planned_cents: Optional[int] = None
+    budget_currency: Optional[str] = None
+    budget_comparison: Optional[str] = None
+    over_budget: Optional[bool] = None
+    over_by_cents: Optional[int] = None
 
 
 @router.get("/{wedding_id}/bookings", response_model=List[BookingDetail])
@@ -303,8 +311,8 @@ async def get_wedding_bookings(
                     "email": item.get("draft_inquiry_email"),
                 }
 
-    # Latest quote per booking + budget allocation per category, so each vendor card
-    # can show the live "quoted vs allocated" picture and an over-budget flag.
+    # Latest quote per booking + the couple's budget categories, so each vendor card can
+    # compare the quote with what they planned for that category.
     booking_ids = [b.id for b in bookings]
     latest_quote: dict[str, Quote] = {}
     if booking_ids:
@@ -313,20 +321,19 @@ async def get_wedding_bookings(
         )
         for q in quotes_result.all():
             latest_quote.setdefault(q.booking_id, q)
-    budget_rows = (await db.exec(select(BudgetLine).where(BudgetLine.wedding_id == wedding_id))).all()
-    alloc_by_cat = {b.category: b.allocated_amount for b in budget_rows}
+    categories = (await db.exec(
+        select(BudgetCategory).where(BudgetCategory.wedding_id == wedding_id)
+    )).all()
 
-    def quote_fields(bid: str, budget_category: str) -> dict:
+    def quote_fields(bid: str, vendor_category: str) -> dict:
         q = latest_quote.get(bid)
         if not q:
             return {}
-        allocated = alloc_by_cat.get(budget_category)
         return {
             "quote_total": q.total_amount,
             "quote_currency": q.currency,
             "quote_rationale": q.rationale_text,
-            "allocated_amount": allocated,
-            "over_budget": bool(allocated and q.total_amount > allocated),
+            **compare_quote(q.total_amount, q.currency, vendor_category, categories),
         }
 
     details: List[BookingDetail] = []

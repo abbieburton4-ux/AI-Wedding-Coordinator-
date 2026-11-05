@@ -585,6 +585,65 @@ def test_api_suite():
         assert all(con["category_id"] is None for con in ours["contributions"])
         print("   * Cross-wedding: another wedding's real ids are refused (404) and untouched")
 
+        print("7d. Verifying vendor cards compare quotes with the couple's own budget (B42)...")
+        from app.db.models import Booking, BudgetLine, Quote, Supplier
+        names = {cat["name"].lower() for cat in ours["categories"]}
+        assert not names & {"photography", "videography", "cake", "transport"}, names
+        assert c.post(f"{b_url}/categories", json={"name": "Photography",
+                      "planned_cents": 300_000}, headers=headers).status_code == 201
+        assert c.post(f"{b_url}/categories", json={"name": "Videography"},
+                      headers=headers).status_code == 201
+        assert c.post(f"{b_url}/categories", json={"name": "Transport",
+                      "planned_cents": 50_000}, headers=headers).status_code == 201
+        # (supplier category, quote total, quote currency)
+        cases = {
+            "over": ("photography", 3000.01, "USD"),
+            "within": ("photography", 3000.00, "usd"),
+            "no_category": ("cake", 10.0, "USD"),
+            "no_planned_amount": ("videography", 10.0, "USD"),
+            "currency_mismatch": ("transport", 900.0, "EUR"),
+        }
+        with Session(sync_engine) as s:
+            # A large old euro row must be ignored: the old over-budget flag came from here.
+            s.add(BudgetLine(id="bl_b42_old", wedding_id=wedding_id, category="photography",
+                             allocated_amount=99_999.0))
+            for key, (cat, total, cur) in cases.items():
+                s.add(Supplier(id=f"sup_b42_{key}", name=f"Sample {key}", category=cat,
+                               location="Sligo", source="manual"))
+                s.add(Booking(id=f"bk_b42_{key}", wedding_id=wedding_id,
+                              supplier_id=f"sup_b42_{key}"))
+                s.add(Quote(id=f"q_b42_{key}", booking_id=f"bk_b42_{key}",
+                            total_amount=total, currency=cur))
+            s.commit()
+        for who in (headers, viewer_headers):
+            res = c.get(f"/api/v1/weddings/{wedding_id}/bookings", headers=who)
+            assert res.status_code == 200, res.text
+            cards = {b["id"]: b for b in res.json()}
+            for key in cases:
+                card = cards[f"bk_b42_{key}"]
+                assert card["budget_comparison"] == key, (key, card)
+                assert card["budget_currency"] == "USD"
+            over, within = cards["bk_b42_over"], cards["bk_b42_within"]
+            assert (over["over_budget"], over["over_by_cents"], over["planned_cents"]) == (
+                True, 1, 300_000), over
+            assert over["budget_category_name"] == "Photography"
+            assert (within["over_budget"], within["over_by_cents"]) == (False, 0), within
+            for key in ("no_category", "no_planned_amount", "currency_mismatch"):
+                card = cards[f"bk_b42_{key}"]
+                assert card["over_budget"] is None and card["over_by_cents"] is None, card
+            assert cards["bk_b42_no_category"]["budget_category_name"] is None
+            assert cards["bk_b42_no_category"]["budget_match_key"] == "cake"
+            assert "allocated_amount" not in over
+        with Session(sync_engine) as s:
+            assert s.get(BudgetLine, "bl_b42_old").allocated_amount == 99_999.0
+            assert s.get(Booking, "bk_b42_over").status == "shortlisted"
+            assert s.get(Quote, "q_b42_over").status == "pending"
+        print("   * Vendor cards: over and within against the planned dollars; no flag without a "
+              "matching category, a planned amount or a dollar quote; old euro rows ignored")
+        from app.utils.budget_compare import to_cents
+        assert to_cents(0.1 + 0.2) == 30 and to_cents(1234.565) == 123457
+        assert to_cents(float("nan")) is None and to_cents(-1) is None and to_cents(None) is None
+
         forged = pyjwt.encode({"sub": "forged_admin", "role": "admin"},
                               "dev-jwt-secret-key-change-me-in-production", algorithm="HS256")
         res = c.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {forged}"})
