@@ -208,3 +208,19 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - (d) The web address: Replit's free `.replit.app` address, or your own address from your first names (about $12 a year). *Recommended: your own address, with the "and" spelling, from PD-006.* **Answer (2026-11-05): "use  Replit's free address".** The app uses Replit's free `.replit.app` address; no domain is bought.
 **Follow-up, ratified (owner, 2026-11-05, asked "Do you want to keep guest details away from the free AI? Yes or no?": "yes"):** on Gemini's free tier, Google may use what the app sends to improve its products, and human reviewers may read it ([Gemini API terms](https://aistudio.google.com/docs/terms)). Guest names, contact details and dietary notes (health data, rule 3) are the most sensitive things the app holds. **Decision:** the AI features never send guest names, contact details or dietary notes to Gemini. They work from counts and categories instead (for example "225 invited, 12 vegetarian"). [GAP] whether any agent sends them today; the engineer checks and fixes it (B49).
 **Rejected because:** A means a second set-up when the owner already works in Replit; the owner chose Replit. The paid AI tier was declined by the owner.
+
+## PD-009 — A setup form that fits this wedding (Chicago, dollars, Jewish ceremony)
+
+**Date:** 2026-11-05 · **Status:** ratified (by the owner, one of the couple, 2026-11-05: "yes, write it up but it can go next/now")
+**Context:** Backlog B51. On the Replit copy, signing in opens the setup form, because the new database has no wedding yet; the form creates the wedding record. The form was never removed (PD-003 removed checkout, the planner and admin areas and the marketing landing, not setup). It was built for Irish couples: only Irish counties, a required budget in euros, ceremony types that include "Irish Catholic" and no Jewish option, and generic defaults (Dublin, 120 guests, €35,000). Saving it as it is would record this wedding as being in an Irish county with a euro budget.
+**Options:**
+- **A: Fit the form to this wedding.** Fill it in from `wedding.md`; the couple check it and save. *Couple's cost:* one check-and-save. *Build:* small.
+- **B: Skip the form; the team creates the wedding from `wedding.md`.** *Couple's cost:* nothing. *But:* agents don't write to the live database directly (AGENTS.md rule 6), so the owner would have to run a script, and the form would still be wrong if it's ever needed again.
+- **C: Leave it, wait for B11** (Chicago vendors and regions). *But:* the couple can't start using the live app until then, or they start with a wrong record.
+**Decision:** A, as the next item.
+- The form is filled in from what the couple told us: Chicago, IL, United States; US dollars; Jewish ceremony; 225 invited; wedding date 21 August 2027, shown as provisional. Every field can still be changed.
+- The budget can be left blank, because it's still being decided (`wedding.md`). A blank budget shows as "not set yet", never as $0 or an invented amount, and can be added later.
+- No Irish counties, euros or "Irish Catholic" anywhere on the form. The ceremony choices include Jewish.
+- Saving the form still never contacts a vendor and never starts vendor matching (PD-003).
+**Technical choices settled by the team:** how the place and a blank budget are stored; the AI planner must not fail or leave the dashboard stuck on "building" when the budget is blank; the couple's names aren't sent to the AI (minimum context, rule 3). Vendor matching for Chicago stays with B11.
+**Rejected because:** B needs the owner to run a script and leaves a broken form behind; C blocks the couple or starts them on a wrong record.
