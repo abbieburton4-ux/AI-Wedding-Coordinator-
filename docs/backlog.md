@@ -11,7 +11,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-05 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B39** — stop look-alike email addresses passing as the couple's at sign-in (PD-002 note, 2026-11-05). `ready`
+1. **B39** — stop look-alike email addresses passing as the couple's at sign-in (PD-002 note, 2026-11-05). Building (engineer started 2026-11-05)
 2. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
 3. **B23** — in depth budgeting (PD-004 ratified: option C, plus an AI-suggested starting split). Fold in B30. Building
 4. **B14** — where the app and its data live, and what that costs. `needs-owner: approve the hosting recommendation (the product lane writes the PD next, with costs)`
