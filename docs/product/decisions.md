@@ -62,6 +62,10 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 **Note (2026-11-05), the settings screen (B22, PR #14):** owner (one of the couple), 2026-11-05: "block it, keep no".
 - *Can one of the couple remove the other's power to manage access?* **No: blocked on the screen.** Neither owner can remove or demote the other. If it's ever really needed, the team does it on the owner's request.
 - *Can the screen make anyone else an access manager?* **No.** Only the owner and the groom manage access. Everyone else is "can edit" or "view only".
+**Note (2026-11-05), look-alike emails (B39):** the security review of PR #18 found that sign-in might treat an address with a look-alike letter (for example, from another alphabet) as one of the couple's or as one on the access list. Owner (one of the couple), 2026-11-05, asked "Shall I get a fix approved and built?": "sure".
+- *Decision:* an address only matches the couple's or an access-list entry if it's the same address, letter for letter. Capital letters and spaces at either end don't matter; look-alike letters never count as a match.
+- *Left to the team:* how the comparison is done, and the checks that prove it.
+- *Guard:* no one already on the access list may lose access because of the change. If an address can't be matched safely, sign-in refuses it with a clear message rather than guessing.
 
 ---
 
@@ -143,3 +147,4 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 **Technical choices settled by the team:** deleting a file doesn't remove it from git history, so old copies stay visible in the repo's past commits. Erasing them from history needs a force-push, which the guardrails block, and it would be a separate owner decision. It isn't part of this decision.
 **Rejected because:** B keeps other people's contact details published.
 **Extended (2026-11-05):** also delete `outreach-list.xlsx` (another old sales list: about 43 named people at planning businesses, with social media handles) and the whole first prototype, `streamlit_mock/`. Owner (one of the couple), 2026-11-05: "Delete the second old outreach list and the whole first prototype". This settles the prototype part of B13. Git history still keeps old copies, as above.
+**Extended again (2026-11-05), past prospects' first names (B40):** PR #20 found four first names of past sales prospects, one linked to a business, in `docs/runway.md`, `scripts/build_tracker.py` and probably `runway-tracker.xlsx`. Owner (one of the couple), 2026-11-05, asked "Shall we remove those too?": "yes". Remove them or replace them with roles (for example "a planner in Dublin"), wherever they appear in the repo's current files. Git history still keeps old copies, as above.
