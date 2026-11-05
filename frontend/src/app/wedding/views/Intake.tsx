@@ -53,7 +53,7 @@ export function Intake() {
       });
       await refetch();
       setActiveWedding(created.id);
-      // The AI planner builds the budget and timeline now; the dashboard shows the
+      // The AI planner drafts the budget now; the dashboard shows the
       // "building" spinner, then the plan.
       navigate("/wedding", { replace: true });
     } catch {
@@ -69,8 +69,8 @@ export function Intake() {
         </p>
         <h1 className="font-display-sm text-display-sm text-on-surface mb-2">Tell us about your wedding</h1>
         <p className="text-body-md text-on-surface-variant mb-8">
-          Your AI coordinator will draft a budget, a planning timeline, and a shortlist of venues and
-          suppliers from this. You can refine everything afterwards.
+          Your AI coordinator will draft a budget and a shortlist of venues and suppliers from
+          this. You can refine everything afterwards.
         </p>
 
         {error && <p className="mb-4 text-sm text-error">{error}</p>}

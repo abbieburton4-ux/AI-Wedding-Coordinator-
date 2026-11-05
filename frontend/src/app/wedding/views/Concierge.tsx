@@ -10,7 +10,7 @@ type Message = { role: "ai" | "user"; text: string };
 const SEED: Message[] = [
   {
     role: "ai",
-    text: "Hi, I'm Aurelia — your AI wedding coordinator. Ask me anything about your budget, timeline, or vendors and I'll answer from your real plan.",
+    text: "Hi, I'm Aurelia — your AI wedding coordinator. Ask me anything about your budget, checklist, or vendors and I'll answer from your real plan.",
   },
 ];
 
@@ -42,7 +42,7 @@ export function Concierge() {
     if (!weddingId) {
       setMessages((prev) => [
         ...prev,
-        { role: "ai", text: "Start your wedding plan first and I'll have your budget and timeline to work from." },
+        { role: "ai", text: "Start your wedding plan first and I'll have your budget and checklist to work from." },
       ]);
       return;
     }

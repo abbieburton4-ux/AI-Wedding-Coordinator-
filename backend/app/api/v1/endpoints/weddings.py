@@ -14,10 +14,11 @@ from app.config import settings
 from app.utils.email_match import UnsafeEmailError, normalise_email
 from app.db.session import get_db
 from app.db.models import (
-    User, Wedding, WeddingMember, BudgetCategory, BudgetLine, TimelineItem, AgentDecisionLog,
+    User, Wedding, WeddingMember, BudgetCategory, BudgetLine, AgentDecisionLog,
     Booking, Venue, Supplier, Quote,
 )
 from app.utils.budget_compare import compare_quote
+from app.utils import checklist as checklist_rules
 from app.api.v1.access import (
     UNSAFE_EMAIL, bootstrap_emails, require_wedding_access, weddings_for_member,
 )
@@ -48,7 +49,7 @@ async def create_wedding(
 ):
     """Submits a couple's wedding profile (Intake Form).
 
-    Runs the intake_planner to build the budget and timeline. Venue and supplier
+    Runs the intake_planner to draft the budget. Venue and supplier
     matching doesn't run automatically: the catalogue doesn't cover this wedding's
     area yet (B11), so it runs only when the couple ask for it (PD-003).
 
@@ -77,6 +78,11 @@ async def create_wedding(
         if theirs.first() is not None:
             raise HTTPException(status_code=409, detail="Your wedding has already been set up.")
 
+    today = checklist_rules.wedding_today()
+    if payload.wedding_date is not None and payload.wedding_date < today:
+        # Same rule as the checklist's date control.
+        raise HTTPException(status_code=422, detail="Please pick a date that hasn't passed yet")
+
     wedding = Wedding(
         couple_user_id=current_user.id,
         guest_count_estimate=payload.guest_count_estimate,
@@ -85,6 +91,8 @@ async def create_wedding(
         ceremony_type=payload.ceremony_type,
         style_notes=payload.style_notes,
         wedding_date=payload.wedding_date,
+        # The checklist's "Catch up" group counts from the day the date was set (PD-007).
+        wedding_date_set_on=today if payload.wedding_date else None,
         wedding_date_start=payload.wedding_date_start,
         wedding_date_end=payload.wedding_date_end,
         status="intake"
@@ -109,7 +117,7 @@ async def create_wedding(
     await db.commit()
     await db.refresh(wedding)
 
-    # Build the budget and timeline now. Matching waits until the couple ask (PD-003).
+    # Draft the budget now. Matching waits until the couple ask (PD-003).
     try:
         await enqueue_agent_task(
             "intake-planner",
@@ -148,6 +156,14 @@ async def update_wedding(
     wedding = await require_wedding_access(db, wedding_id, current_user, "editor")
 
     updates = payload.model_dump(exclude_unset=True)
+    today = checklist_rules.wedding_today()
+    new_date = updates.get("wedding_date")
+    if new_date is not None and new_date != wedding.wedding_date and new_date < today:
+        # Same rule as the checklist's date control.
+        raise HTTPException(status_code=422, detail="Please pick a date that hasn't passed yet")
+    if "wedding_date" in updates and new_date != wedding.wedding_date:
+        # The checklist's "Catch up" group counts from the day the date was set (PD-007).
+        wedding.wedding_date_set_on = today if new_date else None
     for field, value in updates.items():
         setattr(wedding, field, value)
     if updates:
@@ -226,21 +242,6 @@ async def get_wedding_budget(
         select(BudgetLine).where(BudgetLine.wedding_id == wedding_id).order_by(BudgetLine.allocated_amount.desc())
     )
     return budget_result.all()
-
-
-@router.get("/{wedding_id}/timeline", response_model=List[TimelineItem])
-async def get_wedding_timeline(
-    wedding_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Fetches the timeline milestones for a wedding."""
-    wedding = await require_wedding_access(db, wedding_id, current_user, "viewer")
-        
-    timeline_result = await db.exec(
-        select(TimelineItem).where(TimelineItem.wedding_id == wedding_id).order_by(TimelineItem.due_at.asc())
-    )
-    return timeline_result.all()
 
 
 class BookingDetail(BaseModel):
@@ -460,7 +461,7 @@ async def ask_concierge(
     db: AsyncSession = Depends(get_db),
 ):
     """Answers a couple's question via the concierge agent, grounded in their real
-    budget, timeline, and vendors. Runs synchronously (chat needs an immediate reply)
+    budget, checklist, and vendors. Runs synchronously (chat needs an immediate reply)
     and logs an AgentDecisionLog row per question."""
     wedding = await require_wedding_access(db, wedding_id, current_user, "editor")
 

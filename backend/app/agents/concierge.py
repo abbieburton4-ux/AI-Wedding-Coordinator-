@@ -5,7 +5,8 @@ from pydantic import BaseModel, Field
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from google.genai import types
-from app.db.models import Wedding, User, BudgetLine, TimelineItem, Booking, Quote, Supplier, Venue
+from app.db.models import Wedding, User, BudgetLine, ChecklistTask, Booking, Quote, Supplier, Venue
+from app.utils.checklist import STAGE_BY_KEY, STAGE_KEYS, stage_due
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
 
@@ -20,7 +21,7 @@ class ConciergeReply(BaseModel):
 SYSTEM_INSTRUCTION = (
     "You are Aurelia, an expert Irish wedding coordinator and the couple's personal AI concierge. "
     "Answer their question using the WEDDING CONTEXT provided (their budget allocations + spend, their "
-    "planning timeline, and their shortlisted vendors) plus general Irish wedding knowledge.\n\n"
+    "planning checklist, and their shortlisted vendors) plus general Irish wedding knowledge.\n\n"
     "RULES:\n"
     "- Be warm and concise (2–5 sentences). Speak to the couple directly.\n"
     "- Be SPECIFIC with their real numbers: cite the relevant budget line's allocated vs spent, vendor "
@@ -40,9 +41,13 @@ async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
     budget = (await db.exec(
         select(BudgetLine).where(BudgetLine.wedding_id == wedding.id).order_by(BudgetLine.allocated_amount.desc())
     )).all()
-    timeline = (await db.exec(
-        select(TimelineItem).where(TimelineItem.wedding_id == wedding.id).order_by(TimelineItem.due_at.asc())
+    # Titles only: the couple's notes on a task stay out of the prompt.
+    open_tasks = (await db.exec(
+        select(ChecklistTask).where(ChecklistTask.wedding_id == wedding.id,
+                                    ChecklistTask.done == False)  # noqa: E712
     )).all()
+    open_tasks = sorted(open_tasks, key=lambda t: (
+        STAGE_KEYS.index(t.stage) if t.stage in STAGE_BY_KEY else 0, t.position))
     bookings = (await db.exec(select(Booking).where(Booking.wedding_id == wedding.id))).all()
 
     lines: list[str] = []
@@ -58,10 +63,14 @@ async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
         for b in budget:
             lines.append(f"  - {b.category}: €{b.allocated_amount:,.0f} allocated, €{b.spent_amount:,.0f} spent")
 
-    if timeline:
-        lines.append("Upcoming timeline milestones:")
-        for t in timeline[:8]:
-            lines.append(f"  - {t.title} (due {t.due_at}, {t.status})")
+    if open_tasks:
+        lines.append("Next unfinished checklist tasks:")
+        for t in open_tasks[:8]:
+            stage = STAGE_BY_KEY.get(t.stage)
+            when = stage.label if stage else "no stage"
+            if stage and wedding.wedding_date:
+                when += f", due {stage_due(wedding.wedding_date, stage)} (provisional)"
+            lines.append(f"  - {t.title} ({when})")
 
     if bookings:
         venues = {v.id: v for v in (await db.exec(select(Venue))).all()}
@@ -90,7 +99,7 @@ async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
 
 @run_agent("concierge", "concierge_reply")
 async def run_concierge(db: AsyncSession, wedding_id: str, message: str):
-    """Answers a couple's question, grounded in their real budget/timeline/vendors."""
+    """Answers a couple's question, grounded in their real budget/checklist/vendors."""
     model = model_for("concierge")  # not a planning agent → Flash (cheap + fast for chat)
     prompt_version = get_prompt_version(SYSTEM_INSTRUCTION)
 

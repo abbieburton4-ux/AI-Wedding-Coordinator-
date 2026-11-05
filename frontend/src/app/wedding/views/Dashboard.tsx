@@ -13,15 +13,9 @@ interface IntakeLog {
   error_message?: string;
 }
 
-function formatDue(due: string): { label: string; overdue: boolean } {
-  const d = new Date(due);
-  const days = Math.round((d.getTime() - Date.now()) / 86_400_000);
-  const dateStr = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-  if (days < 0) return { label: `${dateStr} · overdue`, overdue: true };
-  if (days === 0) return { label: `${dateStr} · today`, overdue: false };
-  if (days <= 31) return { label: `${dateStr} · in ${days} day${days === 1 ? "" : "s"}`, overdue: false };
-  const months = Math.round(days / 30);
-  return { label: `${dateStr} · in ${months} month${months === 1 ? "" : "s"}`, overdue: false };
+function formatDay(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 export function Dashboard() {
@@ -40,10 +34,12 @@ export function Dashboard() {
   const venues = data.bookings.filter((b) => b.venue_id);
   const suppliers = data.bookings.filter((b) => b.supplier_id);
 
-  // The "what do I do next?" answer: nearest unfinished milestones.
-  const nextSteps = [...data.timelineItems]
-    .filter((t) => t.status !== "done" && t.status !== "completed")
-    .sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())
+  // The "what do I do next?" answer: the first unfinished checklist tasks, from the
+  // groups open by default ("Catch up" and the current stage), else from the top.
+  const groups = data.checklist?.groups ?? [];
+  const current = groups.filter((g) => g.current);
+  const nextSteps = (current.length ? current : groups)
+    .flatMap((g) => g.tasks.filter((t) => !t.done).map((t) => ({ ...t, group: g })))
     .slice(0, 3);
 
   // ---- Intake recovery state ----
@@ -73,7 +69,7 @@ export function Dashboard() {
     }
   }, [weddingId, request]);
 
-  // ---- Polling: while the intake planner builds the budget and timeline ----
+  // ---- Polling: while the intake planner drafts the budget ----
   const [waited, setWaited] = useState(0);
   const sawBuilding = useRef(false);
   if (building) sawBuilding.current = true;
@@ -256,7 +252,7 @@ export function Dashboard() {
           Your AI coordinator is building your plan
         </h1>
         <p className="text-body-md text-on-surface-variant max-w-md">
-          Drafting your budget and a planning timeline for a{" "}
+          Drafting a budget for a{" "}
           {wedding?.guest_count_estimate}-guest {wedding?.ceremony_type} wedding in {wedding?.region}.
         </p>
         {intakeStalled && (
@@ -280,7 +276,12 @@ export function Dashboard() {
   // ---- The live, agent-built plan ----
   const summary = [
     { label: "Budget lines", value: data.budgetLines.length, icon: "payments", to: "/wedding/budget" },
-    { label: "Timeline milestones", value: data.timelineItems.length, icon: "auto_schedule", to: "/wedding/timeline" },
+    {
+      label: "Checklist tasks done",
+      value: data.checklist ? `${data.checklist.done} / ${data.checklist.total}` : "—",
+      icon: "checklist",
+      to: "/wedding/checklist",
+    },
     { label: "Venues shortlisted", value: venues.length, icon: "storefront", to: "/wedding/vendors" },
     { label: "Suppliers shortlisted", value: suppliers.length, icon: "favorite", to: "/wedding/vendors" },
   ];
@@ -325,38 +326,34 @@ export function Dashboard() {
             <h2 className="font-headline-sm text-headline-sm text-on-surface">Your next steps</h2>
             <button
               type="button"
-              onClick={() => navigate("/wedding/timeline")}
+              onClick={() => navigate("/wedding/checklist")}
               className="text-sm font-button-text text-primary hover:opacity-80 transition-opacity"
             >
-              View full timeline
+              View the checklist
             </button>
           </header>
           <div className="bg-wedding-white custom-shadow rounded-[3rem] p-3 border border-outline-variant/10 divide-y divide-outline-variant/10">
-            {nextSteps.map((t) => {
-              const due = formatDue(t.due_at);
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => navigate("/wedding/timeline")}
-                  className="w-full text-left flex items-start gap-4 p-4 hover:bg-primary/5 rounded-[2rem] transition-colors"
-                >
-                  <span className="mt-1 w-9 h-9 shrink-0 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Icon name={t.kind === "day_of" ? "celebration" : "task_alt"} size={18} className="text-primary" />
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-button-text text-on-surface">{t.title}</p>
-                    {t.description && (
-                      <p className="text-sm text-on-surface-variant mt-0.5 line-clamp-2">{t.description}</p>
-                    )}
-                    <p className={`text-xs mt-1 font-bold uppercase tracking-wider ${due.overdue ? "text-error" : "text-on-surface-variant/70"}`}>
-                      {due.label}
-                    </p>
-                  </div>
-                  <Icon name="chevron_right" size={20} className="text-outline mt-1.5 shrink-0" />
-                </button>
-              );
-            })}
+            {nextSteps.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => navigate("/wedding/checklist")}
+                className="w-full text-left flex items-start gap-4 p-4 hover:bg-primary/5 rounded-[2rem] transition-colors"
+              >
+                <span className="mt-1 w-9 h-9 shrink-0 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Icon name="task_alt" size={18} className="text-primary" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-button-text text-on-surface">{t.title}</p>
+                  <p className={`text-xs mt-1 font-bold uppercase tracking-wider ${t.label === "overdue" ? "text-error" : "text-on-surface-variant/70"}`}>
+                    {t.label === "catch_up" ? "Catch up" : t.group.label}
+                    {t.group.due_on ? ` · due ${formatDay(t.group.due_on)}` : ""}
+                    {t.label === "overdue" ? " · overdue" : ""}
+                  </p>
+                </div>
+                <Icon name="chevron_right" size={20} className="text-outline mt-1.5 shrink-0" />
+              </button>
+            ))}
           </div>
         </section>
       )}

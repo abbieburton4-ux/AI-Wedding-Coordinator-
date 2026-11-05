@@ -17,7 +17,9 @@ sys.path.insert(0, os.path.realpath(os.path.dirname(__file__)))
 
 from sqlmodel import SQLModel, select
 from app.db.session import sync_engine, async_session_maker
-from app.db.models import Wedding, User, BudgetLine, TimelineItem, Booking, Quote, AgentDecisionLog
+from app.db.models import (
+    Wedding, User, BudgetLine, TimelineItem, ChecklistTask, Booking, Quote, AgentDecisionLog,
+)
 from app.db.seed import seed_database
 
 # Agent Imports
@@ -103,10 +105,14 @@ async def run_async_verification():
             assert [bl.id for bl in budget_lines] == ["bl_pre_b42"]
             assert budget_lines[0].allocated_amount == 12000.0
             
+            # PD-007: the planning checklist replaced the generated timeline, so the planner
+            # writes no timeline items or checklist tasks, even when the model returns some.
             tl_result = await db.exec(select(TimelineItem).where(TimelineItem.wedding_id == "wedding_intake_test"))
             timeline_items = tl_result.all()
-            print(f"   * Timeline items created: {len(timeline_items)}")
-            assert len(timeline_items) == 2
+            print(f"   * Timeline items created: {len(timeline_items)} (expected 0, PD-007)")
+            assert len(timeline_items) == 0
+            ct_result = await db.exec(select(ChecklistTask).where(ChecklistTask.wedding_id == "wedding_intake_test"))
+            assert ct_result.all() == []
             
             # Verify pending/success audit log entry
             log_result = await db.exec(
@@ -117,6 +123,7 @@ async def run_async_verification():
             print(f"   * Intake planner audit logs: {len(logs)}")
             assert len(logs) == 1
             assert logs[0].status == "success"
+            assert logs[0].decision_type == "intake_plan"
             assert len(logs[0].output_payload.get("budget_lines", [])) == 3
 
             # Success moves the wedding straight to planning; there's no paid preview (PD-003).
@@ -533,8 +540,27 @@ async def run_async_verification():
             assert log.external_api_calls[0]["tokens"] == {"input": None, "output": None}
             print("   * Tokens not reported: logged as empty, not zero")
 
+            print("\nTEST 12: Concierge context reads the checklist (PD-007)...")
+            from app.agents.concierge import _build_context
+            db.add_all([
+                ChecklistTask(wedding_id="wedding_intake_test", stage="2m", position=1,
+                              title="Placeholder later task"),
+                ChecklistTask(wedding_id="wedding_intake_test", stage="9m", position=1,
+                              title="Placeholder sooner task", notes="Private placeholder note"),
+                ChecklistTask(wedding_id="wedding_intake_test", stage="9m", position=2,
+                              title="Placeholder finished task", done=True),
+            ])
+            await db.commit()
+            w_ctx = (await db.exec(select(Wedding).where(Wedding.id == "wedding_intake_test"))).first()
+            context = await _build_context(db, w_ctx)
+            assert "Next unfinished checklist tasks:" in context
+            assert context.index("Placeholder sooner task") < context.index("Placeholder later task")
+            assert "Placeholder finished task" not in context, "done tasks are left out"
+            assert "Private placeholder note" not in context, "notes stay out of the prompt"
+            print("   * Unfinished tasks in stage order; done tasks and notes left out")
+
     # The production path must reach the same decorated agent, not an HTTP stub.
-    print("\nTEST 12: Direct production dispatch uses the decorated agent...")
+    print("\nTEST 13: Direct production dispatch uses the decorated agent...")
     from app.utils.direct_tasks import execute_agent_task
     from unittest.mock import AsyncMock
     from app.config import settings

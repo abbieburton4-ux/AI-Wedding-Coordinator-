@@ -156,7 +156,7 @@ This logic lives in a single `runAgent()` helper. Agents themselves are just `{ 
 
 | Agent | Model | Trigger | `decision_type` writes | Story |
 |---|---|---|---|---|
-| `intake_planner` | Pro | Stripe webhook → `Wedding.status=planning` | `timeline_generate`, `budget_alert` (seed) | 1, 2 |
+| `intake_planner` | Pro | Stripe webhook → `Wedding.status=planning` | `intake_plan` (draft budget split in the log; the timeline was replaced by the checklist, PD-007) | 1, 2 |
 | `venue_matcher` | Pro | Wedding planning starts | `venue_match`, then N `inquiry_draft` | 4 |
 | `supplier_matcher` | Pro | Same as above, per category | `supplier_match`, `inquiry_draft` | 4 |
 | `quote_extractor` | Flash | SendGrid inbound parse | `quote_draft` (chained to `inquiry_draft`) | 4 |
@@ -198,8 +198,8 @@ sequenceDiagram
   API->>Q: enqueue intake_sourcing(wedding_id)
   Q->>W: deliver job
   W->>Gem: intake_planner(wedding_id)
-  Gem-->>W: timeline + budget plan
-  W->>PG: Insert TimelineItem, AgentDecisionLog (draft budget split stays in the log, B42)
+  Gem-->>W: budget plan
+  W->>PG: Update Wedding.status, AgentDecisionLog (draft budget split stays in the log, B42)
   W->>Gem: venue_matcher + supplier_matcher (parallel)
   Gem-->>W: ranked shortlists
   W->>PG: Insert Booking (status=shortlisted), AgentDecisionLog
