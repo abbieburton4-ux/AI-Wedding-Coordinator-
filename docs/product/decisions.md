@@ -174,3 +174,50 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - (f) What happens after the wedding: keep it running, or export everything and shut it down. *Can wait until after the wedding.*
 **Decision:** awaiting couple.
 **Rejected because:** awaiting couple.
+
+## PD-007 — What the overall planning checklist covers (must-have 2)
+
+**Date:** 2026-11-05 · **Status:** proposed (parts ratified by the owner, one of the couple, 2026-11-05: "select August 21 2027, and show a 'dates are provisional' but give me the option to change it. you can combine the ones that are overdue and put it in the longest month from now. dont lable them yet as overdue, but catch up. you can draft up an intiail jewish traditions list for me to review/add to")
+**Context:** Backlog B24. The checklist is the couple's second must-have (`wedding.md`). Today the AI planner makes a short timeline of tasks, but nobody can tick them off, add or edit them, and it has no Jewish ceremony rules. On 2026-11-05 the owner brought their own checklist: 19 stages from "12 months before" to "post-wedding", with about 100 tasks, plus how the screen should work. The list is copied into [checklist-list.md](checklist-list.md). The wedding date isn't fixed, and counting back from August 2027, the first three stages are already past.
+**Decision so far (ratified):**
+- **The list.** The checklist starts from the owner's list ([checklist-list.md](checklist-list.md), part 1), in the order given. The couple can tick tasks done, add their own tasks to any stage, rename tasks and delete any task.
+- **The date.** Due dates are counted back from a provisional wedding date of 21 August 2027. The screen says the dates are provisional, and the couple can change the date; every due date then moves with it.
+- **Stages already past.** Stages whose date has already passed are combined into one "Catch up" group. Its tasks are labelled "catch up", never "overdue".
+- **Jewish traditions.** The product lane drafts a list for the couple to review and add to ([checklist-list.md](checklist-list.md), part 2). It isn't added to the checklist until they approve it.
+- **The screen** (from the owner's spec): stages in order with a count each ("3 / 5"), an overall progress bar, a tick box per task, stages that fold away with the current one open, and a filter for All / Not done / Overdue. It works on a phone and with a keyboard.
+**Couple's calls (still open):**
+- (a) When the "Catch up" group is due. I read "put it in the longest month from now" as: the catch-up tasks join the next stage still ahead, "9 months before", due 21 Nov 2026. The other reading is a separate group due one month from today (5 Dec 2026). *Recommended: the first reading, so nothing gets a made-up date of its own.*
+- (b) One shared checklist for the wedding: when you or the groom tick something, you both see it. Family can see it but not change it, as with the rest of the app. The owner's spec said each person's progress is saved separately. *Recommended: shared.*
+- (c) This list replaces the AI planner's generated timeline on the checklist screen. Nothing is deleted; the AI's tasks just stop showing. *Recommended: yes. The AI timeline has no Jewish rules, and two lists would be confusing.*
+- (d) Which draft Jewish traditions to add ([checklist-list.md](checklist-list.md), part 2). *Doesn't block the build: they can be added after the checklist works.*
+**Technical choices settled by the team:** the checklist is saved in the app's database through the backend, not in the browser (rule 11), with a migration (rule 6). Owners and editors can tick and edit; viewers can only read (PD-002). If the date changes, stages move into or out of "Catch up" to match. A stage that passes from now on, with tasks not done, shows as "overdue" ("dont lable them yet as overdue" covers the stages already past). Ticking a task never marks a payment paid or a booking confirmed (rule 4).
+**Rejected because:** awaiting couple on (a)–(c).
+
+## PD-007 — What the overall planning checklist covers (must-have 2)
+
+**Date:** 2026-11-05 · **Status:** proposed
+**Context:** Backlog B24. The checklist is the couple's second must-have (`wedding.md`). Today the planner makes a timeline of tasks that nobody can tick off, add or edit, and its ceremony rules are Irish and include nothing for a Jewish ceremony. The owner has put a checklist brief in the project folder (`wedding-checklist-prompt.md`, untracked, 2026-11-05). It has 22 phases, from 12 months before the wedding to 2 weeks after, with about 115 general tasks (for example "Book your vendors", "Get your marriage license", "Finalize your seating charts"). It also asks for: ticking items off, adding, editing and deleting items, due dates counted back from the wedding date, overdue and current-phase highlighting, a progress bar, collapsible phases, and a filter (all, incomplete, overdue). Three things in the brief don't settle themselves here:
+- The exact date isn't fixed (August–October 2027 window). The brief shows no dates until one is set.
+- The brief asks for progress "per user". In this app the couple share one wedding, and family can view it (`wedding.md`).
+- The list has no Jewish-tradition items, and the couple want "the usual jewish traditions" (which ones: [GAP]).
+Also, it's now about 9–11 months before the window, so the 12- and 11-month phases fall in the past.
+**Options:**
+- **A: The owner's list, shared by the wedding, with estimated dates.** The checklist starts from the owner's list, plus the Jewish-tradition items the couple pick. There's one checklist for the wedding: the couple tick, add, edit and delete; family see it (view only, as with everything else). Until the exact date is fixed, the couple pick a planning month in the app and the dates show as "estimated". Once the date is set, they become real. Phases already in the past show as "catch up", not as a wall of overdue items. Everything else in the brief is included.
+  - *Couple's cost:* picking a planning month and the traditions once.
+  - *Build:* medium. New editable checklist tables with a migration, the screen, and replacing the planner's old read-only timeline on that screen.
+- **B: The same, but no dates until the exact date is set.** The brief as written: the checklist shows phases in order, but no due dates or overdue flags until the date is fixed.
+  - *Couple's cost:* none now, but the checklist won't warn about anything slipping until the venue and date are booked.
+  - *Build:* slightly smaller than A.
+- **C: A plain shared list, no phases or dates.**
+  - *Couple's cost:* they track timing themselves.
+  - *Build:* small.
+**Recommendation:** A. With the date unfixed and the wedding less than a year away, estimated dates are what keeps the checklist useful now. They're clearly labelled, so the app never presents a date the couple haven't set as real (rule 2).
+**Technical choices settled by the team:** the list is stored per wedding in the database, not in the browser (rule 11), so the couple and family see the same thing. Ticks record who ticked and when. The app never sends reminders to anyone (rule 1). The brief's per-user storage is read as "per wedding", because one wedding is shared by everyone signed in (call (b)).
+**Couple's calls:**
+- (a) A, B or C? *Recommended: A.*
+- (b) One shared checklist for the wedding, rather than a separate one for each person. The couple edit it and family can see it. *Recommended: yes, shared.*
+- (c) Which Jewish traditions should have tasks? Common ones, for the couple to pick from (suggestions, not facts about this wedding): finding a rabbi or officiant; the ketubah (choosing the text and artist, arranging witnesses); the chuppah; tisch and bedeken; the aufruf; kosher or kosher-style catering; music for the hora and chair lifting; the glass for breaking; yichud; mikvah. *Recommended: the couple tick the ones they want; others can be added later as custom items.*
+- (d) Until the exact date is set, which month should the estimated dates count back from: August, September or October 2027? *Recommended: whichever the couple think most likely; it can be changed in the app at any time.*
+- (e) Where the list came from. If it's copied from a wedding website, the team keeps the wording in the app's private data rather than copying the whole list into this public project's notes. *Question for the owner: did you write it, or is it from a website?*
+**Decision:** awaiting couple.
+**Rejected because:** awaiting couple.
