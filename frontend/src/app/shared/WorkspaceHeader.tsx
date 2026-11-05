@@ -20,7 +20,16 @@ function initialsOf(name?: string | null): string {
   return parts.slice(0, 2).map((w) => w[0].toUpperCase()).join("");
 }
 
-export function WorkspaceHeader({ profileTo, searchPlaceholder = "Search…" }: { profileTo?: string; searchPlaceholder?: string }) {
+export function WorkspaceHeader({
+  profileTo,
+  accessTo,
+  searchPlaceholder = "Search…",
+}: {
+  profileTo?: string;
+  /** Link to the access settings, passed only for people who can manage access. */
+  accessTo?: string;
+  searchPlaceholder?: string;
+}) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user, role, signOut } = useAuth();
@@ -133,6 +142,13 @@ export function WorkspaceHeader({ profileTo, searchPlaceholder = "Search…" }: 
                     className="flex items-center gap-3 px-3 py-2.5 rounded-[0.75rem] hover:bg-surface-container-low text-on-surface transition-colors">
                     <Icon name="smart_toy" size={20} className="text-on-surface-variant" />
                     <span className="font-button-text text-button-text">Concierge</span>
+                  </Link>
+                )}
+                {accessTo && (
+                  <Link to={accessTo} onClick={() => setProfileOpen(false)}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-[0.75rem] hover:bg-surface-container-low text-on-surface transition-colors">
+                    <Icon name="manage_accounts" size={20} className="text-on-surface-variant" />
+                    <span className="font-button-text text-button-text">Who has access</span>
                   </Link>
                 )}
                 <button type="button" onClick={handleSignOut}

@@ -143,7 +143,8 @@ NOT_ON_LIST = (
 )
 EMAIL_NOT_VERIFIED = (
     "This email address hasn't been confirmed yet. "
-    "Please sign in with Google using the address the couple added."
+    "Ask for a confirmation email, open the link in it, then continue. "
+    "Or sign in with Google using the address the couple added."
 )
 
 

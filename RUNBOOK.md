@@ -75,7 +75,7 @@ In production (PD-002), set these in the deployment environment, never in git:
 | `INTERNAL_TASKS_SECRET` | A long random value. The task dispatcher sends it to the worker `/tasks/*` routes. |
 | `INBOUND_EMAIL_SECRET` | A long random value. Put it on the SendGrid inbound-parse URL as `?token=...`. |
 
-**Never deploy with `DEVELOPMENT_MODE=True`**, even though `backend/.env.example` sets it for local work. It switches off every secret check below and the wedding-creation limit. Leave `DEVELOPMENT_MODE`, `ALLOW_MOCK_AUTH` and `JWT_SECRET` unset; the first two default to off. Outside dev mode, the worker routes and webhooks refuse every call when their secret isn't set. Nobody can sign themselves up. Everyone other than the couple gets in only once they're on the wedding's access list. The team manages that list with `backend/manage_access.py` until the owner's settings screen exists (B22). The owner's setup steps are in [docs/setup-sign-in.md](docs/setup-sign-in.md).
+**Never deploy with `DEVELOPMENT_MODE=True`**, even though `backend/.env.example` sets it for local work. It switches off every secret check below and the wedding-creation limit. Leave `DEVELOPMENT_MODE`, `ALLOW_MOCK_AUTH` and `JWT_SECRET` unset; the first two default to off. Outside dev mode, the worker routes and webhooks refuse every call when their secret isn't set. Nobody can sign themselves up. Everyone other than the couple gets in only once they're on the wedding's access list. The couple manage that list on the **Who has access** screen (`/wedding/access`, owners only); `backend/manage_access.py` stays as a fallback for the team. Turn on both Google and Email/Password in Firebase: a password account is let in only after the person confirms their email, using a confirmation email they ask for themselves. The owner's setup steps are in [docs/setup-sign-in.md](docs/setup-sign-in.md).
 
 ### Migrations
 
@@ -187,5 +187,5 @@ node e2e.mjs        # screenshots are written next to it
   budget / timeline / vendors; the vendor **quote loop** (log a reply → quote_extractor →
   live budget + over-budget alert); the couple **AI Concierge** (Aurelia, grounded in the
   couple's real budget/timeline/vendors).
-- **Still mock / next slices:** the owner's access screen (B22); SendGrid inbound-email
+- **Still mock / next slices:** SendGrid inbound-email
   auto-ingest of vendor replies.

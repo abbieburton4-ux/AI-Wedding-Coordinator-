@@ -3,7 +3,7 @@ import { Outlet, NavLink, useLocation, Link } from "react-router";
 import { cn } from "../design-system/cn";
 import { Icon } from "../shared/Icon";
 import { WorkspaceHeader } from "../shared/WorkspaceHeader";
-import { WeddingProvider } from "./WeddingProvider";
+import { WeddingProvider, useActiveWedding } from "./WeddingProvider";
 
 const NAV_ITEMS = [
   { path: "/wedding", label: "Overview", deskIcon: "dashboard", mobileLabel: "Home", mobileIcon: "home", end: true, mobile: true },
@@ -14,13 +14,18 @@ const NAV_ITEMS = [
   { path: "/wedding/timeline", label: "Timeline", deskIcon: "auto_schedule", mobileLabel: "Timeline", mobileIcon: "event", mobile: true },
 ];
 
-function WeddingDesktopNav() {
+const ACCESS_PATH = "/wedding/access";
+
+function WeddingDesktopNav({ canManageAccess }: { canManageAccess: boolean }) {
+  const items = canManageAccess
+    ? [...NAV_ITEMS, { path: ACCESS_PATH, label: "Who has access", deskIcon: "manage_accounts", end: false }]
+    : NAV_ITEMS;
   return (
     <nav className="hidden md:flex flex-col gap-base p-6 fixed left-0 top-16 bottom-0 w-72 bg-surface-container-low border-r border-outline-variant/20 z-40 overflow-y-auto">
       <div className="font-label-caps text-label-caps text-on-surface-variant mb-6 px-4 uppercase tracking-widest">
         Wedding Planner
       </div>
-      {NAV_ITEMS.map((item) => (
+      {items.map((item) => (
         <NavLink
           key={item.path}
           to={item.path}
@@ -84,8 +89,10 @@ function ConciergeFab() {
   );
 }
 
-export function WeddingLayout() {
+function WeddingShell() {
   const { pathname } = useLocation();
+  // Only decides what's offered; the API refuses non-owners on its own.
+  const canManageAccess = useActiveWedding().myLevel === "owner";
   // Concierge and the intake/onboarding flow render full-bleed (no nav chrome).
   const showShell = !pathname.endsWith("/concierge") && !pathname.endsWith("/intake");
 
@@ -94,16 +101,28 @@ export function WeddingLayout() {
   }, [pathname]);
 
   return (
-    <WeddingProvider>
-      <div className="wedding min-h-screen flex flex-col md:flex-row bg-background text-on-background font-body-md antialiased selection:bg-primary-container selection:text-on-primary-container">
-        {showShell && <WorkspaceHeader profileTo="/wedding/concierge" searchPlaceholder="Search vendors, guests…" />}
-        {showShell && <WeddingDesktopNav />}
-        <div className="flex-grow w-full min-w-0">
-          <Outlet />
-        </div>
-        {showShell && <WeddingBottomNav />}
-        {showShell && <ConciergeFab />}
+    <div className="wedding min-h-screen flex flex-col md:flex-row bg-background text-on-background font-body-md antialiased selection:bg-primary-container selection:text-on-primary-container">
+      {showShell && (
+        <WorkspaceHeader
+          profileTo="/wedding/concierge"
+          accessTo={canManageAccess ? ACCESS_PATH : undefined}
+          searchPlaceholder="Search vendors, guests…"
+        />
+      )}
+      {showShell && <WeddingDesktopNav canManageAccess={canManageAccess} />}
+      <div className="flex-grow w-full min-w-0">
+        <Outlet />
       </div>
+      {showShell && <WeddingBottomNav />}
+      {showShell && <ConciergeFab />}
+    </div>
+  );
+}
+
+export function WeddingLayout() {
+  return (
+    <WeddingProvider>
+      <WeddingShell />
     </WeddingProvider>
   );
 }
