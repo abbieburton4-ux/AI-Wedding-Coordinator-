@@ -1,5 +1,7 @@
 # VenueFlow — 82-Day Runway to Aug 17 Submission
 
+> **Note (2026-11-05):** the first prototype in `streamlit_mock/` has been deleted from the repo (PD-005). File references below point to code that no longer exists; old copies remain in git history.
+
 **Anchored:** 2026-05-27 (Wed). **Submission deadline:** 2026-08-17 (Mon). **Judging announcement:** 2026-09-25.
 
 > **Day numbering note.** Brief uses "Day 87 = Aug 17"; calendar math is 82 days. This doc anchors on **calendar dates** (immovable) with day-from-start in parens where helpful. If you see "Day N", read it as the named milestone, not a date.
@@ -289,13 +291,13 @@ These are the ones the original risk table missed.
 
 ### Risk 1: Stripe Checkout is not built
 **Impact:** Catastrophic for submission. No real Stripe = no revenue proof = no Business Viability category points.
-**Where:** [streamlit_mock/app.py:214](../streamlit_mock/app.py#L214) currently simulates payment with `st.info("Simulating payment of €299...")`. There is no Stripe key, no Checkout session, no webhook.
+**Where:** `streamlit_mock/app.py:214` currently simulates payment with `st.info("Simulating payment of €299...")`. There is no Stripe key, no Checkout session, no webhook.
 **De-risk by:** Jun 7 (end of Week 2). Atharva ships a real Stripe Checkout in test mode that creates a PaymentIntent and writes a `PAYMENT` row.
 **Data needed to confirm de-risked:** 1 test-mode €149 charge visible in Stripe dashboard + 1 corresponding row in the `payments` table with non-null `stripe_payment_id`.
 
 ### Risk 2: Inbound email parsing doesn't exist
 **Impact:** Medium-high. The `quote_extractor` agent takes pasted-in email text. In production this means a planner has to copy supplier replies manually. If a judge asks "how does the AI actually receive supplier responses?" the answer today is "the planner pastes them in." That's a credibility hit.
-**Where:** [streamlit_mock/app.py:474](../streamlit_mock/app.py#L474) — `st.text_area("Paste Supplier Email Response")`.
+**Where:** `streamlit_mock/app.py:474` — `st.text_area("Paste Supplier Email Response")`.
 **De-risk by:** Jul 19 (end of Week 8). Either ship a SendGrid Inbound Parse webhook (probably 2 days work) OR pre-empt the question in the narrative: "Supplier replies are pasted by the planner today; SendGrid Inbound Parse ships post-Day-90." The narrative honesty is acceptable; pretending otherwise is not.
 **Data needed:** EITHER 1 supplier reply that arrived via SendGrid → triggered quote_extractor → wrote a Quote row, OR a paragraph in the narrative that explicitly names this as planned-not-built.
 

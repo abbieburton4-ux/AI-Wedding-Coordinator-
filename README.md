@@ -3,7 +3,7 @@
 > An AI Wedding Coordinator for couples and independent planners.
 > Built on Gemini. Submitted to the Build with Gemini XPRIZE (deadline: **17 August 2026**).
 
-[**Live marketing site**](https://alanmaizon.github.io/VenueFlow/) · [Pilot app (Streamlit)](./streamlit_mock/) · [Strategic memo](docs/strategic-memo.md) · [Runway plan](docs/runway.md)
+[**Live marketing site**](https://alanmaizon.github.io/VenueFlow/) · [Strategic memo](docs/strategic-memo.md) · [Runway plan](docs/runway.md)
 
 ---
 

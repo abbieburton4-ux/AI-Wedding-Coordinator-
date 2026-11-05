@@ -11,7 +11,6 @@ This is a 2-founder hackathon project on a hard deadline (17 Aug 2026). Keep PRs
 | [backend/](backend/) | FastAPI backend, database schemas (SQLModel), agent implementations, migrations, and test scripts. |
 | [frontend/](frontend/) | Vite + React 18 frontend (Landing + Experience + Wedding Views). |
 | [docs/](docs/) | Architecture, ERD, runway, strategic memo, agent decision log spec. |
-| [streamlit_mock/](streamlit_mock/) | Initial Streamlit pilot app. Kept for historical reference. |
 | [scripts/](scripts/) | One-off scripts (e.g., `build_tracker.py` regenerates `runway-tracker.xlsx`) |
 | `runway-tracker.xlsx` | Live execution tracker. Edit in Excel/Numbers/Sheets; commit changes when status moves. |
 
@@ -121,8 +120,8 @@ Agents live in the [backend/app/agents/](backend/app/agents/) directory (e.g., `
 - **Python:** PEP-8 with reasonable line length (~100 chars). No black/ruff config yet — keep formatting consistent within a file.
 - **TypeScript:** match the surrounding file. No linter wired up and TypeScript isn't installed standalone, so use `npm run build` from `frontend/` as the compile check (Vite/esbuild strips types but catches syntax/import errors).
 - **No comments** unless the *why* is non-obvious. Don't restate what the code does. Don't reference the current task or PR.
-- **No new dependencies** without a 1-line justification in the commit message. The pilot app's transitive deps are already heavy.
-- **Never commit secrets.** `GEMINI_API_KEY`, Stripe keys, planner email lists — all out of repo. Use environment variables or `.env.local` (already `.gitignore`d). See [docs/secrets.md](docs/secrets.md) for the per-service runbook and [streamlit_mock/.env.example](streamlit_mock/.env.example) for the template to copy. A pre-commit `gitleaks` hook ships with the repo; install once with `brew install gitleaks pre-commit && pre-commit install` and it blocks accidental secrets at commit time. Do **not** disable it with `--no-verify`.
+- **No new dependencies** without a 1-line justification in the commit message.
+- **Never commit secrets.** `GEMINI_API_KEY`, Stripe keys, planner email lists — all out of repo. Use environment variables or `.env.local` (already `.gitignore`d). See [docs/secrets.md](docs/secrets.md) for the per-service runbook and [backend/.env.example](backend/.env.example) for the template to copy. A pre-commit `gitleaks` hook ships with the repo; install once with `brew install gitleaks pre-commit && pre-commit install` and it blocks accidental secrets at commit time. Do **not** disable it with `--no-verify`.
 
 ---
 
@@ -155,7 +154,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 ## Branch + PR Workflow
 
-- `main` is always deployable to GitHub Pages (frontend) and to the Streamlit Cloud pilot.
+- `main` is always deployable to GitHub Pages (frontend).
 - Feature branches: `<owner>/<short-name>` — e.g., `alan/outreach-templates`, `atharva/timeline-builder`.
 - **Merge via squash** for small features; merge commit for multi-commit refactors.
 - **Do not push directly to `main`** during pilot week (the week of any milestone date — see `runway.md`). Open a PR and self-review.
@@ -167,7 +166,7 @@ Refactors that touch >100 lines or >2 unrelated concerns should land as multiple
 Concrete rule of thumb:
 
 - One commit per agent function when refactoring the agent layer.
-- One commit per UI tab when refactoring the Streamlit app.
+- One commit per page when refactoring the frontend.
 - One commit per schema entity when changing the DB.
 - Doc updates that accompany code changes go in the same commit (so the doc stays in sync at every history point).
 

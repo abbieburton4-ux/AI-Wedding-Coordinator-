@@ -22,7 +22,7 @@ If a real secret value ever appears in a git diff, that's a bug — the pre-comm
 ### 1Password / Bitwarden
 
 Today. Both founders sign up, create a shared "VenueFlow" vault. The vault holds:
-- Logins for GCP, Stripe, Streamlit Cloud, GitHub
+- Logins for GCP, Stripe, GitHub
 - Recovery / backup codes for MFA
 - *Time-limited* shares for one-off "I need to give Atharva this thing for 24 hours" cases
 
@@ -129,7 +129,7 @@ False positives (rare): add the line to `.gitleaksignore` with the fingerprint g
 - Don't commit `.env` or `.env.local`. Only `.env.example`.
 - Don't reuse the same key across dev / staging / prod — separate keys per environment so revoking dev doesn't break prod.
 - Don't disable the gitleaks hook with `--no-verify`. If gitleaks blocks a commit you believe is legitimate, take 10 seconds to verify before bypassing.
-- Don't expose the Gemini API key through the Streamlit sidebar in production. The sidebar input is fine for the local mock; before Streamlit Cloud deploy, route it to env-only.
+- Don't expose the Gemini API key to the browser. It lives only in backend config.
 
 ## When credentials leak (it happens)
 
