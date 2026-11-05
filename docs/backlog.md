@@ -14,8 +14,9 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 0b. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B38** — block either owner from removing or demoting the other on the access screen (PD-002 note, 2026-11-05). In review, PR #18
 1b. **B39** — stop look-alike email addresses passing as the couple's at sign-in. `needs-owner: approve a fix to sign-in?`
-2. **B37** — delete `outreach-list.xlsx` and `streamlit_mock/`, and fix the references to them (PD-005, extended). `ready`
-3. **B23** — in depth budgeting (PD-004 ratified: option C, plus an AI-suggested starting split). Fold in B30. `ready`
+2. **B37** — delete `outreach-list.xlsx` and `streamlit_mock/` (PD-005, extended). In review, PR #20 (merge after #17)
+2b. **B40** — four first names of past sales prospects in `docs/runway.md`, `scripts/build_tracker.py` and probably `runway-tracker.xlsx`. `needs-owner: remove them too?`
+3. **B23** — in depth budgeting (PD-004 ratified: option C, plus an AI-suggested starting split). Fold in B30. Building
 4. **B14** — where the app and its data live, and what that costs. `needs-owner: approve the hosting recommendation (the product lane writes the PD next, with costs)`
 5. **B24** — planning checklist. `needs-owner: checklist scope PD (unfixed date; which Jewish traditions), to be proposed`
 6. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
@@ -65,7 +66,8 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 ### Housekeeping
 
-- **B13 — Stale material from the prototype and the XPRIZE.** `streamlit_mock/` (still referenced by `README.md`, `CONTRIBUTING.md`, `docs/runway.md`, `docs/reviews/2026-05-27.md` and `scripts/build_tracker.py`), the `.xlsx` trackers, and the XPRIZE framing in `README.md`, `docs/runway.md`, `docs/strategic-memo.md` and `docs/reviews/`. *Fix:* archive or delete them (owner's call). `needs-owner: delete streamlit_mock/? It also keeps a second copy of sole traders' published personal mailboxes (PR #15).` `streamlit_mock/` also holds demo emails and Irish mobile numbers that look real (found while building B26, PR #13). They may belong to real people (rule 3), so this ranks with B6.
+- **B13 — Stale material from the XPRIZE.** The prototype and both sales lists are gone (B6, PR #15; B37, PR #20). Left: the `.xlsx` trackers and the XPRIZE framing in `README.md`, `docs/runway.md`, `docs/strategic-memo.md` and `docs/reviews/`. *Fix:* archive or delete them (owner's call). See B40 for the prospects' first names.
+- **B40 — Past sales prospects' first names remain.** Found in PR #20. Four first names, one linked to a business, in `docs/runway.md`, `scripts/build_tracker.py` and probably `runway-tracker.xlsx` (rule 3). *Fix:* remove or replace them with roles. *Depends on:* owner's go-ahead (extends PD-005).
 - **B14 — The deploy workflow would publish a frontend with no backend.** `.github/workflows/deploy.yml` publishes `frontend/` to GitHub Pages at VenueFlow's domain, `venueflow.ie` (`frontend/public/CNAME`), on every push to `main`. It sets no `VITE_API_URL`, so the published site would have no backend. No runs are recorded on this repo. *Fix:* decide where the app and its backend are hosted, then point the workflow at that. Keep or drop the domain as part of that decision. *Depends on:* a PD on hosting (couple's call).
 - **B15 — CI is new and untested.** `.github/workflows/ci.yml` runs the backend verify scripts and the frontend build on every PR. *Fix:* confirm the first run passes, then make `CI / backend` and `CI / frontend` required checks (see `docs/autonomy.md`).
 - **B17 — The verify scripts rewrite tracked files.** `backend/endpoints_test.db` and its `-shm`/`-wal` files are committed, and every run of `verify_endpoints.py` changes them; the other scripts leave untracked `-shm`/`-wal` files. `.gitignore` already lists `endpoints_test.db*`, but the files were committed before that. *Fix:* `git rm --cached` them and widen the ignore rule to `backend/*_test.db*`.
