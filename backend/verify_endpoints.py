@@ -221,26 +221,59 @@ def test_api_suite():
         assert c.patch(f"/api/v1/weddings/wedding_planning_test/members/{aunt_id}",
                        json={"level": "viewer"}, headers=unauth_headers).status_code == 404
 
-        res = c.patch(f"{members_url}/{owner_member['id']}", json={"level": "editor"}, headers=headers)
-        assert res.status_code == 409, res.text
-        assert c.delete(f"{members_url}/{owner_member['id']}", headers=headers).status_code == 409
+        # Owner rows are fixed in the app (PD-002 note, 2026-11-05), including your own.
+        for level in ("editor", "viewer"):
+            res = c.patch(f"{members_url}/{owner_member['id']}", json={"level": level}, headers=headers)
+            assert res.status_code == 409, res.text
+            assert "ask the team" in res.json()["detail"]
+        res = c.delete(f"{members_url}/{owner_member['id']}", headers=headers)
+        assert res.status_code == 409 and "ask the team" in res.json()["detail"], res.text
         assert c.get(members_url, headers=headers).status_code == 200  # still an owner
+        # Nobody can be made an owner through the API, by adding or by changing a level.
+        assert c.patch(f"{members_url}/{aunt_id}", json={"level": "owner"},
+                       headers=headers).status_code == 422
+        assert c.patch(f"{members_url}/{editor_member['id']}", json={"level": "owner"},
+                       headers=headers).status_code == 422
         with Session(sync_engine) as s:
             s.add(WeddingMember(wedding_id=wedding_id, email="partner@example.test", level="owner"))
             s.commit()
             partner_id = s.exec(sync_select(WeddingMember.id).where(
                 WeddingMember.email == "partner@example.test")).one()
-        # A partner owner who hasn't signed in yet doesn't count: the creator still can't step down.
+        # With both partners listed, neither can demote or remove the other, or themselves.
         assert c.patch(f"{members_url}/{owner_member['id']}", json={"level": "editor"},
                        headers=headers).status_code == 409
         assert c.delete(f"{members_url}/{owner_member['id']}", headers=headers).status_code == 409
         assert c.post(members_url, json={"email": "Kate@example.test", "level": "viewer"},
                       headers=headers).status_code == 422
-        assert c.patch(f"{members_url}/{partner_id}", json={"level": "editor"},
-                       headers=headers).status_code == 200
-        assert c.delete(f"{members_url}/{partner_id}", headers=headers).status_code == 204
+        for level in ("editor", "viewer"):
+            res = c.patch(f"{members_url}/{partner_id}", json={"level": level}, headers=headers)
+            assert res.status_code == 409 and "ask the team" in res.json()["detail"], res.text
+        res = c.delete(f"{members_url}/{partner_id}", headers=headers)
+        assert res.status_code == 409 and "ask the team" in res.json()["detail"], res.text
+        # The team can still change and remove an owner, on the couple's request.
+        import manage_access
+        from unittest.mock import patch as mock_patch
+
+        def _team(*argv):
+            with mock_patch.object(sys, "argv", ["manage_access.py", *argv, "--wedding", wedding_id]):
+                manage_access.main()
+
+        _team("set", "--email", "partner@example.test", "--level", "editor")
+        with Session(sync_engine) as s:
+            assert s.get(WeddingMember, partner_id).level == "editor"
+        _team("set", "--email", "partner@example.test", "--level", "owner")
+        with Session(sync_engine) as s:
+            assert s.get(WeddingMember, partner_id).level == "owner"
+        _team("remove", "--email", "partner@example.test")
+        with Session(sync_engine) as s:
+            assert s.get(WeddingMember, partner_id) is None
+        # Everyone else can still be changed and removed.
+        assert c.patch(f"{members_url}/{editor_member['id']}", json={"level": "viewer"},
+                       headers=headers).json()["level"] == "viewer"
+        assert c.patch(f"{members_url}/{editor_member['id']}", json={"level": "editor"},
+                       headers=headers).json()["level"] == "editor"
         assert c.delete(f"{members_url}/{aunt_id}", headers=headers).status_code == 204
-        print("   * Access list: the last owner can't be removed or demoted; a second owner can")
+        print("   * Access list: owners can't be removed, demoted or created through the API")
 
         forged = pyjwt.encode({"sub": "forged_admin", "role": "admin"},
                               "dev-jwt-secret-key-change-me-in-production", algorithm="HS256")

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router";
 import { Icon } from "../../shared/Icon";
 import { useApi } from "../../api/useApi";
 import { useAuth } from "../../auth/AuthProvider";
@@ -24,11 +23,11 @@ const selectClass =
 /**
  * Who has access to the wedding (PD-002 step 2). Only owners reach it, and the API
  * refuses everyone else too. Adding someone sends them nothing (hard rule 1).
+ * Owner rows are read-only here: only the team changes them, on request (PD-002 note).
  */
 export function Access() {
-  const { activeWedding, myLevel, myLevelLoading, refetchMyLevel } = useActiveWedding();
-  const { user, signOut } = useAuth();
-  const navigate = useNavigate();
+  const { activeWedding, myLevel, myLevelLoading } = useActiveWedding();
+  const { user } = useAuth();
   const { request } = useApi();
   const weddingId = activeWedding?.id ?? null;
 
@@ -86,35 +85,17 @@ export function Access() {
 
   const change = (m: Member, next: "editor" | "viewer") =>
     run(async () => {
-      if (m.level === "owner") {
-        const who = isMe(m) ? "You" : m.email;
-        const ok = window.confirm(
-          `${who} will no longer be able to manage who has access. ` +
-            "This can't be given back from the app. Continue?",
-        );
-        if (!ok) {
-          await load();
-          return;
-        }
-      }
       await request(`/weddings/${weddingId}/members/${m.id}`, {
         method: "PATCH",
         body: JSON.stringify({ level: next }),
       });
       await load();
-      await refetchMyLevel();
     });
 
   const remove = (m: Member) =>
     run(async () => {
       await request(`/weddings/${weddingId}/members/${m.id}`, { method: "DELETE" });
       setConfirmRemove(null);
-      if (isMe(m)) {
-        // They have no access left, so nothing else in the workspace would load.
-        await signOut();
-        navigate("/login", { replace: true });
-        return;
-      }
       await load();
     });
 
@@ -204,26 +185,27 @@ export function Access() {
                       </p>
                     </div>
 
-                    <label className="sr-only" htmlFor={`level-${m.id}`}>What {m.email} can do</label>
-                    <select
-                      id={`level-${m.id}`}
-                      value={m.level}
-                      disabled={busy}
-                      onChange={(e) => change(m, e.target.value as "editor" | "viewer")}
-                      className={selectClass}
-                    >
-                      {m.level === "owner" && <option value="owner">{LEVEL_LABEL.owner}</option>}
-                      <option value="editor">{LEVEL_LABEL.editor}</option>
-                      <option value="viewer">{LEVEL_LABEL.viewer}</option>
-                    </select>
+                    {m.level === "owner" ? (
+                      <p className="text-sm text-on-surface sm:px-4">{LEVEL_LABEL.owner}</p>
+                    ) : (
+                      <>
+                        <label className="sr-only" htmlFor={`level-${m.id}`}>What {m.email} can do</label>
+                        <select
+                          id={`level-${m.id}`}
+                          value={m.level}
+                          disabled={busy}
+                          onChange={(e) => change(m, e.target.value as "editor" | "viewer")}
+                          className={selectClass}
+                        >
+                          <option value="editor">{LEVEL_LABEL.editor}</option>
+                          <option value="viewer">{LEVEL_LABEL.viewer}</option>
+                        </select>
+                      </>
+                    )}
 
-                    {confirmRemove === m.id ? (
+                    {m.level === "owner" ? null : confirmRemove === m.id ? (
                       <span className="flex items-center gap-2 text-sm">
-                        <span>
-                          Remove {isMe(m) ? "yourself" : "them"}?
-                          {m.level === "owner" && " Managing access can't be given back from the app."}
-                          {isMe(m) && " You'll be signed out."}
-                        </span>
+                        <span>Remove them?</span>
                         <button type="button" disabled={busy} onClick={() => remove(m)}
                           className="text-error font-bold underline-offset-4 hover:underline">
                           Yes, remove
@@ -244,8 +226,7 @@ export function Access() {
               </ul>
             )}
             <p className="text-xs text-on-surface-variant mt-3">
-              At least one person who has signed in must always be able to manage access, so the
-              last one can't be removed or changed.
+              Only the team can remove or change people who manage access, if you ask them to.
             </p>
           </section>
         </>
