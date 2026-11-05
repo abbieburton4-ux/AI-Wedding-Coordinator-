@@ -88,6 +88,24 @@ def main() -> None:
         totals = conn.execute(text("SELECT budget_total_cents FROM weddings")).fetchall()
     assert [tuple(r) for r in totals] == [(None,)], totals
 
+    print("3c. Checking that 0004 adds the checklist and keeps the old timeline rows...")
+    command.downgrade(cfg, "0003")
+    with engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO timeline_items (id, wedding_id, kind, title, due_at, status, "
+            "created_at) VALUES ('ti1', 'w1', 'planning', 'Placeholder', '2027-01-01', "
+            "'todo', '2026-01-01')"
+        ))
+    command.upgrade(cfg, "head")
+    with engine.connect() as conn:
+        dates = conn.execute(text(
+            "SELECT wedding_date_set_on, checklist_imported_at FROM weddings")).fetchall()
+        kept = conn.execute(text("SELECT id FROM timeline_items")).fetchall()
+        tasks = conn.execute(text("SELECT COUNT(*) FROM checklist_tasks")).scalar()
+    assert [tuple(r) for r in dates] == [(None, None)], dates
+    assert [tuple(r) for r in kept] == [("ti1",)], "the import merges these, not the migration"
+    assert tasks == 0, tasks
+
     print("4. Downgrading to the start and back up again...")
     command.downgrade(cfg, "base")
     command.upgrade(cfg, "head")

@@ -67,6 +67,11 @@ class Wedding(SQLModel, table=True):
     # The couple's own total for the budget screen (PD-004), in whole US cents. Blank
     # until they set it; separate from the intake estimate above, which is a float.
     budget_total_cents: Optional[int] = Field(default=None)
+    # The day wedding_date was last set or changed. Checklist stages already past on
+    # that day form the "Catch up" group; stages that pass later show as overdue (PD-007).
+    wedding_date_set_on: Optional[datetime.date] = Field(default=None, sa_column=Column(Date))
+    # When the owner's checklist was imported (manage_checklist.py), so it runs once.
+    checklist_imported_at: Optional[datetime.datetime] = Field(default=None)
     currency: str = Field(default="EUR")
     style_notes: Optional[str] = Field(default=None, sa_column=Column(Text))
     status: str = Field(default="intake")  # intake, planning, booked, completed, cancelled
@@ -500,3 +505,43 @@ class WeddingMember(SQLModel, table=True):
         default=None, foreign_key="users.id", index=True, ondelete="SET NULL"
     )
     created_at: datetime.datetime = Field(default_factory=utcnow)
+
+
+# --- Planning checklist (PD-007). One shared list per wedding. ---
+
+CHECKLIST_SOURCES = ("owner_list", "tradition", "ai_timeline", "couple")
+
+
+class ChecklistTask(SQLModel, table=True):
+    """One task on the wedding's planning checklist.
+
+    ``stage`` is a key from ``app.utils.checklist.STAGES``; due dates aren't stored,
+    they're worked out from the wedding date. ``source_ref`` identifies where an
+    imported task came from (an item id in the owner's list, a tradition id, or the
+    old timeline row), so an import can't add the same task twice. Ticking a task
+    never touches a payment or booking (rule 4).
+    """
+    __tablename__ = "checklist_tasks"
+    __table_args__ = (
+        UniqueConstraint("wedding_id", "source_ref", name="uq_checklist_task_source_ref"),
+        CheckConstraint(
+            "source IN ('owner_list', 'tradition', 'ai_timeline', 'couple')",
+            name="ck_checklist_task_source",
+        ),
+    )
+
+    id: str = Field(default_factory=generate_uuid_str, primary_key=True)
+    wedding_id: str = Field(foreign_key="weddings.id", index=True, ondelete="CASCADE")
+    stage: str
+    title: str
+    position: int = Field(default=0)
+    done: bool = Field(default=False)
+    done_at: Optional[datetime.datetime] = None
+    done_by_user_id: Optional[str] = Field(
+        default=None, foreign_key="users.id", ondelete="SET NULL"
+    )
+    notes: Optional[str] = Field(default=None, sa_column=Column(Text))
+    source: str = Field(default="couple")
+    source_ref: Optional[str] = None
+    created_at: datetime.datetime = Field(default_factory=utcnow)
+    updated_at: datetime.datetime = Field(default_factory=utcnow)

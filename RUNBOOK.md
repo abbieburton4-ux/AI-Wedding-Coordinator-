@@ -58,7 +58,7 @@ and `/signup` show an identity picker that uses `mock-<id>` bearer tokens. No
 Firebase project needed to develop.
 
 - **New couple** → `/signup` → "Create a new couple account" → guided intake → the
-  AI builds a budget and timeline → live dashboard. Vendor matching runs when you ask.
+  AI drafts a budget → live dashboard; the Checklist screen holds the shared planning checklist. Vendor matching runs when you ask.
 - **Returning couple** → `/login` → "Continue as a couple (Priya & David)".
 
 For **production**, set `VITE_FIREBASE_*` (see [frontend/.env.example](frontend/.env.example))
@@ -81,6 +81,7 @@ In production (PD-002), set these in the deployment environment, never in git:
 
 Outside dev mode, the app applies Alembic migrations on startup. On Postgres, an advisory lock stops two processes starting at once from racing.
 - **A database that dev mode built with `create_all`:** tell Alembic where it stands, once, before starting the app. If the database has no `wedding_members` table, run `alembic stamp 0001`; the next start adds the table and makes each couple an owner. If the table is already there, run `alembic stamp head`, then add each couple's owner row with `manage_access.py`.
+- **Loading the owner's checklist (PD-007), once, after hosting (B14):** the owner's list comes from their own file, which stays out of git. From `backend/`, against the app's database: `python manage_checklist.py import --wedding <id> --file <path to the owner's file> --wedding-date 2027-08-21`. Without `--apply` it's a dry run: it prints what it would add, merge and remove, then undoes it. Read that, then run it again with `--apply`. It also adds the approved Jewish-tradition tasks, merges the AI planner's old timeline (skipping duplicates), and removes the timeline rows. A second run is refused.
 - **Never run `alembic downgrade` against a database holding real data.** The downgrades drop tables, including the access list.
 - **Writing a migration:** autogenerate renders `op.batch_alter_table` blocks (`render_as_batch`), so altering or dropping a column or constraint also works on SQLite. Keys and unique constraints get names from the convention on `SQLModel.metadata` (`fk_<table>_<column>_<referred table>`, `pk_<table>`, `uq_<table>_<columns>`); give every `CheckConstraint` an explicit name, which `verify_migrations.py` checks. Never change the convention once a real database exists: migrations `0001` and `0002` take their names from it at run time. Databases built before this convention have unnamed (SQLite) or Postgres-default (`<table>_<column>_fkey`, `<table>_pkey`) key names, so a migration that drops an existing foreign or primary key must look its name up rather than assume the convention. `verify_migrations.py` runs on SQLite only, which doesn't compare check constraints or server defaults; review those by hand until it also runs against Postgres.
 
@@ -89,7 +90,7 @@ Outside dev mode, the app applies Alembic migrations on startup. On Postgres, an
 States go `intake` → `planning`. There's no payment step (PD-003).
 
 1. `POST /weddings` (intake) creates the wedding in `intake` status and runs the
-   **intake_planner** agent, which builds the budget and timeline and moves the wedding
+   **intake_planner** agent, which drafts the budget and moves the wedding
    to **`planning`**. The dashboard polls and fills in.
 2. Venue and supplier matching doesn't run automatically: the catalogue doesn't cover
    this wedding's area yet (B11). It runs only when the couple ask from the dashboard
@@ -134,7 +135,7 @@ scripts/stack.sh up          # or: cd backend && docker compose up --build
 Then at <http://localhost:5173/VenueFlow/>:
 
 1. `/signup` → **new couple** → fill the intake form
-2. The dashboard shows "building…", then the budget and timeline. Watch the worker
+2. The dashboard shows "building…", then the plan. Watch the worker
    live: `scripts/stack.sh logs worker`.
 
 Run the suites against Postgres inside the running container:
@@ -185,8 +186,8 @@ node e2e.mjs        # screenshots are written next to it
 ### Wired vs. still-mock (as of this handoff)
 
 - **Wired to real data:** couple signup → intake → dashboard /
-  budget / timeline / vendors; the vendor **quote loop** (log a reply → quote_extractor →
+  budget / checklist / vendors; the vendor **quote loop** (log a reply → quote_extractor →
   compared with the matching category's planned dollars on the budget screen, B42); the couple **AI Concierge** (Aurelia, grounded in the
-  couple's real budget/timeline/vendors).
+  couple's real budget/checklist/vendors).
 - **Still mock / next slices:** SendGrid inbound-email
   auto-ingest of vendor replies.

@@ -644,6 +644,260 @@ def test_api_suite():
         assert to_cents(0.1 + 0.2) == 30 and to_cents(1234.565) == 123457
         assert to_cents(float("nan")) is None and to_cents(-1) is None and to_cents(None) is None
 
+        print("7e. Verifying the planning checklist: dates, catch up, overdue, ticks, import (PD-007)...")
+        import datetime as dt
+        import json as _json
+        import tempfile
+        from app.api.v1.endpoints import checklist as checklist_module
+        from app.db.models import BudgetPayment, ChecklistTask, TimelineItem, User, Wedding
+        from app.utils import checklist as rules
+        from app.utils.checklist_import import ImportRefused, import_checklist, read_owner_list
+
+        D = dt.date
+        # Calendar months keep the day, or use the month's last day.
+        assert rules.add_months(D(2027, 8, 31), -6) == D(2027, 2, 28)
+        assert rules.add_months(D(2028, 8, 31), -6) == D(2028, 2, 29)
+        assert rules.add_months(D(2027, 3, 31), -1) == D(2027, 2, 28)
+        assert rules.add_months(D(2027, 1, 31), -12) == D(2026, 1, 31)
+        assert rules.add_months(D(2027, 1, 15), -1) == D(2026, 12, 15)
+        due = {s.key: rules.stage_due(D(2027, 8, 21), s) for s in rules.STAGES}
+        assert (due["12m"], due["9m"], due["1m"]) == (D(2026, 8, 21), D(2026, 11, 21), D(2027, 7, 21))
+        assert (due["3w"], due["2-3d"], due["1d"]) == (D(2027, 7, 31), D(2027, 8, 18), D(2027, 8, 20))
+        assert (due["day"], due["post"]) == (D(2027, 8, 21), D(2027, 9, 4))
+        print("   * Due dates: calendar months (month ends clamp), weeks and days from the wedding date")
+
+        # The PD-007 example: date set on 5 Nov 2026 for 21 Aug 2027.
+        plans = rules.plan_groups(D(2027, 8, 21), D(2026, 11, 5), D(2026, 11, 5))
+        assert plans[0].kind == "catch_up" and plans[0].stage_keys == ["12m", "11m", "10m"]
+        assert plans[0].due_on == D(2026, 11, 21), "catch up is due with 9 Months Before"
+        assert [p.key for p in plans[1:3]] == ["9m", "8m"] and not any(p.past for p in plans)
+        # Seven weeks later, 9m and 8m have passed since the date was set: overdue, while
+        # the stages already past when it was set stay "catch up".
+        later = rules.plan_groups(D(2027, 8, 21), D(2026, 11, 5), D(2026, 12, 25))
+        assert later[0].stage_keys == ["12m", "11m", "10m"]
+        assert [p.key for p in later if p.past] == ["9m", "8m"]
+        assert rules.task_label(later[0], False) == "catch_up"
+        assert rules.task_label(later[1], False) == "overdue"
+        assert rules.task_label(later[1], True) is None
+        assert rules.plan_groups(None, None, D(2026, 11, 5))[0].due_on is None
+        assert rules.title_key("  Book the  VENUE. ") == rules.title_key("book the venue")
+        print("   * Catch up vs overdue: past-when-set stages are 'catch up', later ones 'overdue'")
+
+        cl_url = f"/api/v1/weddings/{wedding_id}/checklist"
+        real_today = checklist_module._today
+        checklist_module._today = lambda: D(2026, 11, 5)
+        try:
+            res = c.get(cl_url, headers=viewer_headers)
+            assert res.status_code == 200, res.text
+            body = res.json()
+            assert body["wedding_date"] is None and body["total"] == 0
+            assert len(body["groups"]) == 19 and all(g["due_on"] is None for g in body["groups"])
+            assert c.get(cl_url, headers=unauth_headers).status_code == 403
+
+            with Session(sync_engine) as s:
+                status_before = s.get(Wedding, wedding_id).status
+            assert c.put(f"{cl_url}/date", json={"wedding_date": "2027-08-21"},
+                         headers=viewer_headers).status_code == 403
+            assert c.put(f"{cl_url}/date", json={"wedding_date": "2026-11-04"},
+                         headers=editor_headers).status_code == 422
+            res = c.put(f"{cl_url}/date", json={"wedding_date": "2027-08-21"}, headers=editor_headers)
+            assert res.status_code == 200, res.text
+            body = res.json()
+            assert body["date_set_on"] == "2026-11-05"
+            g0 = body["groups"][0]
+            assert (g0["key"], g0["label"], g0["due_on"]) == ("catch_up", "Catch up", "2026-11-21")
+            assert g0["add_to_stage"] == "10m" and body["groups"][1]["key"] == "9m"
+            with Session(sync_engine) as s:
+                assert s.get(Wedding, wedding_id).status == status_before, "date keeps the plan"
+            print("   * Date: set by an editor (never by viewers or to a past day); catch up formed")
+
+            add = lambda stage, title, who=editor_headers: c.post(
+                f"{cl_url}/tasks", json={"stage": stage, "title": title}, headers=who)
+            assert add("9m", "Placeholder task", viewer_headers).status_code == 403
+            assert add("13m", "Placeholder task").status_code == 422
+            assert add("9m", "   ").status_code == 422
+            t_catch = add("11m", "  Placeholder  early task ").json()
+            assert t_catch["title"] == "Placeholder early task" and t_catch["label"] == "catch_up"
+            t_now = add("9m", "Placeholder current task").json()
+            t_soon = add("8m", "Placeholder next task").json()
+            t_late = add("1m", "Placeholder later task").json()
+            assert t_now["label"] is None and t_now["position"] == 1
+            assert add("9m", "Placeholder second current task").json()["position"] == 2
+
+            with Session(sync_engine) as s:
+                paid_before = [(p.id, p.paid) for p in s.exec(sync_select(BudgetPayment)).all()]
+            done_url = f"{cl_url}/tasks/{t_now['id']}/done"
+            assert c.put(done_url, json={"done": True}, headers=viewer_headers).status_code == 403
+            res = c.put(done_url, json={"done": True}, headers=editor_headers)
+            assert res.status_code == 200 and res.json()["done"] is True, res.text
+            first_done_at = res.json()["done_at"]
+            assert first_done_at and res.json()["done_by_name"]
+            # Ticking again keeps the first record; the owner sees the editor's tick.
+            assert c.put(done_url, json={"done": True}, headers=headers).json()["done_at"] == first_done_at
+            body = c.get(cl_url, headers=headers).json()
+            assert (body["done"], body["total"]) == (1, 5)
+            nine = next(g for g in body["groups"] if g["key"] == "9m")
+            assert (nine["done"], nine["total"], nine["current"]) == (1, 2, True)
+            assert body["groups"][0]["current"] is True, "catch up opens while it has tasks left"
+            assert next(g for g in body["groups"] if g["key"] == "8m")["current"] is False
+            res = c.put(done_url, json={"done": False}, headers=editor_headers).json()
+            assert (res["done"], res["done_at"], res["done_by_name"]) == (False, None, None)
+            c.put(done_url, json={"done": True}, headers=editor_headers)
+            with Session(sync_engine) as s:
+                assert [(p.id, p.paid) for p in s.exec(sync_select(BudgetPayment)).all()] == paid_before
+            print("   * Ticks: shared, record who and when, untick clears; payments untouched")
+
+            t_url = f"{cl_url}/tasks/{t_soon['id']}"
+            assert c.patch(t_url, json={"title": "Renamed"}, headers=viewer_headers).status_code == 403
+            res = c.patch(t_url, json={"title": " Renamed  placeholder ", "notes": "A note"},
+                          headers=editor_headers)
+            assert res.json()["title"] == "Renamed placeholder" and res.json()["notes"] == "A note"
+            assert c.patch(t_url, json={"title": ""}, headers=editor_headers).status_code == 422
+            assert c.delete(t_url, headers=viewer_headers).status_code == 403
+            assert c.delete(t_url, headers=editor_headers).status_code == 204
+            assert c.delete(t_url, headers=editor_headers).status_code == 404
+            print("   * Edit: editors rename, note and delete; viewers can't")
+
+            # Seven weeks on, 9m's unfinished task is overdue; catch up stays catch up.
+            checklist_module._today = lambda: D(2026, 12, 25)
+            body = c.get(cl_url, headers=viewer_headers).json()
+            labels = {t["title"]: t["label"] for g in body["groups"] for t in g["tasks"]}
+            assert labels["Placeholder early task"] == "catch_up"
+            assert labels["Placeholder second current task"] == "overdue"
+            assert labels["Placeholder current task"] is None, "done tasks are never overdue"
+            assert labels["Placeholder later task"] is None and body["overdue"] == 1
+            assert next(g for g in body["groups"] if g["current"] and g["kind"] == "stage")["key"] == "7m"
+
+            # Moving the date recomputes everything from the new "set on" day.
+            res = c.put(f"{cl_url}/date", json={"wedding_date": "2028-08-21"},
+                        headers=editor_headers).json()
+            assert res["groups"][0]["key"] == "12m", "nothing is past for a 2028 date"
+            assert res["overdue"] == 0
+            res = c.put(f"{cl_url}/date", json={"wedding_date": None}, headers=editor_headers).json()
+            assert res["wedding_date"] is None and res["date_set_on"] is None and res["overdue"] == 0
+            assert res["done"] == 1 and res["total"] == 4, "clearing the date keeps every task"
+            c.put(f"{cl_url}/date", json={"wedding_date": "2027-08-21"}, headers=editor_headers)
+            assert c.patch(f"/api/v1/weddings/{wedding_id}", json={"wedding_date": "2027-09-04"},
+                           headers=editor_headers).status_code == 200
+            with Session(sync_engine) as s:
+                assert s.get(Wedding, wedding_id).wedding_date_set_on == dt.date.today()
+            c.put(f"{cl_url}/date", json={"wedding_date": "2027-08-21"}, headers=editor_headers)
+            print("   * Date changes: groups and labels recompute; clearing the date keeps tasks")
+        finally:
+            checklist_module._today = real_today
+
+        # The import, with fictional placeholder tasks only.
+        tmp = tempfile.mkdtemp()
+        stages = []
+        for st in rules.STAGES:
+            offset = {k: v for k, v in (("months", st.months), ("weeks", st.weeks),
+                                        ("days", st.days)) if v} or {"days": 0}
+            items = [f"Placeholder {st.key} task {n}" for n in (1, 2, 3)]
+            if st.key == "11m":
+                items[2] = "Placeholder: find someone to officiate"
+            stages.append({"id": st.key, "label": st.label, "offset": offset, "items": items})
+        owner_file = os.path.join(tmp, "owner-list.md")
+        with open(owner_file, "w") as f:
+            f.write("Notes first\n\n```json\n" + _json.dumps(stages) + "\n```\n")
+        owner_list = read_owner_list(owner_file)
+
+        with Session(sync_engine) as s:
+            s.add(User(id="u_import", role="couple", name="Import Test", email="imp@example.test"))
+            s.add(Wedding(id="w_import", couple_user_id="u_import", region="Sligo",
+                          ceremony_type="Civil", guest_count_estimate=10, budget_total=1.0))
+            s.flush()
+            s.add(TimelineItem(id="ti_imp_dup", wedding_id="w_import", kind="planning",
+                               title="  PLACEHOLDER 9m   task 1. ", due_at=D(2026, 11, 20)))
+            s.add(TimelineItem(id="ti_imp_new", wedding_id="w_import", kind="planning",
+                               title="Fictional AI task", description="From the planner",
+                               due_at=D(2027, 2, 20), status="done"))
+            s.add(TimelineItem(id="ti_imp_day", wedding_id="w_import", kind="day_of",
+                               title="Fictional rehearsal", due_at=D(2027, 8, 19)))
+            s.commit()
+
+        with Session(sync_engine) as s:
+            w = s.get(Wedding, "w_import")
+            bad = [dict(x) for x in stages]
+            bad[1] = dict(bad[1], items=["Placeholder a", "Placeholder b", "Not about that"])
+            try:
+                import_checklist(s, w, bad, D(2027, 8, 21), today=D(2026, 11, 5))
+                raise AssertionError("an unexpected 11m-3 should refuse the import")
+            except ImportRefused:
+                s.rollback()
+            w = s.get(Wedding, "w_import")
+            try:
+                import_checklist(s, w, owner_list, None, today=D(2026, 11, 5))
+                raise AssertionError("merging the timeline needs a wedding date")
+            except ImportRefused:
+                s.rollback()
+        with Session(sync_engine) as s:
+            assert s.exec(sync_select(ChecklistTask).where(
+                ChecklistTask.wedding_id == "w_import")).all() == [], "refusals write nothing"
+            assert len(s.exec(sync_select(TimelineItem).where(
+                TimelineItem.wedding_id == "w_import")).all()) == 3
+        for wrong in ([{"id": "x"}], [dict(stages[0], offset={"months": -11})] + stages[1:]):
+            with open(os.path.join(tmp, "bad.json"), "w") as f:
+                f.write(_json.dumps(wrong))
+            try:
+                read_owner_list(os.path.join(tmp, "bad.json"))
+                raise AssertionError("a file with other stages should be refused")
+            except ImportRefused:
+                pass
+
+        # A dry run (rolled back) changes nothing; then the real run.
+        with Session(sync_engine) as s:
+            import_checklist(s, s.get(Wedding, "w_import"), owner_list, D(2027, 8, 21),
+                             today=D(2026, 11, 5))
+            s.rollback()
+        with Session(sync_engine) as s:
+            assert s.get(Wedding, "w_import").wedding_date is None
+            assert len(s.exec(sync_select(TimelineItem).where(
+                TimelineItem.wedding_id == "w_import")).all()) == 3
+            report = import_checklist(s, s.get(Wedding, "w_import"), owner_list, D(2027, 8, 21),
+                                      today=D(2026, 11, 5))
+            s.commit()
+        assert (report.owner_tasks, report.tradition_tasks) == (19 * 3 - 1, 18), report
+        assert report.ai_added == ["Fictional AI task -> 6 Months Before",
+                                   "Fictional rehearsal -> 2–3 Days Before"], report.ai_added
+        assert report.ai_skipped == ["  PLACEHOLDER 9m   task 1. "]
+        assert report.timeline_rows_removed == 3
+        with Session(sync_engine) as s:
+            w = s.get(Wedding, "w_import")
+            assert (w.wedding_date, w.wedding_date_set_on) == (D(2027, 8, 21), D(2026, 11, 5))
+            assert w.checklist_imported_at is not None
+            assert s.exec(sync_select(TimelineItem).where(
+                TimelineItem.wedding_id == "w_import")).all() == []
+            tasks = s.exec(sync_select(ChecklistTask).where(
+                ChecklistTask.wedding_id == "w_import")).all()
+            assert len(tasks) == 56 + 18 + 2
+            eleven = sorted((t for t in tasks if t.stage == "11m"), key=lambda t: t.position)
+            assert [t.source_ref for t in eleven] == ["11m-1", "11m-2", "J2"]
+            assert "officiat" not in " ".join(t.title for t in eleven).lower()
+            ai = {t.source_ref: t for t in tasks if t.source == "ai_timeline"}
+            assert ai["ti:ti_imp_new"].done and ai["ti:ti_imp_new"].notes == "From the planner"
+            their_task = ai["ti:ti_imp_new"].id
+            assert {t.source_ref for t in tasks if t.source == "tradition"} == {
+                ref for ref, _, _ in rules.TRADITIONS}
+            again_refused = False
+            try:
+                import_checklist(s, w, owner_list, None, today=D(2026, 11, 5))
+            except ImportRefused:
+                again_refused = True
+            s.rollback()
+            assert again_refused, "the import runs once"
+        for method, url in (("put", f"{cl_url}/tasks/{their_task}/done"),
+                            ("patch", f"{cl_url}/tasks/{their_task}"),
+                            ("delete", f"{cl_url}/tasks/{their_task}")):
+            kwargs = {} if method == "delete" else {
+                "json": {"done": False} if method == "put" else {"title": "x"}}
+            assert getattr(c, method)(url, headers=headers, **kwargs).status_code == 404
+        with Session(sync_engine) as s:
+            assert s.get(ChecklistTask, their_task).done is True, "untouched"
+        print("   * Cross-wedding: another wedding's tasks are refused (404) and untouched")
+        print("   * Import: owner's list (11m-3 replaced by J2), 18 traditions, AI timeline merged "
+              "by nearest stage with duplicates skipped, timeline removed; runs once; refusals "
+              "and dry runs write nothing")
+
         forged = pyjwt.encode({"sub": "forged_admin", "role": "admin"},
                               "dev-jwt-secret-key-change-me-in-production", algorithm="HS256")
         res = c.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {forged}"})

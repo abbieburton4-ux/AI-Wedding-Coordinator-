@@ -10,7 +10,7 @@ import { Intake } from "./wedding/views/Intake";
 import { Vendors } from "./wedding/views/Vendors";
 import { Budget } from "./wedding/views/Budget";
 import { Guests } from "./wedding/views/Guests";
-import { Timeline } from "./wedding/views/Timeline";
+import { Checklist } from "./wedding/views/Checklist";
 import { SeatingPlan } from "./wedding/views/SeatingPlan";
 import { Concierge } from "./wedding/views/Concierge";
 import { Access } from "./wedding/views/Access";
@@ -37,7 +37,9 @@ export default function App() {
               <Route path="budget" element={<Budget />} />
               <Route path="guests" element={<Guests />} />
               <Route path="seating" element={<SeatingPlan />} />
-              <Route path="timeline" element={<Timeline />} />
+              <Route path="checklist" element={<Checklist />} />
+              {/* The checklist replaced the AI timeline (PD-007); old links still land there. */}
+              <Route path="timeline" element={<Navigate to="/wedding/checklist" replace />} />
               <Route path="concierge" element={<Concierge />} />
               <Route path="access" element={<Access />} />
               <Route path="*" element={<Dashboard />} />
