@@ -60,6 +60,9 @@ def run_agent(agent_name: str, decision_type: str):
                     prompt_version = result[3] if len(result) > 3 else "v1.0"
                     api_calls = result[4] if len(result) > 4 else []
                     follow_ups = result[5] if len(result) > 5 else []
+                    # Optional (input, output) token counts, measured from the response;
+                    # agents that don't pass them leave both columns empty.
+                    tokens = result[6] if len(result) > 6 else (None, None)
                 else:
                     result_dict = result
                     confidence_score = result_dict.get("confidence_score")
@@ -67,7 +70,8 @@ def run_agent(agent_name: str, decision_type: str):
                     prompt_version = "v1.0"
                     api_calls = []
                     follow_ups = []
-                
+                    tokens = (None, None)
+
                 latency = int((time.time() - start_time) * 1000)
                 
                 # Check for custom guardrail/block signals in result
@@ -83,6 +87,7 @@ def run_agent(agent_name: str, decision_type: str):
                 log.output_payload = result_dict
                 log.confidence_score = confidence_score
                 log.latency_ms = latency
+                log.tokens_input, log.tokens_output = tokens
                 log.external_api_calls = api_calls
                 log.follow_up_actions = follow_ups
                 log.rationale_summary = result_dict.get("rationale_summary", "")

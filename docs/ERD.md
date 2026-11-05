@@ -169,6 +169,47 @@ erDiagram
     datetime updated_at
   }
 
+  BUDGET_CATEGORY {
+    string id PK
+    string wedding_id FK
+    string name
+    int planned_cents
+    datetime created_at
+    datetime updated_at
+  }
+
+  BUDGET_COST {
+    string id PK
+    string wedding_id FK
+    string category_id FK
+    string vendor_name
+    int quoted_cents
+    datetime created_at
+    datetime updated_at
+  }
+
+  BUDGET_PAYMENT {
+    string id PK
+    string wedding_id FK
+    string cost_id FK
+    string kind
+    int amount_cents
+    date due_on
+    bool paid
+    datetime paid_at
+    string paid_by_user_id FK
+    datetime created_at
+  }
+
+  BUDGET_CONTRIBUTION {
+    string id PK
+    string wedding_id FK
+    string contributor
+    int amount_cents
+    string category_id FK
+    datetime created_at
+  }
+
   TIMELINE_ITEM {
     string id PK
     string wedding_id FK
@@ -234,6 +275,11 @@ erDiagram
   SUPPLIER ||--o{ BOOKING : "shortlisted/booked for"
   WEDDING ||--o{ BOOKING : has
   WEDDING ||--o{ BUDGET_LINE : has
+  WEDDING ||--o{ BUDGET_CATEGORY : has
+  BUDGET_CATEGORY ||--o{ BUDGET_COST : has
+  BUDGET_COST ||--o{ BUDGET_PAYMENT : has
+  WEDDING ||--o{ BUDGET_CONTRIBUTION : has
+  BUDGET_CATEGORY |o--o{ BUDGET_CONTRIBUTION : "optionally towards"
   WEDDING ||--o{ TIMELINE_ITEM : has
   WEDDING ||--o{ GUEST : has
   WEDDING ||--o{ PAYMENT : has
@@ -258,6 +304,7 @@ erDiagram
 
 - **Wedding** — the central object. `couple_user_id` required; `planner_user_id` optional (set when a planner manages it). `venue_id` is a denormalized convenience FK to the chosen venue — it mirrors the Booking with `venue_id IS NOT NULL AND status='booked'`. `status` ∈ `{intake, planning, booked, completed, cancelled}` (intake = being planned by the agent, planning = budget and timeline ready, booked = venue locked; PD-003 removed the payment stage). `wedding_date` is nullable; if not set, planning uses the date range defined by `wedding_date_start` and `wedding_date_end`. `region` specifies the target wedding location. `ceremony_type` determines the cultural budgeting and timeline template.
 - **BudgetLine** — one row per category per wedding (`venue, catering, florals, photography, videography, music, dj, officiant, stationery, hair_makeup, transport, cake, other`). `spent_amount` is recomputed from accepted Quotes + SupplierPayments.
+- **Budget (PD-004)** — the couple's own budget screen, separate from the intake planner's `BudgetLine` rows (left as they were: float EUR amounts). Every amount is whole US cents. `Wedding.budget_total_cents` is the couple's optional total (blank until they set it; not taken from the intake `budget_total`). **BudgetCategory** has a name and optional `planned_cents`. **BudgetCost** is a vendor cost under a category: free-text `vendor_name` and optional `quoted_cents`. **BudgetPayment** is a deposit or later payment on a cost, with an optional `due_on`; `paid`, `paid_at` and `paid_by_user_id` change only when a signed-in owner or editor ticks it (rule 4). **BudgetContribution** records who is contributing (a free-text label) and how much, optionally towards one category. "Committed" for a cost is its quote, or the sum of its payments if there's no quote; "still to pay" is committed minus paid. Removing a category removes its costs and payments; contributions towards it stay, untied.
 - **TimelineItem** — `kind` ∈ `{planning, day_of}`. Planning items have a future `due_at`; day-of items use the wedding date + time-of-day. One table to keep the agent's "draft + update timeline" decisions uniform.
 - **Guest** — RSVP + seating. `table_number` is set by the agent's seating-assign decision and can be overridden by the couple/planner.
 
@@ -278,7 +325,7 @@ erDiagram
 
 - **AgentDecisionLog** — every autonomous agent action. This is the artifact the XPRIZE judges will export and inspect, so the schema is intentionally richer than the other entities.
   - **Identity & versioning.** `agent_id` is the *logical* agent (e.g., `venue_matcher`, `contract_reviewer`), not a per-call run id. `model_id` is the underlying LLM identifier (e.g., `gemini-3-pro-2026-04`). `prompt_version` is the team's own prompt-template version (e.g., `v3.1`). Together these make every decision reproducible and let prompt iteration be audited.
-  - **Decision taxonomy.** `decision_type` vocabulary (extend as needed): `venue_match, supplier_match, inquiry_draft, quote_draft, quote_negotiate, contract_review, timeline_generate, timeline_update, budget_alert, rsvp_followup, seating_assign, runofshow_update, followup_scheduled, reschedule, post_event_review_request`.
+  - **Decision taxonomy.** `decision_type` vocabulary (extend as needed): `venue_match, supplier_match, inquiry_draft, quote_draft, quote_negotiate, contract_review, timeline_generate, timeline_update, budget_alert, budget_split, rsvp_followup, seating_assign, runofshow_update, followup_scheduled, reschedule, post_event_review_request`.
   - **Status.** `status` ∈ `{success, error, blocked_by_guardrail, overridden}`. Errors are also production reality — log them. `error_kind` is a short code (`schema_violation`, `upstream_timeout`, `rate_limited`, `guardrail_blocked`, …); `error_message` is free text.
   - **Chains & triggers.** `trigger` ∈ `{couple_action, planner_action, supplier_response, scheduled, parent_decision, agent_initiated}`. `parent_decision_id` is a self-FK so chains of reasoning (e.g., `contract_review → flag_risk → notify_couple`) are queryable as a DAG rather than appearing as isolated point events.
   - **Rationale.** `rationale_summary` is a short human-readable sentence ("Shortlisted Five Mile Stables — matches 120-guest indoor/outdoor brief, confirmed Aug 2026 availability, €5,200 within budget"). It powers the couple-facing override UI and gives skimming judges a story. The full structured reasoning still lives in `output_payload`.

@@ -415,6 +415,115 @@ async def run_async_verification():
             reported = [log.confidence_score for log in logs if log.status == "success"]
             assert 0.92 in reported, "a reported confidence must still be logged as-is"
 
+            # --- TEST 9: BUDGET SPLIT (PD-004 call b) ---
+            print("\nTEST 9: Running Budget Splitter (Success Path)...")
+            from app.agents.budget_split import run_budget_splitter, split_cents
+            from app.db.models import BudgetCategory
+
+            async def split_logs():
+                return (await db.exec(
+                    select(AgentDecisionLog)
+                    .where(AgentDecisionLog.wedding_id == "wedding_intake_test",
+                           AgentDecisionLog.agent_id == "budget_splitter")
+                    .order_by(AgentDecisionLog.timestamp.desc())
+                )).all()
+
+            def split_reply(lines, usage=True):
+                body = json.dumps({"lines": lines, "rationale_summary": "A first draft."})
+                response = MockResponse(body, prompt_tokens=40, output_tokens=60)
+                if not usage:
+                    response.usage_metadata = None
+
+                async def _gen(*args, **kwargs):
+                    return response
+                return _gen
+
+            split_kwargs = dict(total_cents=3_333_333, category_names=["Venue", "Chuppah flowers"],
+                                guest_count=200, ceremony_type="Jewish")
+            mock_models.generate_content = split_reply([
+                {"category": "venue", "percent": 50.0, "rationale": "Largest cost."},
+                {"category": "Chuppah flowers", "percent": 16.7, "rationale": "Ceremony."},
+                {"category": "catering", "percent": 33.3, "rationale": "Per head."},
+            ])
+            with patch("app.agents.budget_split.get_client", return_value=mock_client):
+                out = await run_budget_splitter(db, "wedding_intake_test", **split_kwargs)
+            assert out.get("status") != "blocked", out
+            amounts = [line["planned_cents"] for line in out["lines"]]
+            assert sum(amounts) == 3_333_333, "the split must add up to exactly the total"
+            assert all(isinstance(a, int) for a in amounts)
+            assert [line["name"] for line in out["lines"]] == ["Venue", "Chuppah flowers", "Catering"]
+            assert [line["existing"] for line in out["lines"]] == [True, True, False]
+            cats = (await db.exec(select(BudgetCategory).where(
+                BudgetCategory.wedding_id == "wedding_intake_test"))).all()
+            assert cats == [], "a suggestion must not create or change any category"
+            log = (await split_logs())[0]
+            assert log.status == "success" and log.decision_type == "budget_split"
+            assert log.confidence_score is None, "no confidence is asked for, so none is logged"
+            assert (log.tokens_input, log.tokens_output) == (40, 60), "measured tokens are logged"
+            assert split_cents(100, [1, 1, 1]) == [34, 33, 33]
+            print(f"   * Split of {split_kwargs['total_cents']} cents: {amounts}; nothing saved")
+
+            print("\nTEST 10: Running Budget Splitter (Guardrail Paths)...")
+            bad_replies = [
+                ("category_whitelist", [{"category": "fireworks", "percent": 100.0}]),
+                ("duplicate_category", [{"category": "venue", "percent": 50.0},
+                                        {"category": "Venue", "percent": 50.0}]),
+                ("duplicate_category", [{"category": "Hair makeup", "percent": 50.0},
+                                        {"category": "hair_makeup", "percent": 50.0}]),
+                ("invalid_share", [{"category": "venue", "percent": 140.0}]),
+                ("shares_dont_add_up", [{"category": "venue", "percent": 60.0},
+                                        {"category": "catering", "percent": 20.0}]),
+                ("empty_split", []),
+            ]
+            for kind, lines in bad_replies:
+                mock_models.generate_content = split_reply(lines)
+                with patch("app.agents.budget_split.get_client", return_value=mock_client):
+                    out = await run_budget_splitter(db, "wedding_intake_test", **split_kwargs)
+                assert out["status"] == "blocked" and out["error_kind"] == kind, (kind, out)
+                log = (await split_logs())[0]
+                assert log.status == "blocked_by_guardrail" and log.error_kind == kind
+                print(f"   * Blocked: {kind}")
+            out = await run_budget_splitter(db, "wedding_intake_test", total_cents=0,
+                                            category_names=[])
+            assert out["error_kind"] == "no_total"
+            print("   * Blocked: no_total (no model call without the couple's total)")
+
+            print("\nTEST 10b: Budget Splitter strips prices from its reasons...")
+            priced = ["About $12,000 here.", "Typically 8,000 EUR.", "Allow 5k.",
+                      "Around €900 per day.", "Budget 3000 dollars.", "USD 400 each."]
+            clean = ["Usually the largest share, around 40%.", "Scales with 150 guests."]
+            lines = [{"category": c, "percent": 12.5, "rationale": r}
+                     for c, r in zip(["venue", "catering", "florals", "music", "cake",
+                                      "transport", "dj", "officiant"], priced + clean)]
+            body = json.dumps({"lines": lines, "rationale_summary": "Venue gets $15k."})
+
+            async def _priced(*args, **kwargs):
+                return MockResponse(body, prompt_tokens=1, output_tokens=1)
+            mock_models.generate_content = _priced
+            with patch("app.agents.budget_split.get_client", return_value=mock_client):
+                out = await run_budget_splitter(db, "wedding_intake_test", **split_kwargs)
+            assert out.get("status") != "blocked", out
+            reasons = [line["rationale"] for line in out["lines"]]
+            assert reasons == [""] * len(priced) + clean, reasons
+            assert out["rationale_summary"] == "", "a priced summary is dropped too"
+            assert len(out["warnings"]) == len(priced) + 1
+            assert sum(line["planned_cents"] for line in out["lines"]) == 3_333_333
+            log = (await split_logs())[0]
+            assert "$" not in json.dumps(log.output_payload), "no price reaches the log"
+            print("   * Prices in the model's prose are removed; percentages and counts kept")
+
+            print("\nTEST 11: Running Budget Splitter (No Usage Reported)...")
+            mock_models.generate_content = split_reply(
+                [{"category": "venue", "percent": 100.0}], usage=False)
+            with patch("app.agents.budget_split.get_client", return_value=mock_client):
+                out = await run_budget_splitter(db, "wedding_intake_test", **split_kwargs)
+            assert out["lines"][0]["planned_cents"] == 3_333_333
+            assert out["lines"][0]["rationale"] == "", "a missing rationale stays empty"
+            log = (await split_logs())[0]
+            assert (log.tokens_input, log.tokens_output) == (None, None), "missing tokens stay empty"
+            assert log.external_api_calls[0]["tokens"] == {"input": None, "output": None}
+            print("   * Tokens not reported: logged as empty, not zero")
+
     print("\n--- ASYNC AGENT Logic VERIFICATION SUCCESS ---")
 
 def main():

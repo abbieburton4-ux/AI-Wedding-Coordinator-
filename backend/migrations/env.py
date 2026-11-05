@@ -21,7 +21,8 @@ from sqlmodel import SQLModel
 from app.db.models import (
     User, Wedding, Venue, Supplier, VenueAvailability, SupplierAvailability,
     Booking, Quote, Contract, Payment, Subscription, SupplierPayment,
-    BudgetLine, TimelineItem, Guest, AgentDecisionLog, WeddingMember
+    BudgetLine, TimelineItem, Guest, AgentDecisionLog, WeddingMember,
+    BudgetCategory, BudgetCost, BudgetPayment, BudgetContribution,
 )
 from app.config import settings
 

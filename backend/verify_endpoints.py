@@ -283,6 +283,308 @@ def test_api_suite():
         assert c.delete(f"{members_url}/{aunt_id}", headers=headers).status_code == 204
         print("   * Access list: owners can't be removed, demoted or created through the API")
 
+        # 7c. Budget (PD-004): cents only, viewers read everything but change nothing.
+        print("7c. Verifying the budget: categories, vendor costs, payments, contributions...")
+        from app.api.v1.endpoints import budget as budget_module
+        b_url = f"/api/v1/weddings/{wedding_id}/budget"
+        ov = c.get(f"{b_url}/overview", headers=viewer_headers)
+        assert ov.status_code == 200, ov.text
+        assert ov.json()["totals"]["total_cents"] is None, "no total until the couple set one"
+        assert ov.json()["categories"] == [] and ov.json()["next_due"] == []
+        assert c.get(f"{b_url}/overview", headers=unauth_headers).status_code == 403
+
+        res = c.post(f"{b_url}/categories", json={"name": "  Venue ", "planned_cents": 1_500_000},
+                     headers=headers)
+        assert res.status_code == 201 and res.json()["name"] == "Venue", res.text
+        venue_cat = res.json()["id"]
+        res = c.post(f"{b_url}/categories", json={"name": "Flowers"}, headers=editor_headers)
+        assert res.status_code == 201 and res.json()["planned_cents"] is None
+        flowers_cat = res.json()["id"]
+        assert c.post(f"{b_url}/categories", json={"name": "   "}, headers=headers).status_code == 422
+        assert c.post(f"{b_url}/categories", json={"name": "X", "planned_cents": -1},
+                      headers=headers).status_code == 422
+        assert c.post(f"{b_url}/categories", json={"name": "X", "planned_cents": 10.5},
+                      headers=headers).status_code == 422, "amounts are whole cents"
+        res = c.patch(f"{b_url}/categories/{flowers_cat}",
+                      json={"name": "Florals", "planned_cents": 250_000}, headers=editor_headers)
+        assert res.status_code == 200 and res.json()["name"] == "Florals"
+        assert c.patch(f"{b_url}/categories/nope", json={"name": "Y"},
+                       headers=headers).status_code == 404
+        assert c.post(f"{b_url}/categories", json={"name": "venue"},
+                      headers=headers).status_code == 409, "no two categories with one name"
+        assert c.patch(f"{b_url}/categories/{flowers_cat}", json={"name": " VENUE "},
+                       headers=headers).status_code == 409
+        assert c.patch(f"{b_url}/categories/{flowers_cat}", json={"name": "florals"},
+                       headers=headers).status_code == 200, "renaming to itself is fine"
+        assert c.patch(f"{b_url}/categories/{flowers_cat}", json={"name": "Florals"},
+                       headers=headers).status_code == 200
+        print("   * Categories: add, rename and plan; bad names, duplicates and non-cent "
+              "amounts refused")
+
+        res = c.post(f"{b_url}/categories/{venue_cat}/costs",
+                     json={"vendor_name": "Sample Hall", "quoted_cents": 1_200_050}, headers=headers)
+        assert res.status_code == 201, res.text
+        cost_id = res.json()["id"]
+        assert c.patch(f"{b_url}/costs/{cost_id}", json={"quoted_cents": 1_200_000},
+                       headers=editor_headers).status_code == 200
+        res = c.post(f"{b_url}/costs/{cost_id}/payments",
+                     json={"kind": "deposit", "amount_cents": 300_000, "due_on": "2020-01-15"},
+                     headers=headers)
+        assert res.status_code == 201 and res.json()["paid"] is False, res.text
+        deposit_id = res.json()["id"]
+        res = c.post(f"{b_url}/costs/{cost_id}/payments",
+                     json={"amount_cents": 900_000, "due_on": "2099-06-01", "paid": True},
+                     headers=headers)
+        assert res.status_code == 201 and res.json()["paid"] is False, "new payments start unpaid"
+        balance_id = res.json()["id"]
+        assert c.post(f"{b_url}/costs/{cost_id}/payments", json={"amount_cents": 0},
+                      headers=headers).status_code == 422
+        assert c.post(f"{b_url}/costs/{cost_id}/payments", json={"kind": "refund", "amount_cents": 1},
+                      headers=headers).status_code == 422
+        assert c.patch(f"{b_url}/payments/{balance_id}", json={"paid": True},
+                       headers=headers).json()["paid"] is False, "editing can't mark a payment paid"
+        print("   * Vendor costs and payments: added unpaid; only the paid click changes that")
+
+        res = c.post(f"{b_url}/contributions",
+                     json={"contributor": "Groom's parents", "amount_cents": 500_000,
+                           "category_id": venue_cat}, headers=headers)
+        assert res.status_code == 201, res.text
+        contribution_id = res.json()["id"]
+        assert c.post(f"{b_url}/contributions", json={"contributor": "A", "amount_cents": 1,
+                      "category_id": "nope"}, headers=headers).status_code == 404
+        assert c.patch(f"{b_url}/contributions/{contribution_id}", json={"amount_cents": 600_000},
+                       headers=editor_headers).status_code == 200
+
+        # Viewers (family) see it all, contributions included, and can change none of it.
+        paid_url = f"{b_url}/payments/{deposit_id}/paid"
+        viewer_writes = [
+            ("put", f"{b_url}/total", {"total_cents": 1}),
+            ("post", f"{b_url}/categories", {"name": "Z"}),
+            ("patch", f"{b_url}/categories/{venue_cat}", {"name": "Z"}),
+            ("delete", f"{b_url}/categories/{venue_cat}", None),
+            ("post", f"{b_url}/categories/{venue_cat}/costs", {"vendor_name": "Z"}),
+            ("patch", f"{b_url}/costs/{cost_id}", {"quoted_cents": 1}),
+            ("delete", f"{b_url}/costs/{cost_id}", None),
+            ("post", f"{b_url}/costs/{cost_id}/payments", {"amount_cents": 1}),
+            ("patch", f"{b_url}/payments/{deposit_id}", {"amount_cents": 1}),
+            ("put", paid_url, {"paid": True}),
+            ("delete", f"{b_url}/payments/{deposit_id}", None),
+            ("post", f"{b_url}/contributions", {"contributor": "Z", "amount_cents": 1}),
+            ("patch", f"{b_url}/contributions/{contribution_id}", {"amount_cents": 1}),
+            ("delete", f"{b_url}/contributions/{contribution_id}", None),
+            ("post", f"{b_url}/suggest-split", None),
+            ("post", f"{b_url}/apply-split", {"lines": [{"name": "Z", "planned_cents": 1}]}),
+        ]
+        for method, url, body in viewer_writes:
+            kwargs = {"headers": viewer_headers}
+            if body is not None:
+                kwargs["json"] = body
+            res = c.request(method.upper(), url, **kwargs)
+            assert res.status_code == 403, (method, url, res.status_code)
+            res = c.request(method.upper(), url, **{**kwargs, "headers": unauth_headers})
+            assert res.status_code == 403, (method, url, res.status_code)
+        print("   * Viewer and outsider: every budget change and the AI split are refused")
+
+        res = c.put(paid_url, json={"paid": True}, headers=editor_headers)
+        assert res.status_code == 200 and res.json()["paid"] is True and res.json()["paid_at"]
+        first_tick = res.json()
+        assert first_tick["paid_by_name"] == "Mock Couple (editor_1)", first_tick
+        with Session(sync_engine) as s:
+            from app.db.models import BudgetPayment
+            assert s.get(BudgetPayment, deposit_id).paid_by_user_id == "editor_1"
+        res = c.put(paid_url, json={"paid": True}, headers=headers)
+        assert (res.json()["paid_at"], res.json()["paid_by_name"]) == (
+            first_tick["paid_at"], first_tick["paid_by_name"]), "a second tick keeps the first"
+        with Session(sync_engine) as s:
+            assert s.get(BudgetPayment, deposit_id).paid_by_user_id == "editor_1"
+        res = c.patch(f"{b_url}/payments/{deposit_id}", json={"due_on": "2020-01-16"},
+                      headers=headers)
+        assert res.json()["paid_by_name"] == first_tick["paid_by_name"], \
+            "editing a paid payment still says who ticked it"
+        assert c.patch(f"{b_url}/payments/{deposit_id}", json={"due_on": "2020-01-15"},
+                       headers=headers).status_code == 200
+        ov = c.get(f"{b_url}/overview", headers=viewer_headers).json()
+        venue = next(cat for cat in ov["categories"] if cat["id"] == venue_cat)
+        assert (venue["planned_cents"], venue["committed_cents"], venue["paid_cents"],
+                venue["remaining_cents"]) == (1_500_000, 1_200_000, 300_000, 900_000), venue
+        assert ov["totals"] == {"total_cents": None, "planned_cents": 1_750_000,
+                                "committed_cents": 1_200_000, "committed_basis": "quote",
+                                "paid_cents": 300_000, "remaining_cents": 900_000,
+                                "overpaid_cents": 0, "contributions_cents": 600_000}
+        assert [d["payment_id"] for d in ov["next_due"]] == [balance_id]
+        assert ov["next_due"][0]["overdue"] is False
+        assert ov["contributions"][0]["contributor"] == "Groom's parents"
+
+        # Overpaying one vendor shows as overpaid, never as a negative amount, and doesn't
+        # reduce what's still owed elsewhere. "Committed" says where its figure comes from.
+        cake_cat = c.post(f"{b_url}/categories", json={"name": "Cake"}, headers=headers).json()["id"]
+        bakery = c.post(f"{b_url}/categories/{cake_cat}/costs",
+                        json={"vendor_name": "Sample Bakery", "quoted_cents": 10_000},
+                        headers=headers).json()["id"]
+        over_pay = c.post(f"{b_url}/costs/{bakery}/payments", json={"amount_cents": 15_000},
+                          headers=headers).json()["id"]
+        c.put(f"{b_url}/payments/{over_pay}/paid", json={"paid": True}, headers=headers)
+        toppers = c.post(f"{b_url}/categories/{cake_cat}/costs",
+                         json={"vendor_name": "Sample Toppers"}, headers=headers).json()["id"]
+        c.post(f"{b_url}/costs/{toppers}/payments", json={"amount_cents": 2_000}, headers=headers)
+        ov = c.get(f"{b_url}/overview", headers=viewer_headers).json()
+        cake = next(cat for cat in ov["categories"] if cat["id"] == cake_cat)
+        by_vendor = {cost["vendor_name"]: cost for cost in cake["costs"]}
+        assert (by_vendor["Sample Bakery"]["remaining_cents"],
+                by_vendor["Sample Bakery"]["overpaid_cents"]) == (0, 5_000)
+        assert by_vendor["Sample Bakery"]["committed_basis"] == "quote"
+        assert by_vendor["Sample Toppers"]["committed_basis"] == "scheduled"
+        assert (cake["committed_basis"], cake["remaining_cents"], cake["overpaid_cents"]) == (
+            "mixed", 2_000, 5_000), cake
+        assert (ov["totals"]["remaining_cents"], ov["totals"]["overpaid_cents"]) == (
+            902_000, 5_000), "an overpayment isn't netted against other vendors"
+        assert ov["totals"]["committed_basis"] == "mixed"
+        assert c.delete(f"{b_url}/categories/{cake_cat}", headers=headers).status_code == 204
+        print("   * Overpaid: shown per vendor, never negative, never netted")
+
+        res = c.put(paid_url, json={"paid": False}, headers=headers)
+        assert res.json()["paid"] is False and res.json()["paid_at"] is None
+        ov = c.get(f"{b_url}/overview", headers=headers).json()
+        assert ov["next_due"][0]["payment_id"] == deposit_id and ov["next_due"][0]["overdue"] is True
+        print("   * Paid: an editor's click marks it, records who; totals and due list follow")
+
+        # The total is optional; the AI split needs it and changes nothing by itself.
+        assert c.post(f"{b_url}/suggest-split", headers=headers).status_code == 400
+        assert c.put(f"{b_url}/total", json={"total_cents": 0}, headers=headers).status_code == 422
+        res = c.put(f"{b_url}/total", json={"total_cents": 4_000_000}, headers=editor_headers)
+        assert res.status_code == 200 and res.json()["total_cents"] == 4_000_000
+        real_splitter = budget_module.run_budget_splitter
+        calls = []
+
+        async def _fake_split(db, wid, **kwargs):
+            calls.append(kwargs)
+            return {"suggestion": True, "total_cents": kwargs["total_cents"],
+                    "lines": [{"name": "Venue", "planned_cents": 3_000_000, "existing": True,
+                               "rationale": "r"},
+                              {"name": "Catering", "planned_cents": 1_000_000,
+                               "existing": False, "rationale": "r"}],
+                    "rationale_summary": "s"}
+
+        async def _blocked_split(db, wid, **kwargs):
+            return {"status": "blocked", "error_kind": "category_whitelist"}
+
+        budget_module.run_budget_splitter = _fake_split
+        try:
+            res = c.post(f"{b_url}/suggest-split", headers=headers)
+            assert res.status_code == 200 and len(res.json()["lines"]) == 2, res.text
+            assert calls[0]["total_cents"] == 4_000_000
+            assert sorted(calls[0]["category_names"]) == ["Florals", "Venue"]
+            budget_module.run_budget_splitter = _blocked_split
+            assert c.post(f"{b_url}/suggest-split", headers=headers).status_code == 422
+        finally:
+            budget_module.run_budget_splitter = real_splitter
+        ov = c.get(f"{b_url}/overview", headers=headers).json()
+        assert [cat["planned_cents"] for cat in ov["categories"]] == [1_500_000, 250_000], \
+            "a suggestion must change nothing until the couple use it"
+        assert c.post(f"{b_url}/apply-split", headers=headers, json={"lines": [
+            {"name": "Hair makeup", "planned_cents": 2_000_000},
+            {"name": "hair_MAKEUP", "planned_cents": 2_000_000}]}).status_code == 422, \
+            "one category can't appear twice in a split"
+        assert c.post(f"{b_url}/apply-split", headers=headers, json={"lines": [
+            {"name": "venue", "planned_cents": 2_900_000},
+            {"name": "Catering", "planned_cents": 1_000_000}]}).status_code == 409, \
+            "a split that doesn't add up to the total isn't applied"
+        # Two categories differing only by case (possible in data from before the
+        # duplicate check): the split refuses rather than updating just one of them.
+        with Session(sync_engine) as s:
+            from app.db.models import BudgetCategory as BudgetCategoryModel
+            twin = BudgetCategoryModel(wedding_id=wedding_id, name="VENUE", planned_cents=7)
+            s.add(twin)
+            s.commit()
+            twin_id = twin.id
+        res = c.post(f"{b_url}/apply-split", headers=headers, json={"lines": [
+            {"name": "venue", "planned_cents": 2_900_000},
+            {"name": "Catering", "planned_cents": 1_100_000}]})
+        assert res.status_code == 409 and "VENUE" in res.json()["detail"], res.text
+        ov = c.get(f"{b_url}/overview", headers=headers).json()
+        assert [cat["planned_cents"] for cat in ov["categories"]] == [1_500_000, 250_000, 7], \
+            "a refused split changes nothing"
+        assert c.delete(f"{b_url}/categories/{twin_id}", headers=headers).status_code == 204
+        res = c.post(f"{b_url}/apply-split", headers=headers, json={"lines": [
+            {"name": "venue", "planned_cents": 2_900_000},
+            {"name": "Catering", "planned_cents": 1_100_000}]})
+        assert res.status_code == 200, res.text
+        planned = {cat["name"]: cat["planned_cents"] for cat in res.json()["categories"]}
+        assert planned == {"Venue": 2_900_000, "Florals": 250_000, "Catering": 1_100_000}, planned
+        assert sum(planned[n] for n in ("Venue", "Catering")) == 4_000_000, \
+            "the applied split adds up to the total"
+        assert c.put(f"{b_url}/total", json={"total_cents": None}, headers=headers).json()[
+            "total_cents"] is None
+        assert c.post(f"{b_url}/apply-split", headers=headers, json={"lines": [
+            {"name": "Venue", "planned_cents": 1}]}).status_code == 400, "needs a total"
+        print("   * Total: optional; the AI split needs it, saves nothing, and is applied by the couple")
+
+        assert c.delete(f"{b_url}/payments/{balance_id}", headers=headers).status_code == 204
+        assert c.delete(f"{b_url}/costs/{cost_id}", headers=editor_headers).status_code == 204
+        assert c.delete(f"{b_url}/categories/{venue_cat}", headers=headers).status_code == 204
+        ov = c.get(f"{b_url}/overview", headers=headers).json()
+        assert venue_cat not in [cat["id"] for cat in ov["categories"]]
+        assert ov["contributions"][0]["category_id"] is None, "contribution stays, untied"
+        with Session(sync_engine) as s:
+            assert s.get(BudgetPayment, deposit_id) is None, "a removed cost takes its payments"
+        assert c.delete(f"{b_url}/contributions/{contribution_id}",
+                        headers=headers).status_code == 204
+        print("   * Delete: payments, costs and categories go; contributions are kept untied")
+
+        # Another wedding's budget rows can't be read, changed or linked through this
+        # wedding's URLs, even with real ids. couple_2 owns the seeded second wedding.
+        other_headers = {"Authorization": "Bearer mock-couple_2"}
+        o_url = "/api/v1/weddings/wedding_planning_test/budget"
+        o_cat = c.post(f"{o_url}/categories", json={"name": "Their venue"},
+                       headers=other_headers)
+        assert o_cat.status_code == 201, o_cat.text
+        o_cat = o_cat.json()["id"]
+        o_cost = c.post(f"{o_url}/categories/{o_cat}/costs", json={"vendor_name": "Their hall"},
+                        headers=other_headers).json()["id"]
+        o_pay = c.post(f"{o_url}/costs/{o_cost}/payments", json={"amount_cents": 100},
+                       headers=other_headers).json()["id"]
+        o_con = c.post(f"{o_url}/contributions", json={"contributor": "Their family",
+                       "amount_cents": 100}, headers=other_headers).json()["id"]
+        mine = c.post(f"{b_url}/categories", json={"name": "Mine"}, headers=headers).json()["id"]
+        my_cost = c.post(f"{b_url}/categories/{mine}/costs", json={"vendor_name": "My hall"},
+                         headers=headers).json()["id"]
+        my_con = c.post(f"{b_url}/contributions", json={"contributor": "My family",
+                        "amount_cents": 100}, headers=headers).json()["id"]
+        cross = [
+            ("patch", f"{b_url}/categories/{o_cat}", {"name": "Taken"}),
+            ("delete", f"{b_url}/categories/{o_cat}", None),
+            ("post", f"{b_url}/categories/{o_cat}/costs", {"vendor_name": "Z"}),
+            ("patch", f"{b_url}/costs/{o_cost}", {"quoted_cents": 1}),
+            ("delete", f"{b_url}/costs/{o_cost}", None),
+            ("post", f"{b_url}/costs/{o_cost}/payments", {"amount_cents": 1}),
+            ("patch", f"{b_url}/payments/{o_pay}", {"amount_cents": 1}),
+            ("put", f"{b_url}/payments/{o_pay}/paid", {"paid": True}),
+            ("delete", f"{b_url}/payments/{o_pay}", None),
+            ("patch", f"{b_url}/contributions/{o_con}", {"amount_cents": 1}),
+            ("delete", f"{b_url}/contributions/{o_con}", None),
+            ("patch", f"{b_url}/costs/{my_cost}", {"category_id": o_cat}),
+            ("post", f"{b_url}/contributions",
+             {"contributor": "Z", "amount_cents": 1, "category_id": o_cat}),
+            ("patch", f"{b_url}/contributions/{my_con}", {"category_id": o_cat}),
+        ]
+        for method, url, body in cross:
+            kwargs = {"headers": headers}
+            if body is not None:
+                kwargs["json"] = body
+            res = c.request(method.upper(), url, **kwargs)
+            assert res.status_code == 404, (method, url, res.status_code)
+        theirs = c.get(f"{o_url}/overview", headers=other_headers).json()
+        assert [cat["name"] for cat in theirs["categories"]] == ["Their venue"]
+        their_pay = theirs["categories"][0]["costs"][0]["payments"][0]
+        assert (their_pay["amount_cents"], their_pay["paid"]) == (100, False)
+        assert [con["amount_cents"] for con in theirs["contributions"]] == [100]
+        ours = c.get(f"{b_url}/overview", headers=headers).json()
+        assert all(cat["id"] != o_cat for cat in ours["categories"])
+        assert next(cat for cat in ours["categories"] if cat["id"] == mine)["costs"][0][
+            "id"] == my_cost, "the cost stayed in this wedding's category"
+        assert all(con["category_id"] is None for con in ours["contributions"])
+        print("   * Cross-wedding: another wedding's real ids are refused (404) and untouched")
+
         forged = pyjwt.encode({"sub": "forged_admin", "role": "admin"},
                               "dev-jwt-secret-key-change-me-in-production", algorithm="HS256")
         res = c.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {forged}"})

@@ -64,6 +64,9 @@ class Wedding(SQLModel, table=True):
     ceremony_type: str
     guest_count_estimate: int
     budget_total: float
+    # The couple's own total for the budget screen (PD-004), in whole US cents. Blank
+    # until they set it; separate from the intake estimate above, which is a float.
+    budget_total_cents: Optional[int] = Field(default=None)
     currency: str = Field(default="EUR")
     style_notes: Optional[str] = Field(default=None, sa_column=Column(Text))
     status: str = Field(default="intake")  # intake, planning, booked, completed, cancelled
@@ -386,6 +389,92 @@ class AgentDecisionLog(SQLModel, table=True):
     parent_decision: Optional["AgentDecisionLog"] = Relationship(
         sa_relationship_kwargs={"remote_side": "AgentDecisionLog.id"}
     )
+
+
+# --- Budget (PD-004). Every amount is whole US cents; nothing here is a float. ---
+
+PAYMENT_KINDS = ("deposit", "payment")
+
+
+class BudgetCategory(SQLModel, table=True):
+    """A budget category the couple named, with what they plan to spend on it."""
+    __tablename__ = "budget_categories"
+    __table_args__ = (
+        CheckConstraint(
+            "planned_cents IS NULL OR planned_cents >= 0", name="ck_budget_category_planned"
+        ),
+    )
+
+    id: str = Field(default_factory=generate_uuid_str, primary_key=True)
+    wedding_id: str = Field(foreign_key="weddings.id", index=True, ondelete="CASCADE")
+    name: str
+    planned_cents: Optional[int] = None
+    created_at: datetime.datetime = Field(default_factory=utcnow)
+    updated_at: datetime.datetime = Field(default_factory=utcnow)
+
+
+class BudgetCost(SQLModel, table=True):
+    """A vendor cost under a category: who it's with and what they quoted."""
+    __tablename__ = "budget_costs"
+    __table_args__ = (
+        CheckConstraint(
+            "quoted_cents IS NULL OR quoted_cents >= 0", name="ck_budget_cost_quoted"
+        ),
+    )
+
+    id: str = Field(default_factory=generate_uuid_str, primary_key=True)
+    wedding_id: str = Field(foreign_key="weddings.id", index=True, ondelete="CASCADE")
+    category_id: str = Field(foreign_key="budget_categories.id", index=True, ondelete="CASCADE")
+    vendor_name: str = Field(description="Free text typed by the couple")
+    quoted_cents: Optional[int] = None
+    created_at: datetime.datetime = Field(default_factory=utcnow)
+    updated_at: datetime.datetime = Field(default_factory=utcnow)
+
+
+class BudgetPayment(SQLModel, table=True):
+    """A deposit or later payment on a vendor cost.
+
+    ``paid`` changes only when a signed-in owner or editor ticks it (hard rule 4);
+    no agent or background job writes it.
+    """
+    __tablename__ = "budget_payments"
+    __table_args__ = (
+        CheckConstraint("amount_cents > 0", name="ck_budget_payment_amount"),
+        CheckConstraint("kind IN ('deposit', 'payment')", name="ck_budget_payment_kind"),
+    )
+
+    id: str = Field(default_factory=generate_uuid_str, primary_key=True)
+    wedding_id: str = Field(foreign_key="weddings.id", index=True, ondelete="CASCADE")
+    cost_id: str = Field(foreign_key="budget_costs.id", index=True, ondelete="CASCADE")
+    kind: str = Field(default="payment", description="deposit or payment")
+    amount_cents: int
+    due_on: Optional[datetime.date] = Field(default=None, sa_column=Column(Date))
+    paid: bool = Field(default=False)
+    paid_at: Optional[datetime.datetime] = None
+    paid_by_user_id: Optional[str] = Field(
+        default=None, foreign_key="users.id", ondelete="SET NULL"
+    )
+    created_at: datetime.datetime = Field(default_factory=utcnow)
+
+
+class BudgetContribution(SQLModel, table=True):
+    """Who is contributing what, optionally towards one category.
+
+    ``contributor`` is a free-text role label such as "Groom's parents".
+    """
+    __tablename__ = "budget_contributions"
+    __table_args__ = (
+        CheckConstraint("amount_cents >= 0", name="ck_budget_contribution_amount"),
+    )
+
+    id: str = Field(default_factory=generate_uuid_str, primary_key=True)
+    wedding_id: str = Field(foreign_key="weddings.id", index=True, ondelete="CASCADE")
+    contributor: str
+    amount_cents: int
+    category_id: Optional[str] = Field(
+        default=None, foreign_key="budget_categories.id", index=True, ondelete="SET NULL"
+    )
+    created_at: datetime.datetime = Field(default_factory=utcnow)
 
 
 ACCESS_LEVELS = ("viewer", "editor", "owner")  # lowest to highest

@@ -83,6 +83,11 @@ def main() -> None:
         )).fetchall()
     assert [tuple(r) for r in rows] == [("w1", "couple@example.test", "owner", "u1")], rows
 
+    print("3b. Checking that 0003 leaves existing weddings with no budget total set...")
+    with engine.connect() as conn:
+        totals = conn.execute(text("SELECT budget_total_cents FROM weddings")).fetchall()
+    assert [tuple(r) for r in totals] == [(None,)], totals
+
     print("4. Downgrading to the start and back up again...")
     command.downgrade(cfg, "base")
     command.upgrade(cfg, "head")
