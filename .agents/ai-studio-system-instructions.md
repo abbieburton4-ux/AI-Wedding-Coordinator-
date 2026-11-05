@@ -33,13 +33,6 @@ You are working on AI Wedding Coordinator, which is the same app as VenueFlow: "
 **Ask me first** about anything that sends, money, sign-in or access, deleting data, how data is stored, or a product choice not covered in `docs/product/`.
 
 **Code conventions:**
-- Replit's real-access workflow runs `bash scripts/replit-production.sh` after
-  `bash scripts/replit-build.sh`: the built SPA and API share port 5000 with
-  `VITE_BASE=/` and `VITE_API_URL=""`. It uses managed PostgreSQL and Firebase
-  with both demo flags off. Agents run within the request behind `run_agent`;
-  no production queue placeholder is used. Apply Alembic to development only;
-  Replit Publish owns production schema changes, never startup DDL. Run
-  `python verify_production.py` with the existing checks. See `replit.md`.
 - Use `react-router` (not `react-router-dom`); routes live in `frontend/src/app/App.tsx`.
 - Tailwind v4 has no config file; tokens are in `frontend/src/styles/theme.css`. Use semantic classes (`bg-background`, `text-primary`), not hex colours.
 - Brand components are in `frontend/src/app/design-system/primitives.tsx`; shadcn components are in `frontend/src/app/components/ui/`.
