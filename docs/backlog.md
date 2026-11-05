@@ -13,17 +13,18 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
 2. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-3. **B23** — in depth budgeting (PD-004 ratified: option C, plus an AI-suggested starting split). Fold in B30. Building
-4. **B14** — where the app and its data live, and what that costs (PD-006, proposed). `needs-owner: approve PD-006 (Google Cloud, about $10–15 a month) and pick the web address spelling`
-5. **B24** — planning checklist. `needs-owner: checklist scope PD (unfixed date; which Jewish traditions), to be proposed`
-6. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
-7. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
-8. **B34** — database-level guard against the same email being added twice. `ready`
-9. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
-10. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
-11. **B8** — record missing token counts as empty, not 0. `ready`
-12. **B17** — stop tracking the test database files. `ready`
-13. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy. `needs-owner: guardrail files need a session the owner runs`
+3. **B23** — in depth budgeting (PD-004 ratified: option C, plus an AI-suggested starting split). Fold in B30. PR #25: two independent reviews found nothing blocking; review fixes being built
+4. **B42** — vendor cards still measure quotes against the old euro budget, not the new one. `ready` (after B23)
+5. **B14** — where the app and its data live, and what that costs (PD-006, proposed). `needs-owner: approve PD-006 (Google Cloud, about $10–15 a month) and pick the web address spelling`
+6. **B24** — planning checklist. `needs-owner: checklist scope PD (unfixed date; which Jewish traditions), to be proposed`
+7. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
+8. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+9. **B34** — database-level guard against the same email being added twice. `ready`
+10. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+11. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
+12. **B8** — record missing token counts as empty, not 0. `ready`
+13. **B17** — stop tracking the test database files. `ready`
+14. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy. `needs-owner: guardrail files need a session the owner runs`
 
 ## Open
 
@@ -64,6 +65,7 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 - **B13 — Stale material from the XPRIZE.** The prototype and both sales lists are gone (B6, PR #15; B37, PR #20). Left: the `.xlsx` trackers and the XPRIZE framing in `README.md`, `docs/runway.md`, `docs/strategic-memo.md` and `docs/reviews/`. *Fix:* archive or delete them (owner's call). See B40 for the prospects' first names.
 - **B40 — Past sales prospects' first names remain.** Found in PR #20. Four first names, one linked to a business, in `docs/runway.md`, `scripts/build_tracker.py` and probably `runway-tracker.xlsx` (rule 3). *Fix:* remove or replace them with roles. *Depends on:* PD-005, extended again 2026-11-05 (ratified).
 - **B41 — Small follow-ups from the B39 review (PR #23).** The independent review found nothing blocking, plus three should-fix items: (1) `manage_access.py` flags access-list rows that contain look-alike letters but can't remove them, because `remove` refuses non-ASCII input; let `remove` take a row id. (2) No test proves an existing, linked member keeps access if their sign-in address has a look-alike letter (`auth.py:141-143`). (3) The refusal in wedding creation (`weddings.py:58-61`) is untested. Copy (decided-by-agent, reversible): the refusal message should tell people to ask the couple to add a different address, not to "type in plain letters". *Depends on:* PD-002 note, 2026-11-05 (ratified).
+- **B42 — Vendor cards measure against the old euro budget.** Found by the money and access review of PR #25 (B23). `weddings.py:316-329` still flags a vendor quote as "over budget" against the planner's old `BudgetLine` rows (euro floats), while the new budget screen uses the new dollar tables. The couple could plan Venue at one figure on the budget screen while the vendor card compares against a different euro amount. The old rows aren't deleted, so no data is lost. *Fix (recommended, reversible):* compare vendor quotes against the matching category in the new budget, and show no flag when there's no matching category; then stop the planner creating the old lines. *Depends on:* PD-004 (ratified).
 - **B14 — The deploy workflow would publish a frontend with no backend.** `.github/workflows/deploy.yml` publishes `frontend/` to GitHub Pages at VenueFlow's domain, `venueflow.ie` (`frontend/public/CNAME`), on every push to `main`. It sets no `VITE_API_URL`, so the published site would have no backend. No runs are recorded on this repo. *Fix:* decide where the app and its backend are hosted, then point the workflow at that. Keep or drop the domain as part of that decision. *Depends on:* a PD on hosting (couple's call).
 - **B17 — The verify scripts rewrite tracked files.** `backend/endpoints_test.db` and its `-shm`/`-wal` files are committed, and every run of `verify_endpoints.py` changes them; the other scripts leave untracked `-shm`/`-wal` files. `.gitignore` already lists `endpoints_test.db*`, but the files were committed before that. *Fix:* `git rm --cached` them and widen the ignore rule to `backend/*_test.db*`.
 - **B25 — Unattended agents need a first test.** `.github/workflows/claude-agents.yml` is new, and its third-party plugins aren't pinned to a version. Known gaps from its review (2026-11-04):
