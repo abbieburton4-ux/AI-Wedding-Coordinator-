@@ -8,7 +8,27 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 ## Next up
 
-*(Empty. The first autopilot run turns the ranking under "Open" into this ordered list, each item marked `ready` or `needs-owner: <question>`. See `docs/autonomy.md`.)*
+*Updated 2026-11-04 by the product lane. Re-rank if this date is more than 14 days old.*
+
+0. **B31** — point the autopilot workflow at the owner's Claude subscription. `needs-owner: agents may not change .github/; the owner makes this edit or runs it in their own engineer session`
+0b. **B32** — two Claude reply bots and an automatic PR review. `needs-owner: (a) turn off the extra reply bot? (b) keep the automatic review on every PR?`
+1. **B28** — label every sample figure on the couple's screens as sample. `ready`
+2. **B26** — stop seeding demo couples and weddings outside dev mode. `ready`
+3. **B22** — in review, PR #14. `needs-owner: (1) may one of the couple remove the other's power to manage access (built as allowed, with a warning)? (2) may the screen make anyone else an access manager (built as no)?`
+3b. **B6** — delete `planner-targets.xlsx` and the real-looking contacts in `streamlit_mock/` (PD-005). `ready`
+4. **B23** — in depth budgeting. `ready` (PD-004 ratified: option C, plus an AI-suggested starting split)
+5. **B14** — where the app and its data live, and what that costs. `needs-owner: approve the hosting recommendation (the product lane writes the PD next, with costs)`
+6. **B24** — planning checklist. `needs-owner: checklist scope PD (unfixed date; which Jewish traditions), to be proposed`
+7. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
+8. **B8** — record missing token counts as empty, not 0. `ready`
+9. **B17** — stop tracking the test database files. `ready`
+9b. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+9c. **B34** — database-level guard against the same email being added twice. `ready`
+9d. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+9e. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy after B22, B26 and B28. `needs-owner: guardrail files need a session the owner runs`
+10. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
+11. **B30** — the budget ring always shows 65% spent. `ready` (could fold into B23)
+
 
 ## Open
 
@@ -38,6 +58,9 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
   - **Email and password fallback:** PD-002 ratified it, but it doesn't work yet. New accounts need a verified email, and the app has no "confirm your email" step, so family without a Google account can't get in. Adding that step means Firebase sends a confirmation email when the person asks for one, in the same way as the password reset PD-002 already accepts. Until it exists, the setup guide tells the couple to turn on Google sign-in only.
   - *Depends on:* PD-002 (ratified). The email-confirmation step approved by the owner, 2026-11-04, since it's an email to a family member (raised at the 2026-11-04 checkpoint).
 - **B19 — Guest planning (must-have 3), but the guest list and seating plan show unlabelled sample data.** `frontend/src/app/wedding/views/Guests.tsx:9` (`GUESTS`, made-up names with dietary tags) and `SeatingPlan.tsx:13` (`GUESTS`, `INITIAL_TABLES`) are hard-coded and never call the API, on the couple's own workspace (rule 10). The backend has a `Guest` table (`backend/app/db/models.py:322`: name, email, phone, RSVP status, `dietary`, plus-one, table number), but no guest endpoint exists in `api/v1/endpoints/`. *Why it matters:* the couple listed "guest planning (list, food, seating)" as must-have 3, for 225 invited guests. Today nothing they enter would be saved. The "food" part includes dietary needs, which are health data (AGENTS.md rule 3). They must never appear in git, fixtures, issues, logs or `AgentDecisionLog` payloads. In the app, family (view only) can see them: "family can see dietary notes" (owner, 2026-11-04, `wedding.md`). *Fix:* label the sample data as sample now, as a quick and separate step. Then a proposed PD on guest-planning scope (what "food" covers, what seating needs), then backend guest endpoints and wiring. How it's built is not yet decided. *Depends on:* B10/B22 before real guest data goes in, and that PD.
+- **B28 — Sample data on the couple's screens looks real.** The guest list (`Guests.tsx`, `GUESTS`), seating plan (`SeatingPlan.tsx`, `GUESTS`, `INITIAL_TABLES`), budget fallback (`Budget.tsx`, `STATIC_CATEGORIES` and the "$24,500 of $35,000" totals) and checklist fallback (`Timeline.tsx`, `STATIC_ITEMS`) show made-up content with no label (rule 10). *Why it matters:* the couple and family could mistake made-up guests or dollar totals for their own. *Fix:* a clear, visible "Sample data, not your wedding" label on each of these screens wherever sample content shows. No new features and no data changes. This is the quick first step split out of B19, B23 and B24. *Depends on:* nothing (rule 10).
+- **B29 — Sample content flashes before real data loads.** Found while building B28 (PR #12). When a wedding has real budget lines or checklist items, `Budget.tsx` and `Timeline.tsx` show the static fallback, now labelled as sample, until the API answers. *Fix:* show a loading state instead of sample content while the data is loading. *Depends on:* nothing.
+- **B30 — The budget ring is hard-coded.** Found while building B28 (PR #12). The ring on `Budget.tsx` always shows 65% spent, whatever the totals are (rule 10). *Fix:* compute it from the real totals, or hide it when there's no data. It may be simplest to fold this into B23. *Depends on:* nothing.
 - **B20 — The catalogue and its docstring overstate what's verified.** In `backend/app/db/seed_data_real.py`, 10 of 26 suppliers are unchecked (`_verify: True`) and 3 are `_template` placeholders with made-up names (lines 340–361). The docstring (lines 26–28) promises that inquiries route through `agents.resolve_inquiry_recipient` to an owner-controlled inbox, but no such function exists. *Fix:* check or remove the unchecked rows (`add-vendors` skill), keep templates out of recommendations, and correct the docstring.
 
 ### Making it fit this wedding
@@ -49,7 +72,7 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 ### Housekeeping
 
-- **B13 — Stale material from the prototype and the XPRIZE.** `streamlit_mock/` (still referenced by `README.md`, `CONTRIBUTING.md`, `docs/runway.md`, `docs/reviews/2026-05-27.md` and `scripts/build_tracker.py`), the `.xlsx` trackers, and the XPRIZE framing in `README.md`, `docs/runway.md`, `docs/strategic-memo.md` and `docs/reviews/`. *Fix:* archive or delete them (owner's call).
+- **B13 — Stale material from the prototype and the XPRIZE.** `streamlit_mock/` (still referenced by `README.md`, `CONTRIBUTING.md`, `docs/runway.md`, `docs/reviews/2026-05-27.md` and `scripts/build_tracker.py`), the `.xlsx` trackers, and the XPRIZE framing in `README.md`, `docs/runway.md`, `docs/strategic-memo.md` and `docs/reviews/`. *Fix:* archive or delete them (owner's call). `streamlit_mock/` also holds demo emails and Irish mobile numbers that look real (found while building B26, PR #13). They may belong to real people (rule 3), so this ranks with B6.
 - **B14 — The deploy workflow would publish a frontend with no backend.** `.github/workflows/deploy.yml` publishes `frontend/` to GitHub Pages at VenueFlow's domain, `venueflow.ie` (`frontend/public/CNAME`), on every push to `main`. It sets no `VITE_API_URL`, so the published site would have no backend. No runs are recorded on this repo. *Fix:* decide where the app and its backend are hosted, then point the workflow at that. Keep or drop the domain as part of that decision. *Depends on:* a PD on hosting (couple's call).
 - **B15 — CI is new and untested.** `.github/workflows/ci.yml` runs the backend verify scripts and the frontend build on every PR. *Fix:* confirm the first run passes, then make `CI / backend` and `CI / frontend` required checks (see `docs/autonomy.md`).
 - **B17 — The verify scripts rewrite tracked files.** `backend/endpoints_test.db` and its `-shm`/`-wal` files are committed, and every run of `verify_endpoints.py` changes them; the other scripts leave untracked `-shm`/`-wal` files. `.gitignore` already lists `endpoints_test.db*`, but the files were committed before that. *Fix:* `git rm --cached` them and widen the ignore rule to `backend/*_test.db*`.
@@ -66,7 +89,16 @@ Not carried over from the audit, because the restored backend already covers the
 
 ---
 
-- **B26 — Demo data is seeded into every database.** `seed_database()` (`backend/app/db/seed.py`) runs on every startup, production included. It adds demo users (`couple_1`, `couple_2`, `planner_1`) and demo weddings when the database is empty. *Why it matters:* the real database would hold made-up couples, and `planner_1`'s email may belong to a real business (rule 3). *Fix:* seed only in `DEVELOPMENT_MODE`; keep the vendor catalogue seed separate.
+- **B31 — The autopilot can't sign in to Claude.** The owner connected their Claude subscription with `/install-github-app` (2026-11-04), which stored `CLAUDE_CODE_OAUTH_TOKEN`. The workflow (`.github/workflows/claude-agents.yml`, lines 52 and 112) still reads `ANTHROPIC_API_KEY`, which doesn't exist, so every run fails. *Fix:* switch both lines to `claude_code_oauth_token`, per `docs/autonomy.md` step 3. *Depends on:* nothing.
+
+- **B32 — Two "@claude" reply bots, and an automatic review on every PR.** `/install-github-app` opened PR #11, which the owner merged on 2026-11-04. It added `.github/workflows/claude.yml`, which answers any "@claude" comment, and `claude-code-review.yml`, which reviews every PR when it's opened or updated. `claude-agents.yml` already answers "@claude" with the repo's autopilot rules, so once B31 is fixed, each owner comment would start two separate runs. Only one of them follows this repo's rules. The automatic review also uses subscription allowance on every agent PR, which the repo's own reviewer already checks. *Fix (recommended):* turn off `claude.yml`. Whether to keep the automatic review is the owner's call. *Depends on:* the owner's answer. It's a `.github/` change, so it needs an owner-run session.
+
+- **B33 — The backend allows calls from VenueFlow's original website.** Found in PR #14. The list of websites allowed to call the backend still includes the upstream author's address. *Fix:* remove it, and add the real address once hosting is decided (B14).
+- **B34 — No database-level guard on duplicate access entries.** Found in PR #14. The app checks for an email already on the access list, but the `wedding_members` table doesn't enforce it. *Fix:* a unique constraint per wedding and email, through a migration (rule 6, see B27).
+- **B35 — Sign-in setup should turn on email-enumeration protection.** Found in PR #14. Firebase can hide whether an email has an account. *Fix:* add the step to `docs/setup-sign-in.md`.
+- **B36 — The shared agent instructions describe the app as it was before B22, B26 and B28.** "What's actually there today" in `.agents/AGENTS.md` and `ai-studio-system-instructions.md` is out of date. Agents may not edit their own instructions, so this needs a session the owner runs.
+
+- **B26 — Demo data is seeded into every database.** *In review: PR #13. No real copy of the app has run yet (PD-002 call (c); hosting is undecided, B14), so there's no old demo data to clean up. [ASSUMPTION] Confirm with the owner when hosting is set up.* `seed_database()` (`backend/app/db/seed.py`) runs on every startup, production included. It adds demo users (`couple_1`, `couple_2`, `planner_1`) and demo weddings when the database is empty. *Why it matters:* the real database would hold made-up couples, and `planner_1`'s email may belong to a real business (rule 3). *Fix:* seed only in `DEVELOPMENT_MODE`; keep the vendor catalogue seed separate.
 - **B27 — The migration check can't see Postgres-only drift.** `verify_migrations.py` runs on SQLite, which doesn't compare CHECK constraints or server defaults. `env.py` has no `render_as_batch` and no constraint naming convention, so the first migration that alters or drops a column or constraint may fail on SQLite or can't name the FK. *Fix:* add a naming convention and `render_as_batch=True` before the next schema change, and run the migration check against Postgres in CI once hosting is decided (B14).
 
 ## Recently closed

@@ -106,3 +106,36 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - *Losing the ability to sell the app:* PD-001 already rules that out. Git keeps the code if that ever changes.
 - *Tests shrinking:* removing verify checks could hide a regression. Only checks for removed endpoints go, and the PD-002 access checks stay.
 - *Hosting and the domain:* the marketing site lives at `venueflow.ie` (B14). Removing the landing doesn't decide hosting or the domain; that's the next PD.
+
+## PD-004 — What "in depth budgeting" covers (must-have 1)
+
+**Date:** 2026-11-04 · **Status:** ratified (by the owner, one of the couple, 2026-11-04: "option c"; call (b): "yes")
+**Context:** Backlog B23. Budgeting is the couple's first must-have (`wedding.md`). Today the planner creates budget categories with a planned and a spent amount, but nobody can add, edit or record anything (the only budget endpoint is read-only). Live amounts show in euros, though the couple want US dollars (B11). With no live lines, the screen shows made-up dollar figures that look real (B28). The total budget is still [GAP] ("still being determined", owner, 2026-11-04). Family (view only) can see the budget.
+**Options:**
+- **A: Planned vs actual, plus vendor payments.** The couple add, rename and remove categories, and set a planned amount for each. Under each category they record vendor costs: the quoted price, the deposit, and the remaining payments with due dates. Each payment is ticked as paid by a person; the app never marks anything paid (hard rule 4). The screen shows totals, what's left, and the next payments due. The total budget can stay blank until the couple set it.
+  - *Couple's cost:* entering each vendor's price and payment dates as they book.
+  - *Build:* medium. New tables with a migration, edit screens, amounts in dollars, stored as whole cents.
+- **B: Planned vs actual only.** Editable categories with a planned and a spent amount each, and totals. No payments or due dates.
+  - *Couple's cost:* less typing, but payment due dates live somewhere else.
+  - *Build:* small.
+- **C: A, plus who's contributing.** Everything in A, and a record of who is paying for what (for example, a parent covering a category).
+  - *Couple's cost:* the same as A, plus agreeing contribution amounts with family. Family can see the budget, so they'd see each other's contributions.
+  - *Build:* medium-plus.
+**Recommendation:** A. It covers what usually goes wrong with wedding money (missed deposit dates and creeping totals) without asking the couple to put family contributions on a screen family can see. C can be added later.
+**Technical choices settled by the team:** amounts in US dollars, stored as whole cents (rule 4). A Google Sheets export is a later step, in a separate PD on Google integrations.
+**Decision:** C. Planned vs actual per category, vendor prices, deposits and payment due dates, plus a record of who is contributing to what. Family (view only) can see contributions, as with the rest of the budget. The couple tick payments as paid; the app never does (rule 4). Once the couple set a total, the AI suggests a starting split across categories. It's labelled as a suggestion and the couple edit it (call (b)).
+**Couple's calls:**
+- (a) A, B or C? *Recommended: A.* **Answer: "option c".**
+- (b) Should the AI suggest a starting split across categories once you set a total? It would be labelled as a suggestion, and you'd edit it. *Recommended: yes.* **Answer: "yes".**
+**Rejected because:**
+- A leaves out who is contributing, which the couple want.
+- B has no payments or due dates, so deposits would be tracked somewhere else.
+
+## PD-005 — Delete the old sales list and the real-looking contacts in the prototype
+
+**Date:** 2026-11-05 · **Status:** ratified (by the owner, one of the couple, 2026-11-05: "yes, you can delete the contact details and ols sales spreadsheet")
+**Context:** Backlog B6 and B13. `planner-targets.xlsx` is VenueFlow's old sales prospect list: named people at real planning businesses, with their contact details. `streamlit_mock/` (the first prototype) holds demo emails and Irish mobile numbers that look real (found in PR #13). Both are in this public repo, and both may be other people's personal data (rule 3).
+**Options:** A: delete them. B: keep them.
+**Decision:** A. Delete `planner-targets.xlsx`. Remove or replace the real-looking emails and phone numbers in `streamlit_mock/` with obviously fictional ones (for example `@example.com`, no phone numbers). The rest of the prototype folder stays: whether to archive it all is still the owner's call (B13).
+**Technical choices settled by the team:** deleting a file doesn't remove it from git history, so old copies stay visible in the repo's past commits. Erasing them from history needs a force-push, which the guardrails block, and it would be a separate owner decision. It isn't part of this decision.
+**Rejected because:** B keeps other people's contact details published.
