@@ -11,12 +11,12 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-05 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B42** — vendor cards still measure quotes against the old euro budget, not the new one. `ready`
+1. **B42** — vendor cards still measure quotes against the old euro budget, not the new one. In progress: owner, 2026-11-05: "yes start the vendor card fix"
 2. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
 3. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
 4. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
 5. **B14** — where the app and its data live, and what that costs (PD-006, proposed). `needs-owner: approve PD-006 (Google Cloud, about $10–15 a month) and pick the web address spelling`
-6. **B24** — planning checklist (PD-007, partly ratified: owner's list, provisional date 21 Aug 2027, a "Catch up" group, one shared checklist, AI timeline merged in then deleted). `needs-owner: PD-007 calls (a) catch-up due date, (e) where the list came from`. Jewish traditions (d) don't block the build
+6. **B24** — planning checklist (PD-007, ratified). `ready` (after B42). Jewish traditions (PD-007 call (d)) are added once the couple review the draft
 7. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
 8. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
 9. **B34** — database-level guard against the same email being added twice. `ready`

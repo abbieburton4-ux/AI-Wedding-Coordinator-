@@ -6,7 +6,7 @@ Each stage's due date is counted back from the wedding date. Until the couple fi
 
 ## Part 1: the owner's list
 
-19 stages, from "12 Months Before" to "Post-Wedding", about 100 tasks, each stage with its offset from the wedding date. The owner brought it on 2026-11-05 as `wedding-checklist-prompt.md`. It isn't copied here yet: this project is public, and if the list comes from a wedding website its wording belongs only in the app's own database (PD-007, call (e)). The engineer receives the list directly when the build is handed off.
+19 stages, from "12 Months Before" to "Post-Wedding", about 100 tasks, each stage with its offset from the wedding date. The owner brought it on 2026-11-05 as `wedding-checklist-prompt.md`. It came from loverly.com (owner, 2026-11-05), so it isn't copied here: this project is public, and the list's wording belongs only in the app's own database (PD-007, call (e)). The engineer receives the list directly when the build is handed off.
 
 Item ids are `<stage id>-<position>` (for example `12m-1`), and the order is the order given.
 
