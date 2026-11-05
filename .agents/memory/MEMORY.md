@@ -1,1 +1,2 @@
 - [Replit package installation](replit-package-installation.md) — check Node compatibility and transitive fixes before adopting a new Firebase major.
+- [Gemini model availability](gemini-model-availability.md) — verify a real generation request; advertised models and latest aliases can still fail.

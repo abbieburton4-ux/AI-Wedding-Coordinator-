@@ -8,6 +8,18 @@ Vite frontend) behind one script.
 
 ### Replit demo preview (without Docker)
 
+**Real-access setup is now the default on Replit.** Build with
+`bash scripts/replit-build.sh`, then run `bash scripts/replit-production.sh`.
+This serves the built React app and FastAPI together on port 5000, uses the
+managed PostgreSQL database and Firebase, and disables both demo flags.
+Set `ACCESS_BOOTSTRAP_EMAILS` privately for the couple's first sign-ins.
+AI actions run within the request; no worker secret or task emulator is needed.
+Apply existing migrations to development only; Replit Publish applies production
+schema changes. The managed production startup never runs DDL. Full configuration,
+verification and publishing blockers are in [replit.md](replit.md).
+
+The following demo command is retained for disposable data only, without Firebase:
+
 Run `bash scripts/replit-demo.sh` using the **Start application** workflow.
 Open `/login` and choose **Continue as a couple**. This is the existing demo
 mode with fictional data, simulated sign-in and a disposable SQLite database;

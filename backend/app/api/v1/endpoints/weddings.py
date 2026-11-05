@@ -120,6 +120,8 @@ async def create_wedding(
         import logging
         logging.getLogger(__name__).error(f"Failed to enqueue intake planner task on creation: {e}")
 
+    # Direct execution may have updated the wedding in its own session.
+    await db.refresh(wedding)
     return wedding
 
 
@@ -181,7 +183,12 @@ async def replan_wedding(
     )
     if not enqueued:
         raise HTTPException(status_code=500, detail="Failed to enqueue intake planner task")
-    return {"status": "pending", "message": "Intake planner re-enqueued.", "force": force}
+    return {
+        "status": "completed" if settings.DIRECT_AGENT_EXECUTION else "pending",
+        "message": "Intake planner finished." if settings.DIRECT_AGENT_EXECUTION
+        else "Intake planner re-enqueued.",
+        "force": force,
+    }
 
 
 @router.get("/", response_model=List[Wedding])
@@ -409,7 +416,11 @@ async def trigger_venue_matching(
     if not enqueued:
         raise HTTPException(status_code=500, detail="Failed to enqueue venue matcher task")
         
-    return {"status": "pending", "message": "Venue matching agent enqueued successfully."}
+    return {
+        "status": "completed" if settings.DIRECT_AGENT_EXECUTION else "pending",
+        "message": "Venue matching finished." if settings.DIRECT_AGENT_EXECUTION
+        else "Venue matching agent enqueued successfully.",
+    }
 
 
 class SupplierMatchRequest(BaseModel):
@@ -430,7 +441,11 @@ async def trigger_supplier_matching(
     if not enqueued:
         raise HTTPException(status_code=500, detail="Failed to enqueue supplier matcher task")
         
-    return {"status": "pending", "message": f"Supplier matching agent for {payload.category} enqueued successfully."}
+    return {
+        "status": "completed" if settings.DIRECT_AGENT_EXECUTION else "pending",
+        "message": "Supplier matching finished." if settings.DIRECT_AGENT_EXECUTION
+        else f"Supplier matching agent for {payload.category} enqueued successfully.",
+    }
 
 
 class ConciergeRequest(BaseModel):

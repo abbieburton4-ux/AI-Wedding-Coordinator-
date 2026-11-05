@@ -10,6 +10,7 @@ VenueFlow was built as an XPRIZE submission: a SaaS for many couples and planner
 
 **What's actually there today:**
 - **Backend** (`backend/`): FastAPI + SQLModel. Gemini agents (intake planner, venue and supplier matchers, quote extractor, concierge) run behind `run_agent` and write an `AgentDecisionLog` row per decision. Tests mock Gemini.
+- **Replit real-access setup:** managed PostgreSQL plus Firebase, with both demo flags off. The production server serves the built SPA and API together. Agent actions execute within the request using the same decorated agents; no Cloud Tasks placeholder or detached job is used. Replit Publish owns production schema changes; managed startup checks tables instead of running DDL. Demo SQLite is retained separately.
 - **Frontend** (`frontend/`): React + Vite SPA that calls the backend at `VITE_API_URL`. `localStorage` holds only the active wedding id and the dev sign-in state (the user id and a `mock-<id>` token).
 - **Sample data on the couple's own screens**: the guest list (`wedding/views/Guests.tsx`) and seating plan (`SeatingPlan.tsx`) render hard-coded sample guests and tables, not data from the backend, and don't say so (backlog B19).
 - **No send path**: agents only draft inquiry text (`draft_inquiry_email`), which the couple sends themselves. Nothing in the backend sends mail; `webhooks.py` handles inbound mail only.
@@ -75,11 +76,16 @@ The owner doesn't write issues; the backlog is the queue. The "Next up" list at 
 
 ## Commands
 
-Replit demo preview: `bash scripts/replit-demo.sh` (workflow **Start application**).
-Frontend port 5000 proxies `/api` to backend port 8000; `VITE_BASE=/` and
-`VITE_API_URL=""` keep browser requests same-origin. This explicitly enables
-existing dev/mock flags with disposable SQLite data. Never use real data or
-publish that configuration. See `replit.md`; the non-Replit commands below remain.
+Replit real access: `bash scripts/replit-build.sh`, then
+`bash scripts/replit-production.sh` (workflow **Start application**).
+The built SPA and API share port 5000. `VITE_BASE=/` and `VITE_API_URL=""`
+keep browser requests same-origin; Firebase web config requires a rebuild.
+The run script disables dev/mock flags and uses managed PostgreSQL. Apply
+`python -m alembic upgrade head` from `backend/` to development only; production
+schema updates go through Publish, never startup DDL. Also run
+`python verify_production.py` alongside the existing verification scripts.
+`scripts/replit-demo.sh` remains disposable-only and refuses Firebase config.
+See `replit.md`; the non-Replit commands below remain.
 
 Backend (from `backend/`; Gemini is mocked in tests, so a dummy key works):
 ```bash

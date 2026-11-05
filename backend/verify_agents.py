@@ -533,6 +533,43 @@ async def run_async_verification():
             assert log.external_api_calls[0]["tokens"] == {"input": None, "output": None}
             print("   * Tokens not reported: logged as empty, not zero")
 
+    # The production path must reach the same decorated agent, not an HTTP stub.
+    print("\nTEST 12: Direct production dispatch uses the decorated agent...")
+    from app.utils.direct_tasks import execute_agent_task
+    from unittest.mock import AsyncMock
+    from app.config import settings
+    from app.utils.tasks import enqueue_agent_task
+    with patch("app.utils.direct_tasks.run_intake_planner", new_callable=AsyncMock) as run:
+        run.return_value = {"status": "success"}
+        out = await execute_agent_task(
+            "intake-planner", {"wedding_id": "wedding_intake_test", "force": True}
+        )
+        assert out["status"] == "success"
+        assert run.await_args.args[1] == "wedding_intake_test"
+        assert run.await_args.kwargs == {"force": True, "trigger": "couple_action"}
+    # Failure must retain the orchestrator's error row when invoked by dispatch.
+    previous = settings.DIRECT_AGENT_EXECUTION
+    settings.DIRECT_AGENT_EXECUTION = True
+    try:
+        from fastapi import HTTPException
+        with patch("app.agents.planner.get_client", side_effect=RuntimeError("test unavailable")):
+            try:
+                await enqueue_agent_task(
+                    "intake-planner", {"wedding_id": "wedding_intake_test", "force": True}
+                )
+                raise AssertionError("Expected an explicit AI failure")
+            except HTTPException as exc:
+                assert exc.status_code == 502
+        async with async_session_maker() as db:
+            rows = (await db.exec(select(AgentDecisionLog).where(
+                AgentDecisionLog.wedding_id == "wedding_intake_test",
+                AgentDecisionLog.agent_id == "intake_planner",
+                AgentDecisionLog.status == "error",
+            ))).all()
+            assert rows, "Direct execution must preserve a recorded agent failure"
+    finally:
+        settings.DIRECT_AGENT_EXECUTION = previous
+    print("   * Real dispatch reaches the agent; provider failures are logged and returned")
     print("\n--- ASYNC AGENT Logic VERIFICATION SUCCESS ---")
 
 def main():

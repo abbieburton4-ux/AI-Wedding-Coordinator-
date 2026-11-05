@@ -1,6 +1,7 @@
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from app.config import settings
 
 # Setup logging
@@ -16,7 +17,7 @@ app = FastAPI(
 # Configure CORS dynamically for local Vite development and deployed GitHub Pages
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
+    allow_origins=[] if settings.FRONTEND_DIST_DIR else [
         "https://alanmaizon.github.io",
         "http://localhost:5173",
         "http://127.0.0.1:5173"
@@ -38,6 +39,11 @@ def on_startup():
     from sqlmodel import SQLModel
     from app.db.session import sync_engine
     from app.db.seed import seed_database
+
+    if settings.REPLIT_MANAGED_DATABASE and (
+        settings.DEVELOPMENT_MODE or settings.ALLOW_MOCK_AUTH
+    ):
+        raise RuntimeError("Managed real-access databases must not enable demo flags.")
     
     if settings.DEVELOPMENT_MODE and settings.FIREBASE_PROJECT_ID:
         # Dev mode switches off every secret check (worker routes, webhooks, wedding
@@ -46,7 +52,19 @@ def on_startup():
             "DEVELOPMENT_MODE is on with a real FIREBASE_PROJECT_ID. Worker routes, "
             "webhooks and wedding creation are unprotected. Never run this way with real data."
         )
-    if settings.DEVELOPMENT_MODE:
+    if settings.REPLIT_MANAGED_DATABASE:
+        from sqlalchemy import inspect
+
+        # Schema changes are applied to development explicitly, then by Publish
+        # to production. A missing schema is an error, never a startup migration.
+        present = set(inspect(sync_engine).get_table_names())
+        missing = set(SQLModel.metadata.tables) - present
+        if missing:
+            raise RuntimeError(
+                "Database schema is not ready. Apply development migrations, then "
+                "publish the schema through Replit. Missing tables: " + ", ".join(sorted(missing))
+            )
+    elif settings.DEVELOPMENT_MODE:
         # Local throwaway databases: build tables straight from the models.
         logger.info("Development mode: creating tables from models...")
         SQLModel.metadata.create_all(sync_engine)
@@ -84,6 +102,9 @@ app.include_router(tasks.router, prefix="/tasks", tags=["Worker Tasks"])
 
 @app.get("/")
 def read_root():
+    if settings.FRONTEND_DIST_DIR:
+        from pathlib import Path
+        return FileResponse(Path(settings.FRONTEND_DIST_DIR) / "index.html")
     return {
         "status": "healthy",
         "service": "VenueFlow Backend",
