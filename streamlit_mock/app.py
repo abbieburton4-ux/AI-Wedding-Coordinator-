@@ -202,8 +202,8 @@ with tab1:
         st.markdown("<h4>Intake Form</h4>", unsafe_allow_html=True)
         with st.form("onboarding_form"):
             couple_name = st.text_input("Couple Name(s)", placeholder="e.g. Clara & Sean", value="Clara & Sean")
-            email = st.text_input("Primary Email", value="clara.sean@wedding.ie")
-            phone = st.text_input("Primary Phone", value="+353871234567")
+            email = st.text_input("Primary Email", value="clara.sean@example.com")
+            phone = st.text_input("Primary Phone", value="")
             
             budget_total = st.number_input("Total Wedding Budget (€)", min_value=1000, value=30000, step=1000)
             guest_count = st.number_input("Estimated Guest Count", min_value=10, value=100, step=10)
