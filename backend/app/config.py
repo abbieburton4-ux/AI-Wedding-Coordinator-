@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     # Databases: async for FastAPI, sync for Alembic/seeding
     DATABASE_URL: str = "postgresql+asyncpg://venueflow:venueflow_pass@db/venueflow"
     SYNC_DATABASE_URL: Optional[str] = None
-    # Replit Publish owns the production schema. Never run startup DDL there.
+    # Set by the Replit run script: real data, so demo flags are refused at startup.
     REPLIT_MANAGED_DATABASE: bool = False
     FRONTEND_DIST_DIR: Optional[str] = None
     # Request-bound execution requires no external queue and never acknowledges

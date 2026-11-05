@@ -10,13 +10,24 @@ if [ -x .venv/bin/python ]; then PY=".venv/bin/python"; fi
 export GEMINI_API_KEY="${GEMINI_API_KEY:-dummy}"   # Gemini is mocked in these scripts
 
 status=0
-for script in verify_endpoints.py verify_agents.py verify.py verify_migrations.py; do
+for script in verify_endpoints.py verify_agents.py verify.py verify_migrations.py verify_production.py; do
   echo "== $script"
   if ! "$PY" "$script"; then
     echo "FAILED: $script"
     status=1
   fi
 done
+
+# The sign-in profile test needs only Node's built-in runner, no npm install, so it
+# runs here and CI's backend job (which has Node on its runner) picks it up.
+echo "== sessionProfile.test.js"
+if ! command -v node >/dev/null 2>&1; then
+  echo "FAILED: node is needed for frontend/src/app/auth/sessionProfile.test.js"
+  status=1
+elif ! node --test ../frontend/src/app/auth/sessionProfile.test.js; then
+  echo "FAILED: sessionProfile.test.js"
+  status=1
+fi
 
 # The scripts rewrite tracked test databases and leave SQLite side files (backlog B17).
 git restore endpoints_test.db endpoints_test.db-shm endpoints_test.db-wal 2>/dev/null || true

@@ -5,8 +5,8 @@
 The Replit production entrypoint is `app.production:app`: FastAPI serves the built
 React SPA and API together, using Firebase access checks and managed PostgreSQL.
 Demo/mock flags are disabled and the disposable SQLite demo database is separate.
-Existing Alembic migrations initialize development only; Replit Publish applies
-production schema changes. Managed startup verifies the schema without DDL.
+Startup runs `alembic upgrade head` on that environment's database, as every
+non-development deployment does (rule 6), and refuses a schema Alembic didn't build.
 
 With `DIRECT_AGENT_EXECUTION=True`, intake/replan/matching/extraction dispatch
 awaits the existing decorated agent in an independent session within the HTTP

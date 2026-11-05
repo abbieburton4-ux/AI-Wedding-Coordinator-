@@ -14,9 +14,9 @@ This serves the built React app and FastAPI together on port 5000, uses the
 managed PostgreSQL database and Firebase, and disables both demo flags.
 Set `ACCESS_BOOTSTRAP_EMAILS` privately for the couple's first sign-ins.
 AI actions run within the request; no worker secret or task emulator is needed.
-Apply existing migrations to development only; Replit Publish applies production
-schema changes. The managed production startup never runs DDL. Full configuration,
-verification and publishing blockers are in [replit.md](replit.md).
+Every start applies the Alembic migrations to that environment's own database
+(rule 6); when publishing, don't let Replit apply schema changes itself. Full
+configuration, publishing steps and verification are in [replit.md](replit.md).
 
 The following demo command is retained for disposable data only, without Firebase:
 
