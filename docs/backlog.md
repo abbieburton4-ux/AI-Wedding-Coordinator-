@@ -16,8 +16,8 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 2. **B26** — stop seeding demo couples and weddings outside dev mode. `ready`
 3. **B22** — in review, PR #14. `needs-owner: (1) may one of the couple remove the other's power to manage access (built as allowed, with a warning)? (2) may the screen make anyone else an access manager (built as no)?`
 3b. **B6** — in review, PR #15 (PD-005). `needs-owner: also delete the old outreach list (about 43 named people at planning businesses, with social media handles)?`
-3c. **B27** — make migrations safe to alter columns and constraints. Comes before B23's schema change. `ready`
-4. **B23** — in depth budgeting. `ready` (PD-004 ratified: option C, plus an AI-suggested starting split)
+3c. **B27** — in review, PR #16. Comes before B23's schema change.
+4. **B23** — in depth budgeting. `needs-owner: merge PR #12 (B28) and #16 (B27) first, so budgeting builds on them`. Scope is settled (PD-004 ratified: option C, plus an AI-suggested starting split)
 5. **B14** — where the app and its data live, and what that costs. `needs-owner: approve the hosting recommendation (the product lane writes the PD next, with costs)`
 6. **B24** — planning checklist. `needs-owner: checklist scope PD (unfixed date; which Jewish traditions), to be proposed`
 7. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
