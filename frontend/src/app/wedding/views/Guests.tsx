@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { cn } from "../../design-system/cn";
 import { Icon } from "../../shared/Icon";
+import { SampleDataNotice } from "../../shared/SampleDataNotice";
 
 type Status = "Attending" | "Pending" | "Declined";
 type Guest = { id: string; name: string; status: Status; table?: string; head?: boolean; dietary: string[] };
@@ -81,6 +82,9 @@ export function Guests() {
           <p className="font-body-lg text-body-lg text-on-surface-variant">
             Manage your attendees and orchestrate the perfect table arrangements.
           </p>
+          <SampleDataNotice className="mt-4">
+            These guests, counts and suggestions are made-up examples, not your guest list.
+          </SampleDataNotice>
         </div>
         <div className="hidden lg:flex gap-4">
           <button

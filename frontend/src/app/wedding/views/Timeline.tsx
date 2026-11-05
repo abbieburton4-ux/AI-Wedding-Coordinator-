@@ -1,4 +1,5 @@
 import { Icon } from "../../shared/Icon";
+import { SampleDataNotice } from "../../shared/SampleDataNotice";
 import { useWedding, USE_FASTAPI_BACKEND } from "../../api";
 import { useActiveWedding } from "../WeddingProvider";
 
@@ -94,9 +95,14 @@ export function Timeline() {
       <div className="mb-8">
         <h1 className="font-display-lg-mobile text-display-lg-mobile text-on-surface mb-2">Timeline</h1>
         <p className="text-on-surface-variant">Your upcoming milestones and planning schedule.</p>
+        {!loading && !useLiveData && (
+          <SampleDataNotice className="mt-4">
+            These milestones, dates and places are made-up examples, not your wedding's schedule.
+          </SampleDataNotice>
+        )}
       </div>
 
-      {hasOverdue && (
+      {!loading && hasOverdue && (
         <div className="bg-error-container/10 border border-error/20 rounded-[3rem] p-4 mb-8 flex gap-4">
           <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center shrink-0">
             <Icon name="error" filled className="text-error" />
