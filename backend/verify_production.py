@@ -150,7 +150,7 @@ def check_startup_migrations():
 
 
 def check_webhook_does_not_invite_redelivery():
-    """A failed in-request extraction must not make SendGrid resend the email."""
+    """A blocked extraction isn't redelivered; a failed one is, so no reply is lost."""
     from types import SimpleNamespace
     from starlette.requests import Request
     from unittest.mock import MagicMock
@@ -179,15 +179,15 @@ def check_webhook_does_not_invite_redelivery():
     try:
         client = TestClient(app)
         url = "/api/v1/webhooks/sendgrid/inbound?token=fictional-inbound-secret"
-        for code in (422, 502):
+        with patch.object(webhooks_module, "enqueue_agent_task",
+                          AsyncMock(side_effect=HTTPException(status_code=422))):
+            res = client.post(url, data=form)
+            assert res.status_code == 200 and res.json()["status"] == "not_processed"
+        # A failed AI call or missing setup must stay an error so SendGrid retries.
+        for code in (502, 503):
             with patch.object(webhooks_module, "enqueue_agent_task",
                               AsyncMock(side_effect=HTTPException(status_code=code))):
-                res = client.post(url, data=form)
-                assert res.status_code == 200 and res.json()["status"] == "not_processed"
-        # A missing execution setup is not logged anywhere, so let SendGrid retry.
-        with patch.object(webhooks_module, "enqueue_agent_task",
-                          AsyncMock(side_effect=HTTPException(status_code=503))):
-            assert client.post(url, data=form).status_code == 503
+                assert client.post(url, data=form).status_code == code
     finally:
         form_patch.stop()
         app.dependency_overrides.pop(get_db, None)

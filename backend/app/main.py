@@ -10,10 +10,6 @@ from app.config import settings
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Any number that is unique to this app; it serialises migrations across instances.
-_MIGRATION_LOCK_ID = 7_340_211
-
-
 def _refuse_unversioned_schema(engine) -> None:
     """Stop if app tables exist that Alembic has no record of.
 
@@ -42,12 +38,11 @@ def apply_migrations() -> None:
     """Bring the schema to the latest Alembic revision (rule 6).
 
     Alembic's env.py connects through settings.SYNC_DATABASE_URL, the same URL
-    sync_engine is built from, so the checks and the lock see the same database.
+    sync_engine is built from, so the check and the upgrade see the same database.
     """
     import os
     from alembic import command
     from alembic.config import Config
-    from sqlalchemy import text
     from app.db.session import sync_engine as engine
 
     _refuse_unversioned_schema(engine)
@@ -55,28 +50,18 @@ def apply_migrations() -> None:
     alembic_cfg = Config(os.path.join(backend_dir, "alembic.ini"))
     alembic_cfg.set_main_option("script_location", os.path.join(backend_dir, "migrations"))
 
-    def upgrade() -> None:
-        try:
-            command.upgrade(alembic_cfg, "head")
-        except Exception as exc:
-            # Typically "already exists": something other than Alembic changed the
-            # schema. On PostgreSQL the upgrade is one transaction, so nothing half-applies.
-            raise RuntimeError(
-                "Database migration failed; the app will not start on a schema it "
-                "can't vouch for. See replit.md, 'Database schema'."
-            ) from exc
-
     logger.info("Applying database migrations...")
-    if engine.dialect.name != "postgresql":
-        upgrade()
-        return
-    # Autoscale can start several instances at once; only one may migrate.
-    with engine.connect() as lock_conn:
-        lock_conn.execute(text("SELECT pg_advisory_lock(:id)"), {"id": _MIGRATION_LOCK_ID})
-        try:
-            upgrade()
-        finally:
-            lock_conn.execute(text("SELECT pg_advisory_unlock(:id)"), {"id": _MIGRATION_LOCK_ID})
+    # migrations/env.py takes a PostgreSQL advisory lock, so instances that start
+    # together wait for each other instead of racing.
+    try:
+        command.upgrade(alembic_cfg, "head")
+    except Exception as exc:
+        # Typically "already exists": something other than Alembic changed the
+        # schema. On PostgreSQL the upgrade is one transaction, so nothing half-applies.
+        raise RuntimeError(
+            "Database migration failed; the app will not start on a schema it "
+            "can't vouch for. See replit.md, 'Database schema'."
+        ) from exc
 
 
 def on_startup():

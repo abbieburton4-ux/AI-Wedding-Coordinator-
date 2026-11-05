@@ -72,7 +72,8 @@ changed the schema). Don't fix either by editing the database by hand; ask the t
    publishing. [ASSUMPTION] Replit offers a way to skip; nobody has checked
    this screen yet.
 4. Once published, open the app. If it shows an error page instead of sign-in,
-   tell the team; your data is untouched because the app stops before writing.
+   tell the team. The app stops before changing anything itself, but if Replit
+   applied schema changes in step 2, those already happened.
 
 Startup then seeds only the vendor catalogue (never fictional users, weddings,
 budgets or bookings).
