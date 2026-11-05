@@ -14,7 +14,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 1. **B39** — stop look-alike email addresses passing as the couple's at sign-in (PD-002 note, 2026-11-05). Building (engineer started 2026-11-05)
 2. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
 3. **B23** — in depth budgeting (PD-004 ratified: option C, plus an AI-suggested starting split). Fold in B30. Building
-4. **B14** — where the app and its data live, and what that costs. `needs-owner: approve the hosting recommendation (the product lane writes the PD next, with costs)`
+4. **B14** — where the app and its data live, and what that costs (PD-006, proposed). `needs-owner: approve PD-006 (Google Cloud, about $10–15 a month) and pick the web address spelling`
 5. **B24** — planning checklist. `needs-owner: checklist scope PD (unfixed date; which Jewish traditions), to be proposed`
 6. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
 7. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
