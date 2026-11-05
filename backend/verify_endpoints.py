@@ -135,7 +135,7 @@ def test_api_suite():
         assert "text/csv" in res.headers["content-type"]
         csv_content = res.text
         # Verify PII masking: no raw emails should leak through
-        assert "clara.sean@wedding.ie" not in csv_content
+        assert "clara.sean@example.com" not in csv_content
         print(f"   * Export: CSV downloaded ({len(csv_content)} bytes), PII masking verified")
         
         # 7b. Access levels (PD-002)

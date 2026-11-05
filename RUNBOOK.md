@@ -42,7 +42,7 @@ to `/signup`).
 | Service | Port | Notes |
 |---|---|---|
 | frontend | 5173 | Vite dev server; app served under `/VenueFlow/` |
-| api | 8000 | FastAPI; Swagger at `/docs`. Seeds on startup; builds tables from models in dev mode, applies Alembic migrations otherwise |
+| api | 8000 | FastAPI; Swagger at `/docs`. On an empty database, seeds the vendor catalogue, plus the fictional demo couples and weddings in dev mode only. Builds tables from models in dev mode, applies Alembic migrations otherwise |
 | worker | 8001 | Same app; receives Cloud Tasks pushes at `/tasks/*` |
 | db | 5432 | Postgres 16 (`venueflow` / `venueflow_pass`), data in a named volume |
 | tasks-emulator | 8123 | Cloud Tasks emulator (gRPC) |
