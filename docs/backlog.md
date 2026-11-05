@@ -16,7 +16,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 3. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
 4. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
 5. **B14** — where the app and its data live, and what that costs (PD-006, proposed). `needs-owner: approve PD-006 (Google Cloud, about $10–15 a month) and pick the web address spelling`
-6. **B24** — planning checklist (PD-007, ratified). `ready` (after B42). Jewish traditions (PD-007 call (d)) are added once the couple review the draft
+6. **B24** — planning checklist (PD-007, ratified), including the 18 approved Jewish-tradition tasks. `ready` (after B42)
 7. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
 8. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
 9. **B34** — database-level guard against the same email being added twice. `ready`
