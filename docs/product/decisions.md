@@ -59,6 +59,9 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - *Who's out of scope:* guests signing in to RSVP aren't covered.
 - *Who owns sign-in:* until the couple's own Firebase project replaces `venueflow-dev`, real sign-ins would land in a project they don't control.
 **Note (2026-11-04), email confirmation:** email and password sign-in (the fallback) needs a "confirm your email" step. When someone signs up with a password, Google's sign-in service (Firebase) sends them one confirmation email, and only when they ask for it. The owner approved allowing it so family without a Google account can get in: "yes, and allow the email confirmation" (owner, one of the couple, 2026-11-04). This is a couple's call because it's an email to a family member. The person triggers it themselves and Firebase sends it, so no agent sends anything (hard rule 1).
+**Note (2026-11-05), the settings screen (B22, PR #14):** owner (one of the couple), 2026-11-05: "block it, keep no".
+- *Can one of the couple remove the other's power to manage access?* **No: blocked on the screen.** Neither owner can remove or demote the other. If it's ever really needed, the team does it on the owner's request.
+- *Can the screen make anyone else an access manager?* **No.** Only the owner and the groom manage access. Everyone else is "can edit" or "view only".
 
 ---
 
@@ -139,3 +142,4 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 **Decision:** A. Delete `planner-targets.xlsx`. Remove or replace the real-looking emails and phone numbers in `streamlit_mock/` with obviously fictional ones (for example `@example.com`, no phone numbers). The rest of the prototype folder stays: whether to archive it all is still the owner's call (B13).
 **Technical choices settled by the team:** deleting a file doesn't remove it from git history, so old copies stay visible in the repo's past commits. Erasing them from history needs a force-push, which the guardrails block, and it would be a separate owner decision. It isn't part of this decision.
 **Rejected because:** B keeps other people's contact details published.
+**Extended (2026-11-05):** also delete `outreach-list.xlsx` (another old sales list: about 43 named people at planning businesses, with social media handles) and the whole first prototype, `streamlit_mock/`. Owner (one of the couple), 2026-11-05: "Delete the second old outreach list and the whole first prototype". This settles the prototype part of B13. Git history still keeps old copies, as above.
