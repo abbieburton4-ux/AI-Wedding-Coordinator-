@@ -42,3 +42,26 @@ export function formatDay(isoDate: string): string {
     year: "numeric",
   });
 }
+
+/**
+ * A server timestamp as a calendar date in the viewer's own time zone. The API sends
+ * UTC without a zone marker, so one is added before parsing.
+ */
+export function formatInstantDay(isoDateTime: string): string {
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(isoDateTime);
+  const when = new Date(hasZone ? isoDateTime : `${isoDateTime}Z`);
+  if (Number.isNaN(when.getTime())) return "";
+  return when.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+const COMMITTED_LABEL = {
+  none: "Committed",
+  quote: "Committed (quoted)",
+  scheduled: "Committed (payments scheduled)",
+  mixed: "Committed (quotes and scheduled payments)",
+} as const;
+
+/** The heading for a "committed" figure, saying where the number comes from. */
+export function committedLabel(basis: keyof typeof COMMITTED_LABEL): string {
+  return COMMITTED_LABEL[basis];
+}

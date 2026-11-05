@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.agents.budget_split import run_budget_splitter
+from app.agents.budget_split import category_key, run_budget_splitter
 from app.api.v1.access import require_wedding_access
 from app.api.v1.endpoints.auth import get_current_user
 from app.db.models import (
@@ -103,6 +103,18 @@ class ApplySplitIn(BaseModel):
 
 # --- Responses ------------------------------------------------------------------------
 
+# Where a "committed" figure comes from: the vendor's quote, the payments scheduled so
+# far (no quote recorded), or a mix of both across several vendors.
+Basis = Literal["none", "quote", "scheduled", "mixed"]
+
+
+def _basis(parts: list) -> str:
+    kinds = {p for p in parts if p != "none"}
+    if not kinds:
+        return "none"
+    return kinds.pop() if len(kinds) == 1 else "mixed"
+
+
 class PaymentOut(BaseModel):
     id: str
     cost_id: str
@@ -120,7 +132,10 @@ class CostOut(BaseModel):
     vendor_name: str
     quoted_cents: Optional[int]
     committed_cents: int
+    committed_basis: Basis
     paid_cents: int
+    remaining_cents: int
+    overpaid_cents: int
     payments: List[PaymentOut]
 
 
@@ -129,8 +144,10 @@ class CategoryOut(BaseModel):
     name: str
     planned_cents: Optional[int]
     committed_cents: int
+    committed_basis: Basis
     paid_cents: int
     remaining_cents: int
+    overpaid_cents: int
     costs: List[CostOut]
 
 
@@ -155,8 +172,10 @@ class Totals(BaseModel):
     total_cents: Optional[int]
     planned_cents: int
     committed_cents: int
+    committed_basis: Basis
     paid_cents: int
     remaining_cents: int
+    overpaid_cents: int
     contributions_cents: int
 
 
@@ -189,11 +208,24 @@ async def _editor(db: AsyncSession, wedding_id: str, user: User):
     return await require_wedding_access(db, wedding_id, user, "editor")
 
 
-def _committed(cost: BudgetCost, payments: list) -> int:
-    """The quote if there is one, otherwise what's been scheduled so far."""
+def _committed(cost: BudgetCost, payments: list) -> tuple:
+    """The quote if there is one, otherwise what's been scheduled so far, with which."""
     if cost.quoted_cents is not None:
-        return cost.quoted_cents
-    return sum(p.amount_cents for p in payments)
+        return cost.quoted_cents, "quote"
+    if not payments:
+        return 0, "none"
+    return sum(p.amount_cents for p in payments), "scheduled"
+
+
+async def _check_unique_name(db: AsyncSession, wedding_id: str, name: str,
+                             except_id: Optional[str] = None) -> None:
+    key = category_key(name)
+    for row in (await db.exec(
+        select(BudgetCategory).where(BudgetCategory.wedding_id == wedding_id)
+    )).all():
+        if row.id != except_id and category_key(row.name) == key:
+            raise HTTPException(status_code=409,
+                                detail=f"You already have a category called {row.name}")
 
 
 async def _overview(db: AsyncSession, wedding) -> Overview:
@@ -236,23 +268,22 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
         for cost in by_category.get(cat.id, []):
             pays = by_cost.get(cost.id, [])
             names[cost.id] = (cat.name, cost.vendor_name)
+            committed, basis = _committed(cost, pays)
+            paid = sum(p.amount_cents for p in pays if p.paid)
+            # Paying one vendor more than agreed doesn't reduce what's owed to another,
+            # so "still to pay" and "overpaid" are worked out per vendor, never netted.
             out_costs.append(CostOut(
                 id=cost.id, category_id=cat.id, vendor_name=cost.vendor_name,
                 quoted_cents=cost.quoted_cents,
-                committed_cents=_committed(cost, pays),
-                paid_cents=sum(p.amount_cents for p in pays if p.paid),
-                payments=[PaymentOut(
-                    id=p.id, cost_id=p.cost_id, kind=p.kind, amount_cents=p.amount_cents,
-                    due_on=p.due_on, paid=p.paid, paid_at=p.paid_at,
-                    paid_by_name=payers.get(p.paid_by_user_id) if p.paid else None,
-                ) for p in pays],
+                committed_cents=committed, committed_basis=basis, paid_cents=paid,
+                remaining_cents=max(committed - paid, 0),
+                overpaid_cents=max(paid - committed, 0),
+                payments=[_payment_out(p, payers.get(p.paid_by_user_id)) for p in pays],
             ))
-        committed = sum(c.committed_cents for c in out_costs)
-        paid = sum(c.paid_cents for c in out_costs)
         out_categories.append(CategoryOut(
             id=cat.id, name=cat.name, planned_cents=cat.planned_cents,
-            committed_cents=committed, paid_cents=paid, remaining_cents=committed - paid,
-            costs=out_costs,
+            committed_basis=_basis([c.committed_basis for c in out_costs]),
+            costs=out_costs, **_sums(out_costs),
         ))
 
     # Unpaid payments, soonest first; ones with no date yet go last.
@@ -264,14 +295,13 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
         overdue=p.due_on is not None and p.due_on < today,
     ) for p in unpaid]
 
-    committed = sum(c.committed_cents for c in out_categories)
-    paid = sum(c.paid_cents for c in out_categories)
     return Overview(
         totals=Totals(
             total_cents=wedding.budget_total_cents,
             planned_cents=sum(c.planned_cents or 0 for c in categories),
-            committed_cents=committed, paid_cents=paid, remaining_cents=committed - paid,
+            committed_basis=_basis([c.committed_basis for c in out_categories]),
             contributions_cents=sum(c.amount_cents for c in contributions),
+            **_sums(out_categories),
         ),
         categories=out_categories,
         contributions=[ContributionOut(
@@ -280,6 +310,11 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
         ) for c in contributions],
         next_due=next_due,
     )
+
+
+def _sums(rows: list) -> dict:
+    return {field: sum(getattr(r, field) for r in rows) for field in (
+        "committed_cents", "paid_cents", "remaining_cents", "overpaid_cents")}
 
 
 # --- Routes ---------------------------------------------------------------------------
@@ -316,8 +351,9 @@ async def add_category(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
     await _editor(db, wedding_id, current_user)
-    row = BudgetCategory(wedding_id=wedding_id, name=_clean(payload.name),
-                         planned_cents=payload.planned_cents)
+    name = _clean(payload.name)
+    await _check_unique_name(db, wedding_id, name)
+    row = BudgetCategory(wedding_id=wedding_id, name=name, planned_cents=payload.planned_cents)
     db.add(row)
     await db.commit()
     await db.refresh(row)
@@ -333,7 +369,9 @@ async def edit_category(
     row = await _row(db, BudgetCategory, category_id, wedding_id, "category")
     updates = payload.model_dump(exclude_unset=True)
     if "name" in updates:
-        row.name = _clean(updates["name"] or "")
+        name = _clean(updates["name"] or "")
+        await _check_unique_name(db, wedding_id, name, except_id=row.id)
+        row.name = name
     if "planned_cents" in updates:
         row.planned_cents = updates["planned_cents"]
     row.updated_at = utcnow()
@@ -441,6 +479,13 @@ async def add_payment(
     return _payment_out(row, None)
 
 
+async def _payer_name(db: AsyncSession, row: BudgetPayment) -> Optional[str]:
+    if not (row.paid and row.paid_by_user_id):
+        return None
+    payer = await db.get(User, row.paid_by_user_id)
+    return payer.name if payer else None
+
+
 def _payment_out(row: BudgetPayment, paid_by_name: Optional[str]) -> PaymentOut:
     return PaymentOut(
         id=row.id, cost_id=row.cost_id, kind=row.kind, amount_cents=row.amount_cents,
@@ -466,7 +511,7 @@ async def edit_payment(
     db.add(row)
     await db.commit()
     await db.refresh(row)
-    return _payment_out(row, None)
+    return _payment_out(row, await _payer_name(db, row))
 
 
 @router.put("/{wedding_id}/budget/payments/{payment_id}/paid", response_model=PaymentOut)
@@ -476,17 +521,19 @@ async def mark_paid(
 ):
     """The only way a payment becomes paid: a signed-in owner or editor ticking it.
 
-    Records who ticked it and when. Unticking clears both.
+    Records who ticked it and when. Ticking an already-paid payment again keeps the
+    original record; unticking clears both.
     """
     await _editor(db, wedding_id, current_user)
     row = await _row(db, BudgetPayment, payment_id, wedding_id, "payment")
-    row.paid = payload.paid
-    row.paid_at = utcnow() if payload.paid else None
-    row.paid_by_user_id = current_user.id if payload.paid else None
-    db.add(row)
-    await db.commit()
-    await db.refresh(row)
-    return _payment_out(row, current_user.name)
+    if payload.paid != row.paid:
+        row.paid = payload.paid
+        row.paid_at = utcnow() if payload.paid else None
+        row.paid_by_user_id = current_user.id if payload.paid else None
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
+    return _payment_out(row, await _payer_name(db, row))
 
 
 @router.delete("/{wedding_id}/budget/payments/{payment_id}",
@@ -593,23 +640,42 @@ async def apply_split(
     wedding_id: str, payload: ApplySplitIn,
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
-    """Uses a split the couple reviewed (and maybe edited): sets each named category's
-    planned amount, adding categories that don't exist yet. Leaves other categories,
-    vendor costs and payments alone."""
+    """Uses a split the couple reviewed (and maybe edited or trimmed): sets each named
+    category's planned amount, adding categories that don't exist yet. Leaves other
+    categories, vendor costs and payments alone.
+
+    The lines must add up to exactly the couple's total, and each must name a different
+    category. Names are matched ignoring case, spaces and underscores; if that matches
+    two of the couple's categories, nothing is changed and they're asked to rename one.
+    """
     wedding = await _editor(db, wedding_id, current_user)
-    existing = {}
+    if not wedding.budget_total_cents:
+        raise HTTPException(status_code=400, detail="Set your total budget first")
+    lines = [(_clean(line.name), line.planned_cents) for line in payload.lines]
+    keys = [category_key(name) for name, _ in lines]
+    if len(set(keys)) != len(keys):
+        raise HTTPException(status_code=422, detail="Each category can only appear once")
+    if sum(cents for _, cents in lines) != wedding.budget_total_cents:
+        raise HTTPException(status_code=409,
+                            detail="The amounts need to add up to your total budget")
+
+    existing: dict = {}
     for row in (await db.exec(
         select(BudgetCategory).where(BudgetCategory.wedding_id == wedding_id)
-        .order_by(BudgetCategory.created_at)
     )).all():
-        existing.setdefault(row.name.strip().lower(), row)
-    for line in payload.lines:
-        name = _clean(line.name)
-        row = existing.get(name.lower())
-        if row is None:
-            row = BudgetCategory(wedding_id=wedding_id, name=name)
-            existing[name.lower()] = row
-        row.planned_cents = line.planned_cents
+        existing.setdefault(category_key(row.name), []).append(row)
+    for key, (name, _) in zip(keys, lines):
+        if len(existing.get(key, [])) > 1:
+            names = " and ".join(r.name for r in existing[key])
+            raise HTTPException(
+                status_code=409,
+                detail=f"You have two categories that look the same ({names}). "
+                "Rename or remove one, then use the split.",
+            )
+    for key, (name, cents) in zip(keys, lines):
+        row = existing[key][0] if key in existing else BudgetCategory(
+            wedding_id=wedding_id, name=name)
+        row.planned_cents = cents
         row.updated_at = utcnow()
         db.add(row)
     await db.commit()

@@ -7,6 +7,7 @@ the split as a suggestion and decide whether to use it.
 """
 import json
 import logging
+import re
 from typing import Optional
 
 from google.genai import types
@@ -24,6 +25,17 @@ AGENT_ID = "budget_splitter"
 # Shares are accepted if they add up to 100% give or take this much, then scaled to
 # the exact total. Further off than this means the model didn't produce a real split.
 SHARE_TOLERANCE_BP = 100  # basis points (1%)
+
+# Money amounts in the model's prose: a currency sign or code next to digits, or "15k".
+# Percentages and plain counts ("40%", "150 guests") are fine (rule 2: no invented prices).
+PRICE_TEXT = re.compile(
+    r"[$€£¥]\s*\d"
+    r"|\d\s*[$€£¥]"
+    r"|\b(?:usd|eur|gbp|cad|aud)\s*\d"
+    r"|\d[\d,.]*\s*(?:usd|eur|gbp|cad|aud|dollars?|euros?|pounds?|bucks|grand)\b"
+    r"|\b\d+(?:[.,]\d+)?\s?k\b",
+    re.IGNORECASE,
+)
 
 
 class SplitLineDraft(BaseModel):
@@ -55,8 +67,24 @@ SYSTEM_INSTRUCTION = (
 )
 
 
-def _label(category: str) -> str:
-    return category.replace("_", " ").capitalize()
+def category_key(name) -> str:
+    """One comparable form for a category name: 'Hair_Makeup', 'hair makeup' and
+    ' HAIR  makeup ' are all 'hair makeup'."""
+    return " ".join(normalize_category(name).replace("_", " ").split())
+
+
+def _label(key: str) -> str:
+    return key.capitalize()
+
+
+def _no_prices(text, where: str, warnings: list) -> str:
+    """Drops prose that states an amount of money; the app shows only its own sums."""
+    if not isinstance(text, str):
+        return ""
+    if PRICE_TEXT.search(text):
+        warnings.append(f"price-like text removed from {where}")
+        return ""
+    return text
 
 
 def _blocked(error_kind: str, warning: str) -> dict:
@@ -104,8 +132,8 @@ async def run_budget_splitter(
 
     own = {}
     for name in category_names:
-        own.setdefault(normalize_category(name), name)
-    allowed = set(own) | ALLOWED_BUDGET_CATEGORIES
+        own.setdefault(category_key(name), name)
+    allowed = set(own) | {category_key(c) for c in ALLOWED_BUDGET_CATEGORIES}
 
     facts = {
         "total_budget_usd": f"{total_cents // 100}.{total_cents % 100:02d}",
@@ -143,27 +171,30 @@ async def run_budget_splitter(
     seen = set()
     weights = []
     picked = []
+    warnings: list = []
     for line in lines:
         if not isinstance(line, dict):
             return done(_blocked("invalid_share", "a line wasn't readable"))
-        key = normalize_category(line.get("category"))
+        key = category_key(line.get("category"))
         if key not in allowed:
             return done(_blocked(
                 "category_whitelist", f"unknown category {line.get('category')!r}"
             ))
-        if key in seen:
+        label = own.get(key, _label(key))
+        # Compared on the key and on the label shown, so two lines can never become two
+        # categories with the same name.
+        if key in seen or category_key(label) in seen:
             return done(_blocked("duplicate_category", f"{key!r} appears twice"))
-        seen.add(key)
+        seen.update({key, category_key(label)})
         percent = line.get("percent")
         if isinstance(percent, bool) or not isinstance(percent, (int, float)) \
                 or not 0 < percent <= 100:
             return done(_blocked("invalid_share", f"share for {key!r} isn't 0 to 100"))
         weights.append(int(round(percent * 100)))  # basis points
-        rationale = line.get("rationale")
         picked.append({
-            "name": own.get(key, _label(key)),
+            "name": label,
             "existing": key in own,
-            "rationale": rationale if isinstance(rationale, str) else "",
+            "rationale": _no_prices(line.get("rationale"), f"the {label} reason", warnings),
         })
 
     if abs(sum(weights) - 10000) > SHARE_TOLERANCE_BP or 0 in weights:
@@ -171,11 +202,15 @@ async def run_budget_splitter(
 
     for item, cents in zip(picked, split_cents(total_cents, weights)):
         item["planned_cents"] = cents
+    if sum(item["planned_cents"] for item in picked) != total_cents:
+        return done(_blocked("split_mismatch", "the amounts don't add up to the total"))
 
-    summary = data.get("rationale_summary")
-    return done({
+    result = {
         "suggestion": True,
         "total_cents": total_cents,
         "lines": picked,
-        "rationale_summary": summary if isinstance(summary, str) else "",
-    })
+        "rationale_summary": _no_prices(data.get("rationale_summary"), "the summary", warnings),
+    }
+    if warnings:
+        result["warnings"] = warnings
+    return done(result)

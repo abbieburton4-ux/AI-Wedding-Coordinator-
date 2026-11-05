@@ -1,6 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Icon } from "../../../shared/Icon";
-import { AMOUNT_HINT, centsToInput, formatCents, formatDay, parseDollars } from "./money";
+import {
+  AMOUNT_HINT, centsToInput, committedLabel, formatCents, formatDay, formatInstantDay, parseDollars,
+} from "./money";
 import type { Category, Contribution, Cost, DuePayment, Payment, Run } from "./types";
 
 type Req = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
@@ -76,15 +78,38 @@ function amountOrError(text: string, setError: (e: string | null) => void): numb
   return cents;
 }
 
-function Stat({ label, cents, tone }: { label: string; cents: number | null; tone?: "error" }) {
+function Stat({ label, cents, tone, note }: { label: string; cents: number | null; tone?: "error"; note?: string }) {
   return (
     <div>
       <p className="text-xs text-on-surface-variant">{label}</p>
       <p className={`font-button-text ${tone === "error" ? "text-error" : "text-on-surface"}`}>
         {cents === null ? "Not set" : formatCents(cents)}
       </p>
+      {note && <p className="text-[11px] text-on-surface-variant">{note}</p>}
     </div>
   );
+}
+
+/** "Overpaid by $200" when more was paid than agreed, for a note under "Still to pay". */
+export function overpaidNote(overpaidCents: number): string | undefined {
+  return overpaidCents > 0 ? `Overpaid by ${formatCents(overpaidCents)}` : undefined;
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+/** What removing a category takes with it, spelt out before the couple confirm. */
+function removeCategoryText(category: Category): string {
+  const costs = category.costs.length;
+  if (!costs) return `Remove ${category.name}?`;
+  const payments = category.costs.reduce((n, c) => n + c.payments.length, 0);
+  const paid = category.costs.reduce((n, c) => n + c.payments.filter((p) => p.paid).length, 0);
+  const what = payments
+    ? `its ${plural(costs, "vendor cost")} and their ${plural(payments, "payment")}` +
+      (paid ? `, including ${paid} already ticked paid` : "")
+    : `its ${plural(costs, "vendor cost")}`;
+  return `Remove ${category.name}? This also removes ${what}. Contributions towards it are kept.`;
 }
 
 function Confirm({ text, onYes, onNo, busy }: { text: ReactNode; onYes: () => void; onNo: () => void; busy: boolean }) {
@@ -142,9 +167,7 @@ export function CategoryCard({
             confirm ? (
               <Confirm
                 busy={busy}
-                text={category.costs.length
-                  ? `Remove ${category.name} and its ${category.costs.length} vendor cost${category.costs.length > 1 ? "s" : ""} and payments?`
-                  : `Remove ${category.name}?`}
+                text={removeCategoryText(category)}
                 onYes={() => run(() => request(`${base}/categories/${category.id}`, json("DELETE")))}
                 onNo={() => setConfirm(false)}
               />
@@ -167,9 +190,9 @@ export function CategoryCard({
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-3">
         <Stat label="Planned" cents={planned_cents} />
-        <Stat label="Committed (quoted)" cents={category.committed_cents} tone={over ? "error" : undefined} />
+        <Stat label={committedLabel(category.committed_basis)} cents={category.committed_cents} tone={over ? "error" : undefined} />
         <Stat label="Paid" cents={category.paid_cents} />
-        <Stat label="Still to pay" cents={category.remaining_cents} />
+        <Stat label="Still to pay" cents={category.remaining_cents} note={overpaidNote(category.overpaid_cents)} />
       </div>
       {planned_cents ? (
         <div className="w-full bg-surface-container-low h-2 rounded-full mb-2" aria-hidden>
@@ -178,7 +201,7 @@ export function CategoryCard({
       ) : null}
       {over && planned_cents !== null && (
         <p className="text-sm text-error mb-2">
-          Quotes are {formatCents(category.committed_cents - planned_cents)} over what you planned.
+          What you've committed is {formatCents(category.committed_cents - planned_cents)} over what you planned.
         </p>
       )}
 
@@ -257,6 +280,7 @@ function CostBlock({ base, cost, canEdit, run, request, busy }: { base: string; 
               {" · "}
               {cost.quoted_cents === null ? "No quote recorded" : `Quoted ${formatCents(cost.quoted_cents)}`}
               {" · "}Paid {formatCents(cost.paid_cents)}
+              {cost.overpaid_cents > 0 && <>{" · "}{overpaidNote(cost.overpaid_cents)}</>}
             </span>
           </p>
           {canEdit && (confirm ? (
@@ -372,8 +396,9 @@ function PaymentRow({ base, payment, canEdit, run, request, busy }: { base: stri
   }
 
   const due = payment.due_on ? `due ${formatDay(payment.due_on)}` : "no due date";
+  const paidOn = payment.paid_at ? formatInstantDay(payment.paid_at) : "";
   const paidNote = payment.paid
-    ? `Marked paid${payment.paid_by_name ? ` by ${payment.paid_by_name}` : ""}${payment.paid_at ? ` on ${formatDay(payment.paid_at.slice(0, 10))}` : ""}`
+    ? `Marked paid${payment.paid_by_name ? ` by ${payment.paid_by_name}` : ""}${paidOn ? ` on ${paidOn}` : ""}`
     : "Not paid yet";
   return (
     <li className="py-2 flex flex-wrap items-center gap-3 text-sm">

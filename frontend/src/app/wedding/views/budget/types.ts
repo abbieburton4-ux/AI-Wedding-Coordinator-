@@ -1,5 +1,11 @@
 /** Shapes returned by GET /weddings/{id}/budget/overview. Amounts are whole US cents. */
 
+/**
+ * Where a "committed" figure comes from: the vendor's quote, the payments scheduled so
+ * far (no quote recorded), a mix of both across vendors, or nothing recorded yet.
+ */
+export type CommittedBasis = "none" | "quote" | "scheduled" | "mixed";
+
 export interface Payment {
   id: string;
   cost_id: string;
@@ -17,7 +23,11 @@ export interface Cost {
   vendor_name: string;
   quoted_cents: number | null;
   committed_cents: number;
+  committed_basis: CommittedBasis;
   paid_cents: number;
+  /** Never negative. Paying more than agreed shows in overpaid_cents instead. */
+  remaining_cents: number;
+  overpaid_cents: number;
   payments: Payment[];
 }
 
@@ -26,8 +36,10 @@ export interface Category {
   name: string;
   planned_cents: number | null;
   committed_cents: number;
+  committed_basis: CommittedBasis;
   paid_cents: number;
   remaining_cents: number;
+  overpaid_cents: number;
   costs: Cost[];
 }
 
@@ -52,8 +64,10 @@ export interface Totals {
   total_cents: number | null;
   planned_cents: number;
   committed_cents: number;
+  committed_basis: CommittedBasis;
   paid_cents: number;
   remaining_cents: number;
+  overpaid_cents: number;
   contributions_cents: number;
 }
 

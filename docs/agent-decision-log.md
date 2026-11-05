@@ -56,7 +56,7 @@ Description of columns
 - user_id: user involved (couple/planner/venue_admin)
 - timestamp: when the decision was logged (ISO 8601)
 - decision_type: short enum describing the decision
-  - `budget_split` (`budget_splitter`, PD-004): a suggested split of the couple's own total. `output_payload.lines` holds names and `planned_cents`; nothing is saved from it. `confidence_score` is always empty (none is asked of the model); `tokens_input`/`tokens_output` are filled only when the response reports usage.
+  - `budget_split` (`budget_splitter`, PD-004): a suggested split of the couple's own total. `output_payload.lines` holds names and `planned_cents`; nothing is saved from it. Reasons or a summary that state an amount of money are blanked, with a note in `output_payload.warnings`. `confidence_score` is always empty (none is asked of the model); `tokens_input`/`tokens_output` are filled only when the response reports usage.
 - input_payload: JSON string with the agent's input context
 - output_payload: JSON string with the agent's outputs and `rationale`
 - confidence_score: numeric 0..1
