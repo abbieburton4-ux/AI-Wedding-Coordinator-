@@ -54,6 +54,9 @@ export function useAgentMatcher(weddingId: string) {
 
     try {
       await request(`/weddings/${weddingId}/match`, { method: "POST" });
+      // On Replit the agent runs inside that request, so the time limit only
+      // starts once it has returned.
+      startTimeRef.current = Date.now();
 
       pollRef.current = setInterval(async () => {
         // Timeout guard
@@ -121,6 +124,7 @@ export function useAgentMatcher(weddingId: string) {
           method: "POST",
           body: JSON.stringify({ category }),
         });
+        startTimeRef.current = Date.now();
 
         pollRef.current = setInterval(async () => {
           if (Date.now() - startTimeRef.current > POLL_TIMEOUT_MS) {

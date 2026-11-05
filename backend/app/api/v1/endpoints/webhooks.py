@@ -43,12 +43,24 @@ async def sendgrid_inbound_parse(request: Request, db: AsyncSession = Depends(ge
         return {"status": "ignored", "reason": "booking_not_found"}
 
     # Enqueue the quote extractor task with the raw email body and booking id
-    await enqueue_agent_task("quote-extractor", {
-        "booking_id": booking.id,
-        "email_body": email_body,
-        "sender": sender,
-        "subject": subject
-    })
-    
+    try:
+        await enqueue_agent_task("quote-extractor", {
+            "booking_id": booking.id,
+            "email_body": email_body,
+            "sender": sender,
+            "subject": subject
+        })
+    except HTTPException as exc:
+        if exc.status_code not in (422, 502):
+            raise
+        # With in-request execution a failed or blocked extraction surfaces here.
+        # The decision log already holds the outcome; an error status would only
+        # make SendGrid redeliver the same email and run the extractor again.
+        logger.error(
+            f"SendGrid webhook: quote-extractor did not complete for booking {booking_id} "
+            f"(HTTP {exc.status_code})"
+        )
+        return {"status": "not_processed", "booking_id": booking_id}
+
     logger.info(f"SendGrid webhook: enqueued quote-extractor for booking {booking_id}")
     return {"status": "success", "booking_id": booking_id}
