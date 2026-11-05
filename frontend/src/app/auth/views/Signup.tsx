@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router";
 import { useAuth } from "../AuthProvider";
 import { AuthShell, authInputClass } from "../AuthShell";
 import { Button } from "../../design-system/primitives";
+import { ConfirmEmail } from "./ConfirmEmail";
 
 /** Generate a throwaway couple uid for dev-auth signup ("couple" in the id makes
  *  the backend assign the couple role for the mock- token). */
@@ -11,7 +12,7 @@ function newDevCoupleUid() {
 }
 
 export function Signup() {
-  const { user, signUpEmail, signInGoogle, devSignIn, firebaseEnabled, accessMessage } = useAuth();
+  const { user, signUpEmail, signInGoogle, devSignIn, firebaseEnabled, accessMessage, unconfirmedEmail } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
@@ -42,8 +43,8 @@ export function Signup() {
 
   return (
     <AuthShell
-      eyebrow="Start planning"
-      title={<>Create your <span className="italic">wedding</span></>}
+      eyebrow="Welcome"
+      title={<>Create your <span className="italic">account</span></>}
       footer={
         <>
           Already have an account?{" "}
@@ -54,7 +55,9 @@ export function Signup() {
       {accessMessage && <p className="mb-4 text-sm text-destructive">{accessMessage}</p>}
       {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
-      {firebaseEnabled ? (
+      {unconfirmedEmail ? (
+        <ConfirmEmail email={unconfirmedEmail} />
+      ) : firebaseEnabled ? (
         <>
           <form onSubmit={onEmail} className="flex flex-col gap-4">
             <input className={authInputClass} type="email" placeholder="Email" value={email}

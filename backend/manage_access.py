@@ -1,6 +1,6 @@
 """Add, change or remove someone on a wedding's access list (PD-002).
 
-A stop-gap for the team until the owner's settings screen exists (backlog B22).
+A fallback for the team; the couple normally use the app's Who has access screen.
 Run it against the database the app uses (SYNC_DATABASE_URL), only when the owner
 has asked for the change. It never contacts anyone; tell the person yourself.
 

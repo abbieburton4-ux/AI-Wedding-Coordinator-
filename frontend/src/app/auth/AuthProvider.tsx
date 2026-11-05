@@ -12,7 +12,9 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
+  sendEmailVerification,
   signOut as firebaseSignOut,
+  type User as FirebaseUser,
 } from "firebase/auth";
 import { firebaseAuth, firebaseEnabled } from "./firebase";
 import { API_BASE_URL } from "../api/config";
@@ -42,6 +44,23 @@ interface AuthContextValue {
   getToken: () => Promise<string | null>;
   /** Set when the account signed in but isn't on the wedding's access list. */
   accessMessage: string | null;
+  /**
+   * The email of someone signed in with a password whose address isn't confirmed
+   * yet. They stay signed in to Firebase (not to the app) so they can ask for a
+   * confirmation email.
+   */
+  unconfirmedEmail: string | null;
+  /** Asks Firebase to send one confirmation email. Only ever called from the person's own click. */
+  sendConfirmationEmail: () => Promise<void>;
+  /** Re-checks the address after they've opened the link; resolves false if it's still unconfirmed. */
+  checkEmailConfirmed: () => Promise<boolean>;
+}
+
+/** A password account whose address hasn't been confirmed. Google accounts are confirmed already. */
+function needsConfirmation(fbUser: FirebaseUser): boolean {
+  return (
+    !fbUser.emailVerified && fbUser.providerData.some((p) => p.providerId === "password")
+  );
 }
 
 const DEV_UID_KEY = "vf_dev_uid";
@@ -85,6 +104,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [accessMessage, setAccessMessage] = useState<string | null>(null);
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
+
+  /** Ask the backend who this Firebase account is; sign out of Firebase if refused. */
+  const resolveFirebaseUser = useCallback(async (fbUser: FirebaseUser, forceRefresh = false) => {
+    const token = await fbUser.getIdToken(forceRefresh);
+    const { user: me, denied } = await fetchMeWithStatus(token);
+    setUser(me);
+    setAccessMessage(denied);
+    // Not on the list: sign out of Google too, so they can try another account.
+    if (denied && firebaseAuth) await firebaseSignOut(firebaseAuth);
+  }, []);
 
   const getToken = useCallback(async (): Promise<string | null> => {
     if (firebaseEnabled && firebaseAuth) {
@@ -103,17 +133,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (firebaseEnabled && firebaseAuth) {
       const unsub = onAuthStateChanged(firebaseAuth, async (fbUser) => {
         if (!active) return;
-        if (fbUser) {
-          const token = await fbUser.getIdToken();
-          const { user: me, denied } = await fetchMeWithStatus(token);
-          if (active) {
-            setUser(me);
-            setAccessMessage(denied);
-          }
-          // Not on the list: sign out of Google too, so they can try another account.
-          if (denied && firebaseAuth) await firebaseSignOut(firebaseAuth);
+        if (fbUser && needsConfirmation(fbUser)) {
+          // The backend refuses unconfirmed addresses, so don't ask it yet.
+          setUser(null);
+          setAccessMessage(null);
+          setUnconfirmedEmail(fbUser.email);
+        } else if (fbUser) {
+          setUnconfirmedEmail(null);
+          await resolveFirebaseUser(fbUser);
         } else {
           setUser(null);
+          setUnconfirmedEmail(null);
         }
         if (active) setLoading(false);
       });
@@ -162,6 +192,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
+  const sendConfirmationEmail = useCallback(async () => {
+    const fbUser = firebaseAuth?.currentUser;
+    if (!fbUser) throw new Error("Please sign in again first.");
+    // Firebase sends the one email, to the person's own address, because they asked.
+    await sendEmailVerification(fbUser);
+  }, []);
+
+  const checkEmailConfirmed = useCallback(async () => {
+    const fbUser = firebaseAuth?.currentUser;
+    if (!fbUser) throw new Error("Please sign in again first.");
+    await fbUser.reload();
+    if (!fbUser.emailVerified) return false;
+    setUnconfirmedEmail(null);
+    setLoading(true);
+    try {
+      // A fresh token carries the confirmed address to the backend.
+      await resolveFirebaseUser(fbUser, true);
+    } finally {
+      setLoading(false);
+    }
+    return true;
+  }, [resolveFirebaseUser]);
+
   const signOut = useCallback(async () => {
     if (firebaseEnabled && firebaseAuth) {
       await firebaseSignOut(firebaseAuth);
@@ -169,6 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(DEV_UID_KEY);
     localStorage.removeItem(LEGACY_TOKEN_KEY);
     setUser(null);
+    setUnconfirmedEmail(null);
   }, []);
 
   const value: AuthContextValue = {
@@ -183,6 +237,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut,
     getToken,
     accessMessage,
+    unconfirmedEmail,
+    sendConfirmationEmail,
+    checkEmailConfirmed,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -44,6 +44,8 @@ async def require_wedding_access(
     if level is None:
         raise HTTPException(status_code=403, detail="You don't have access to this wedding")
     if _RANK[level] < _RANK[minimum]:
+        if minimum == "owner":
+            raise HTTPException(status_code=403, detail="Only the people who manage access can do this")
         raise HTTPException(status_code=403, detail="Your access to this wedding is view only")
     return wedding
 
@@ -85,8 +87,15 @@ async def link_memberships(db: AsyncSession, user: User, email: str) -> bool:
         return False
     result = await db.exec(select(WeddingMember).where(WeddingMember.email == email))
     rows = list(result.all())
+    linked = await db.exec(
+        select(WeddingMember.wedding_id).where(WeddingMember.user_id == user.id)
+    )
+    already_on = set(linked.all())
     for row in rows:
-        if row.user_id is None:
+        # One row per person per wedding: if their address changed and the new one is
+        # listed too, keep the row they already have rather than holding two levels.
+        if row.user_id is None and row.wedding_id not in already_on:
             row.user_id = user.id
             db.add(row)
+            already_on.add(row.wedding_id)
     return bool(rows)

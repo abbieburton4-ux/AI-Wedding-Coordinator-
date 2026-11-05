@@ -174,6 +174,74 @@ def test_api_suite():
                        headers=editor_headers).status_code == 200
         print("   * Editor: can edit")
 
+        # Managing the access list is owner-only, enforced by the API (PD-002 step 2, B22).
+        members_url = f"/api/v1/weddings/{wedding_id}/members"
+        assert c.get(f"/api/v1/weddings/{wedding_id}/my-access", headers=viewer_headers).json() == {"level": "viewer"}
+        assert c.get(f"/api/v1/weddings/{wedding_id}/my-access", headers=headers).json() == {"level": "owner"}
+        assert c.get(f"/api/v1/weddings/{wedding_id}/my-access", headers=unauth_headers).status_code == 403
+        for who in (viewer_headers, editor_headers, unauth_headers):
+            assert c.get(members_url, headers=who).status_code == 403
+            assert c.post(members_url, json={"email": "x@example.test", "level": "viewer"},
+                          headers=who).status_code == 403
+        assert "manage access" in c.get(members_url, headers=editor_headers).json()["detail"]
+        listed = c.get(members_url, headers=headers).json()
+        by_email = {m["email"]: m for m in listed}
+        assert by_email["viewer_1@example.test"]["level"] == "viewer"
+        owner_member = next(m for m in listed if m["level"] == "owner")
+        editor_member = by_email["editor_1@example.test"]
+        assert c.patch(f"{members_url}/{owner_member['id']}", json={"level": "viewer"},
+                       headers=editor_headers).status_code == 403
+        assert c.delete(f"{members_url}/{owner_member['id']}", headers=editor_headers).status_code == 403
+        assert c.delete(f"{members_url}/{editor_member['id']}", headers=viewer_headers).status_code == 403
+        print("   * Access list: viewers, editors and outsiders can't read or change it")
+
+        res = c.post(members_url, json={"email": " Aunt@Example.test ", "level": "viewer"}, headers=headers)
+        assert res.status_code == 201 and res.json()["email"] == "aunt@example.test"
+        assert res.json()["signed_in"] is False
+        aunt_id = res.json()["id"]
+        assert c.post(members_url, json={"email": "aunt@example.test", "level": "editor"},
+                      headers=headers).status_code == 409
+        assert c.post(members_url, json={"email": "not-an-email", "level": "viewer"},
+                      headers=headers).status_code == 422
+        assert c.post(members_url, json={"email": "x2@example.test", "level": "owner"},
+                      headers=headers).status_code == 422
+        res = c.post(members_url, json={"email": "uncle@example.test", "level": "viewer"}, headers=headers)
+        assert res.status_code == 201  # several people can share a level
+        uncle_id = res.json()["id"]
+        assert c.patch(f"{members_url}/{aunt_id}", json={"level": "editor"},
+                       headers=headers).json()["level"] == "editor"
+        assert c.delete(f"{members_url}/{uncle_id}", headers=headers).status_code == 204
+        assert c.delete(f"{members_url}/{uncle_id}", headers=headers).status_code == 404
+        assert "uncle@example.test" not in [m["email"] for m in c.get(members_url, headers=headers).json()]
+        print("   * Access list: an owner can add, change and remove people; nothing is sent")
+
+        # An owner of another wedding (couple_2, seeded) can't reach this wedding's rows.
+        assert c.delete(f"/api/v1/weddings/wedding_planning_test/members/{aunt_id}",
+                        headers=unauth_headers).status_code == 404
+        assert c.patch(f"/api/v1/weddings/wedding_planning_test/members/{aunt_id}",
+                       json={"level": "viewer"}, headers=unauth_headers).status_code == 404
+
+        res = c.patch(f"{members_url}/{owner_member['id']}", json={"level": "editor"}, headers=headers)
+        assert res.status_code == 409, res.text
+        assert c.delete(f"{members_url}/{owner_member['id']}", headers=headers).status_code == 409
+        assert c.get(members_url, headers=headers).status_code == 200  # still an owner
+        with Session(sync_engine) as s:
+            s.add(WeddingMember(wedding_id=wedding_id, email="partner@example.test", level="owner"))
+            s.commit()
+            partner_id = s.exec(sync_select(WeddingMember.id).where(
+                WeddingMember.email == "partner@example.test")).one()
+        # A partner owner who hasn't signed in yet doesn't count: the creator still can't step down.
+        assert c.patch(f"{members_url}/{owner_member['id']}", json={"level": "editor"},
+                       headers=headers).status_code == 409
+        assert c.delete(f"{members_url}/{owner_member['id']}", headers=headers).status_code == 409
+        assert c.post(members_url, json={"email": "Kate@example.test", "level": "viewer"},
+                      headers=headers).status_code == 422
+        assert c.patch(f"{members_url}/{partner_id}", json={"level": "editor"},
+                       headers=headers).status_code == 200
+        assert c.delete(f"{members_url}/{partner_id}", headers=headers).status_code == 204
+        assert c.delete(f"{members_url}/{aunt_id}", headers=headers).status_code == 204
+        print("   * Access list: the last owner can't be removed or demoted; a second owner can")
+
         forged = pyjwt.encode({"sub": "forged_admin", "role": "admin"},
                               "dev-jwt-secret-key-change-me-in-production", algorithm="HS256")
         res = c.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {forged}"})
@@ -213,6 +281,19 @@ def test_api_suite():
                 row = s.exec(sync_select(WeddingMember).where(
                     WeddingMember.email == "pending@example.test")).one()
                 assert row.user_id == "new_member"
+                # Same person, new address also listed: they keep one row, not two levels.
+                s.add(WeddingMember(wedding_id=wedding_id, email="pending.new@example.test", level="owner"))
+                s.commit()
+            async with async_session_maker() as db:
+                user = await db.get(UserModel, "new_member")
+                assert await link_memberships(db, user, "pending.new@example.test")
+                await db.commit()
+            with Session(sync_engine) as s:
+                row = s.exec(sync_select(WeddingMember).where(
+                    WeddingMember.email == "pending.new@example.test")).one()
+                assert row.user_id is None
+                s.delete(row)
+                s.commit()
 
         asyncio.run(_signup_rules())
         print("   * Sign-up: only listed or bootstrap emails may create an account; list rows link on sign-in")

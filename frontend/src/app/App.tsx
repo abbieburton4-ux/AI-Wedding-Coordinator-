@@ -13,6 +13,7 @@ import { Guests } from "./wedding/views/Guests";
 import { Timeline } from "./wedding/views/Timeline";
 import { SeatingPlan } from "./wedding/views/SeatingPlan";
 import { Concierge } from "./wedding/views/Concierge";
+import { Access } from "./wedding/views/Access";
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
 
@@ -38,6 +39,7 @@ export default function App() {
               <Route path="seating" element={<SeatingPlan />} />
               <Route path="timeline" element={<Timeline />} />
               <Route path="concierge" element={<Concierge />} />
+              <Route path="access" element={<Access />} />
               <Route path="*" element={<Dashboard />} />
             </Route>
           </Route>

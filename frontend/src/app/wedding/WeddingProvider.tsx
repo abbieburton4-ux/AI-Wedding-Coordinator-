@@ -25,6 +25,10 @@ interface WeddingContextValue {
   setActiveWedding: (id: string) => void;
   loading: boolean;
   refetch: () => Promise<void>;
+  /** The signed-in person's level on the active wedding (viewer, editor or owner). */
+  myLevel: string | null;
+  myLevelLoading: boolean;
+  refetchMyLevel: () => Promise<void>;
 }
 
 export const ACTIVE_WEDDING_KEY = "vf_active_wedding";
@@ -77,6 +81,29 @@ export function WeddingProvider({ children }: { children: ReactNode }) {
     if (activeId) localStorage.setItem(ACTIVE_KEY, activeId);
   }, [activeId]);
 
+  // Only decides which screens to offer; the API enforces every level itself.
+  const [myLevel, setMyLevel] = useState<string | null>(null);
+  const [myLevelLoading, setMyLevelLoading] = useState(true);
+  const refetchMyLevel = useCallback(async () => {
+    if (!activeId) {
+      setMyLevel(null);
+      setMyLevelLoading(false);
+      return;
+    }
+    try {
+      const res = await request<{ level: string }>(`/weddings/${activeId}/my-access`);
+      setMyLevel(res.level ?? null);
+    } catch {
+      setMyLevel(null);
+    } finally {
+      setMyLevelLoading(false);
+    }
+  }, [activeId, request]);
+
+  useEffect(() => {
+    refetchMyLevel();
+  }, [refetchMyLevel]);
+
   // A couple with no wedding yet goes straight into intake (the activation hook).
   useEffect(() => {
     if (!loading && weddings.length === 0 && !pathname.endsWith("/intake")) {
@@ -90,6 +117,9 @@ export function WeddingProvider({ children }: { children: ReactNode }) {
     setActiveWedding: useCallback((id: string) => setActiveId(id), []),
     loading,
     refetch,
+    myLevel,
+    myLevelLoading,
+    refetchMyLevel,
   };
 
   return <WeddingContext.Provider value={value}>{children}</WeddingContext.Provider>;

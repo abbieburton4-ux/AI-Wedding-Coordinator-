@@ -3,9 +3,10 @@ import { useNavigate, useLocation, Link } from "react-router";
 import { useAuth } from "../AuthProvider";
 import { AuthShell, authInputClass } from "../AuthShell";
 import { Button } from "../../design-system/primitives";
+import { ConfirmEmail } from "./ConfirmEmail";
 
 export function Login() {
-  const { user, signInEmail, signInGoogle, devSignIn, firebaseEnabled, accessMessage } = useAuth();
+  const { user, signInEmail, signInGoogle, devSignIn, firebaseEnabled, accessMessage, unconfirmedEmail } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
@@ -43,15 +44,17 @@ export function Login() {
       title={<>Sign in to your <span className="italic">plans</span></>}
       footer={
         <>
-          New to VenueFlow?{" "}
-          <Link to="/signup" className="text-primary hover:underline">Create your wedding</Link>
+          No account yet?{" "}
+          <Link to="/signup" className="text-primary hover:underline">Create an account</Link>
         </>
       }
     >
       {accessMessage && <p className="mb-4 text-sm text-destructive">{accessMessage}</p>}
       {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
-      {firebaseEnabled ? (
+      {unconfirmedEmail ? (
+        <ConfirmEmail email={unconfirmedEmail} />
+      ) : firebaseEnabled ? (
         <>
           <form onSubmit={onEmail} className="flex flex-col gap-4">
             <input className={authInputClass} type="email" placeholder="Email" value={email}
