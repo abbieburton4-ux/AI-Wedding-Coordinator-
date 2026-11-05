@@ -10,12 +10,9 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 *Updated 2026-11-05 by the product lane. Re-rank if this date is more than 14 days old.*
 
-0. **B31** — point the autopilot workflow at the owner's Claude subscription. The owner made the edit on GitHub, 2026-11-05. In review, PR #19 (the owner merges it)
-0b. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B38** — block either owner from removing or demoting the other on the access screen (PD-002 note, 2026-11-05). In review, PR #18
-1b. **B39** — stop look-alike email addresses passing as the couple's at sign-in. `needs-owner: approve a fix to sign-in?`
-2. **B37** — delete `outreach-list.xlsx` and `streamlit_mock/` (PD-005, extended). In review, PR #20 (merge after #17)
-2b. **B40** — four first names of past sales prospects in `docs/runway.md`, `scripts/build_tracker.py` and probably `runway-tracker.xlsx`. `needs-owner: remove them too?`
+0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
+1. **B39** — stop look-alike email addresses passing as the couple's at sign-in. `needs-owner: approve a fix to sign-in?`
+2. **B40** — four first names of past sales prospects in `docs/runway.md`, `scripts/build_tracker.py` and probably `runway-tracker.xlsx`. `needs-owner: remove them too?`
 3. **B23** — in depth budgeting (PD-004 ratified: option C, plus an AI-suggested starting split). Fold in B30. Building
 4. **B14** — where the app and its data live, and what that costs. `needs-owner: approve the hosting recommendation (the product lane writes the PD next, with costs)`
 5. **B24** — planning checklist. `needs-owner: checklist scope PD (unfixed date; which Jewish traditions), to be proposed`
@@ -50,7 +47,6 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B8 — Unmeasured token counts are logged as 0.** Every agent records `"input"`/`"output"` tokens as `0` when Gemini returns no usage data (`usage... if usage else 0` in `planner.py`, `matcher.py`, `extractor.py`, `concierge.py`), so a missing measurement looks like a free call (AGENTS.md rule 10). *Fix:* record `None`, after checking that every consumer of those counts (metrics, logs, frontend) handles a missing value.
 - **B22 — The owner and the groom manage access themselves (PD-002 step 2).** Done in PR #14: the access settings screen, owner-only access changes, and email confirmation for password sign-in. The remaining follow-up is B38.
-- **B38 — Neither owner can remove the other's access powers.** Owner, 2026-11-05: "block it, keep no" (PD-002 note). PR #14 allows one owner to demote the other, with a warning. *Fix:* the backend refuses to remove or demote an `owner` row unless the request comes from the team's `manage_access.py`, and the screen doesn't offer it. Keep: no new owners from the screen. *Depends on:* PD-002 (ratified). *In review: PR #18.*
 - **B39 — A look-alike email could pass as one of the couple's.** Found by the security review of PR #18. Sign-in may treat an address containing a look-alike letter (for example, from another alphabet) as matching an address on the access list or in `ACCESS_BOOTSTRAP_EMAILS`. It's unlikely, but it would grant someone else the couple's access. *Fix:* compare emails strictly (normalised, ASCII-safe), and add checks for it. Touches sign-in, so it needs the owner's go-ahead (AGENTS.md "Stop and ask"). *Depends on:* owner approval.
 - **B19 — Guest planning (must-have 3), but the guest list and seating plan show unlabelled sample data.** `frontend/src/app/wedding/views/Guests.tsx:9` (`GUESTS`, made-up names with dietary tags) and `SeatingPlan.tsx:13` (`GUESTS`, `INITIAL_TABLES`) are hard-coded and never call the API, on the couple's own workspace (rule 10). The backend has a `Guest` table (`backend/app/db/models.py:322`: name, email, phone, RSVP status, `dietary`, plus-one, table number), but no guest endpoint exists in `api/v1/endpoints/`. *Why it matters:* the couple listed "guest planning (list, food, seating)" as must-have 3, for 225 invited guests. Today nothing they enter would be saved. The "food" part includes dietary needs, which are health data (AGENTS.md rule 3). They must never appear in git, fixtures, issues, logs or `AgentDecisionLog` payloads. In the app, family (view only) can see them: "family can see dietary notes" (owner, 2026-11-04, `wedding.md`). *Fix:* label the sample data as sample now, as a quick and separate step. Then a proposed PD on guest-planning scope (what "food" covers, what seating needs), then backend guest endpoints and wiring. How it's built is not yet decided. *Depends on:* B10/B22 before real guest data goes in, and that PD.
 - **B29 — Sample content flashes before real data loads.** Found while building B28 (PR #12). When a wedding has real budget lines or checklist items, `Budget.tsx` and `Timeline.tsx` show the static fallback, now labelled as sample, until the API answers. *Fix:* show a loading state instead of sample content while the data is loading. *Depends on:* nothing.
@@ -83,7 +79,6 @@ Not carried over from the audit, because the restored backend already covers the
 
 ---
 
-- **B31 — The autopilot can't sign in to Claude.** The owner connected their Claude subscription with `/install-github-app` (2026-11-04), which stored `CLAUDE_CODE_OAUTH_TOKEN`. The workflow (`.github/workflows/claude-agents.yml`, lines 52 and 112) still reads `ANTHROPIC_API_KEY`, which doesn't exist, so every run fails. *Fix:* switch both lines to `claude_code_oauth_token`, per `docs/autonomy.md` step 3. *Depends on:* nothing.
 
 - **B32 — Two "@claude" reply bots, and an automatic review on every PR.** `/install-github-app` opened PR #11, which the owner merged on 2026-11-04. It added `.github/workflows/claude.yml`, which answers any "@claude" comment, and `claude-code-review.yml`, which reviews every PR when it's opened or updated. `claude-agents.yml` already answers "@claude" with the repo's autopilot rules, so once B31 is fixed, each owner comment would start two separate runs. Only one of them follows this repo's rules. The automatic review also uses subscription allowance on every agent PR, which the repo's own reviewer already checks. *Fix (recommended):* turn off `claude.yml`. Whether to keep the automatic review is the owner's call. *Depends on:* the owner's answer. It's a `.github/` change, so it needs an owner-run session.
 
@@ -91,13 +86,15 @@ Not carried over from the audit, because the restored backend already covers the
 - **B34 — No database-level guard on duplicate access entries.** Found in PR #14. The app checks for an email already on the access list, but the `wedding_members` table doesn't enforce it. *Fix:* a unique constraint per wedding and email, through a migration (rule 6, see B27).
 - **B35 — Sign-in setup should turn on email-enumeration protection.** Found in PR #14. Firebase can hide whether an email has an account. *Fix:* add the step to `docs/setup-sign-in.md`.
 - **B36 — The shared agent instructions describe the app as it was before B22, B26 and B28.** "What's actually there today" in `.agents/AGENTS.md` and `ai-studio-system-instructions.md` is out of date. Agents may not edit their own instructions, so this needs a session the owner runs. It also covers removing their references to `streamlit_mock/` (B37).
-- **B37 — Delete the old outreach list and the first prototype (PD-005, extended).** Remove `outreach-list.xlsx` and `streamlit_mock/`. Update or remove the references in `README.md`, `CONTRIBUTING.md`, `docs/runway.md`, `docs/reviews/2026-05-27.md` and `scripts/build_tracker.py`. *Depends on:* PD-005.
 
 
 ## Recently closed
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-05 | **B31** — autopilot signs in with the owner's Claude subscription (owner's own edit) | #19 |
+| 2026-11-05 | **B38** — neither owner can remove or demote the other from the access screen (PD-002 note) | #18 |
+| 2026-11-05 | **B37** — old outreach list and first prototype deleted, references fixed (PD-005, extended) | #20 |
 | 2026-11-05 | **B15** — CI passes on PRs. `main` is protected by the owner: PR required, `backend` and `frontend` checks required, applies to admins, no force pushes or deletion | repo settings (owner) |
 | 2026-11-05 | **B22** — access settings screen, owner-only access changes, email confirmation (PD-002 step 2) | #14 |
 | 2026-11-05 | **B27** — migration naming convention and batch mode | #16 |
