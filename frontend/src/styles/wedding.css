@@ -55,7 +55,7 @@
   width: 200px;
   height: 200px;
   border-radius: 50%;
-  background: conic-gradient(#d4af37 0% 65%, #f4f3f1 65% 100%);
+  background: conic-gradient(#d4af37 0% var(--ring-pct, 0%), #f4f3f1 var(--ring-pct, 0%) 100%);
   display: flex;
   align-items: center;
   justify-content: center;

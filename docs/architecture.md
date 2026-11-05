@@ -146,6 +146,7 @@ This logic lives in a single `runAgent()` helper. Agents themselves are just `{ 
 | `quote_negotiator` | Pro | Quote extracted, over budget | `quote_negotiate` | 4, 9 |
 | `contract_reviewer` | Pro | Contract uploaded to GCS | `contract_review` | 5 |
 | `budget_monitor` | Flash | `Quote.status='accepted'` or `SupplierPayment` insert | `budget_alert` | 9 |
+| `budget_splitter` | Flash | Couple action ("Suggest a starting split", needs a total) | `budget_split`. Returns percentage shares only; amounts are worked out in cents from the couple's total. Saves nothing; the couple apply it themselves. Blocks on unknown or duplicate categories, bad shares, or shares not adding to 100% | PD-004 |
 | `rsvp_follower` | Flash | Cloud Scheduler daily | `rsvp_followup` | 10 |
 | `seating_assigner` | Pro | Couple action ("draft seating") | `seating_assign` | 11 |
 | `runofshow_updater` | Pro | `Booking`/`Quote` change near wedding date | `timeline_update`, `runofshow_update` | 12 |
