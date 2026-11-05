@@ -11,13 +11,14 @@ import pandas as pd
 from pydantic import BaseModel
 
 from app.config import settings
+from app.utils.email_match import UnsafeEmailError, normalise_email
 from app.db.session import get_db
 from app.db.models import (
     User, Wedding, WeddingMember, BudgetLine, TimelineItem, AgentDecisionLog, Booking, Venue,
     Supplier, Quote,
 )
 from app.api.v1.access import (
-    bootstrap_emails, normalise_email, require_wedding_access, weddings_for_member,
+    UNSAFE_EMAIL, bootstrap_emails, require_wedding_access, weddings_for_member,
 )
 from app.api.v1.endpoints.auth import get_current_user
 from app.utils.tasks import enqueue_agent_task
@@ -54,7 +55,10 @@ async def create_wedding(
     (ACCESS_BOOTSTRAP_EMAILS) may create it, and nobody can create a second one.
     Everyone on that list becomes an owner (PD-002: both partners manage access).
     """
-    creator_email = normalise_email(current_user.email)
+    try:
+        creator_email = normalise_email(current_user.email)
+    except UnsafeEmailError:
+        raise HTTPException(status_code=403, detail=UNSAFE_EMAIL)
     couple_emails = bootstrap_emails()
     if not settings.DEVELOPMENT_MODE and creator_email not in couple_emails:
         raise HTTPException(status_code=403, detail="Only the couple can set up the wedding.")

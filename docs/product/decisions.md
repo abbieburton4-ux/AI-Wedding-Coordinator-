@@ -62,6 +62,10 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 **Note (2026-11-05), the settings screen (B22, PR #14):** owner (one of the couple), 2026-11-05: "block it, keep no".
 - *Can one of the couple remove the other's power to manage access?* **No: blocked on the screen.** Neither owner can remove or demote the other. If it's ever really needed, the team does it on the owner's request.
 - *Can the screen make anyone else an access manager?* **No.** Only the owner and the groom manage access. Everyone else is "can edit" or "view only".
+**Note (2026-11-05), look-alike emails (B39):** the security review of PR #18 found that sign-in might treat an address with a look-alike letter (for example, from another alphabet) as one of the couple's or as one on the access list. Owner (one of the couple), 2026-11-05, asked "Shall I get a fix approved and built?": "sure".
+- *Decision:* an address only matches the couple's or an access-list entry if it's the same address, letter for letter. Capital letters and spaces at either end don't matter; look-alike letters never count as a match.
+- *Left to the team:* how the comparison is done, and the checks that prove it.
+- *Guard:* no one already on the access list may lose access because of the change. If an address can't be matched safely, sign-in refuses it with a clear message rather than guessing.
 
 ---
 
@@ -143,3 +147,30 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 **Technical choices settled by the team:** deleting a file doesn't remove it from git history, so old copies stay visible in the repo's past commits. Erasing them from history needs a force-push, which the guardrails block, and it would be a separate owner decision. It isn't part of this decision.
 **Rejected because:** B keeps other people's contact details published.
 **Extended (2026-11-05):** also delete `outreach-list.xlsx` (another old sales list: about 43 named people at planning businesses, with social media handles) and the whole first prototype, `streamlit_mock/`. Owner (one of the couple), 2026-11-05: "Delete the second old outreach list and the whole first prototype". This settles the prototype part of B13. Git history still keeps old copies, as above.
+**Extended again (2026-11-05), past prospects' first names (B40):** PR #20 found four first names of past sales prospects, one linked to a business, in `docs/runway.md`, `scripts/build_tracker.py` and probably `runway-tracker.xlsx`. Owner (one of the couple), 2026-11-05, asked "Shall we remove those too?": "yes". Remove them or replace them with roles (for example "a planner in Dublin"), wherever they appear in the repo's current files. Git history still keeps old copies, as above.
+
+## PD-006 — Where the app and its data live, and what that costs
+
+**Date:** 2026-11-05 · **Status:** proposed
+**Context:** Backlog B14. The app runs only on a developer's computer, so nobody can use it for real yet, and real guest details (including dietary notes, which are health data) shouldn't go in until it has a proper home. The old deploy workflow would publish only the screens, with no database, to `venueflow.ie`, the original VenueFlow author's web address. The owner wants a user-friendly setup that works with Google's tools (`wedding.md`), and sign-in is already Google's (Firebase, PD-002). The app needs four things hosted: the screens, the backend with its background worker, a database, and the Gemini AI. About 8 people use it (the couple and 6 family members). Prices below were checked on 2026-11-05. They're estimates, not quotes, and Google can change them.
+**Options:**
+- **A: Google Cloud, under the owner's Google account (the same account as sign-in).** Screens on Firebase Hosting. Backend and worker on Cloud Run. A small Postgres database on Cloud SQL in Google's Iowa region (`us-central1`, the nearest to Chicago) with daily automatic backups. Background jobs on Cloud Tasks. Gemini on the paid tier.
+  - *Monthly cost, estimated:* database about $8–10. Google's own example for the smallest database is $9.37 a month ([Cloud SQL pricing examples](https://cloud.google.com/sql/docs/postgres/pricing-examples?hl=en)). Backend: $0 expected, because 2 million requests a month are free ([Cloud Run pricing](https://cloud.google.com/run/pricing)). Background jobs: $0, because the first million a month are free ([Cloud Tasks pricing](https://cloud.google.com/tasks/pricing)). Screens: $0, inside Firebase Hosting's free 10 GB of storage and 360 MB a day of traffic ([Firebase pricing](https://firebase.google.com/pricing)). Gemini: [ASSUMPTION] a few dollars a month or less at this use, to be measured once it runs. **Total about $10–15 a month**, plus the web address. That's roughly $120–180 from now to an October 2027 wedding.
+  - *Couple's cost:* about an hour following a step-by-step guide the team writes. Turning on billing on the owner's Google account with a payment card. Setting a spending alert. The groom is added as a second owner, as with sign-in.
+  - *Build:* small to medium. The app was built for Google Cloud (it already uses Cloud Tasks), so the team mostly writes deployment settings and the guide.
+- **B: An all-in-one hosting service (for example Render), with Google sign-in kept.** Roughly $7 a month for the backend and $6 a month for the smallest database ([Render pricing](https://render.com/pricing)), so about $13 a month, which is about the same as A.
+  - *Couple's cost:* a second account and a second bill outside Google, and the data lives with a company the couple don't otherwise use.
+  - *Build:* medium. The background jobs would need reworking, because Cloud Tasks is a Google service.
+- **C: Don't host yet.** $0.
+  - *Couple's cost:* nobody can use the app for real, and the budget and guest lists live somewhere else until it's hosted.
+**Recommendation:** A. It keeps everything in one Google account the couple already control. It's the closest fit to how the app was built, so it's the least rework. It costs about the same as B.
+**Technical choices settled by the team (if A):** the database is a managed Postgres with automatic daily backups. Secrets (the Gemini key, the worker and webhook secrets) are kept in Google's secret storage, never in git or in the screens (rule 5). Dev-only settings stay off (RUNBOOK). Firebase's allowed sign-in addresses are set to match the web address (PD-002). The old deploy workflow and the `venueflow.ie` address are retired. The team writes the guide; the owner presses the buttons.
+**Couple's calls:**
+- (a) A, B or C? *Recommended: A.*
+- (b) Where the data is stored: Google's Iowa region, in the US. *Recommended: yes.*
+- (c) Gemini AI on the paid tier, so Google doesn't use your wedding details to improve its products. On the free tier Google uses what you send it to improve its products, and "human reviewers may read" it. On the paid tier Google says it doesn't use your prompts or responses for that ([Gemini API terms](https://aistudio.google.com/docs/terms)). Costs a few dollars a month at most [ASSUMPTION]. *Recommended: paid.*
+- (d) A spending alert on the Google account, emailed to the owner by Google. An alert warns you; it doesn't stop spending. *Recommended: alert at $25 a month.*
+- (e) The web address. The owner asked for one based on the couple's first names, "if available" (2026-11-05). A `+` isn't allowed in web addresses, so the choices are spelled with "and", a hyphen or "plus". All three `.com` versions were unregistered on 2026-11-05 (registry lookup, which doesn't guarantee a purchase will go through). A `.com` costs $12 a year through Google ([Cloud Domains pricing](https://cloud.google.com/domains/pricing)) and renews automatically. The exact address isn't written here because this repo is public: [GAP] which spelling, and whether it's fine to record it here. *Recommended: the "and" spelling, in `.com`.*
+- (f) What happens after the wedding: keep it running, or export everything and shut it down. *Can wait until after the wedding.*
+**Decision:** awaiting couple.
+**Rejected because:** awaiting couple.

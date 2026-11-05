@@ -8,7 +8,8 @@ from typing import Optional
 from app.config import settings
 from app.db.session import get_db
 from app.db.models import User, WeddingMember
-from app.api.v1.access import bootstrap_emails, link_memberships
+from app.api.v1.access import UNSAFE_EMAIL, bootstrap_emails, link_memberships
+from app.utils.email_match import UnsafeEmailError, normalise_email
 
 security = HTTPBearer()
 router = APIRouter()
@@ -112,8 +113,12 @@ async def get_current_user(
     user_id = claims.get("sub")
     if not user_id:
         raise _unauthorized()
-    email = (claims.get("email") or "").strip().lower()
     email_verified = bool(claims.get("email_verified"))
+    try:
+        email = normalise_email(claims.get("email"))
+        email_safe = True
+    except UnsafeEmailError:
+        email, email_safe = "", False
     name = claims.get("name") or email or "Firebase User"
 
     # No self sign-up (PD-002): a new account is created only for a verified
@@ -124,6 +129,8 @@ async def get_current_user(
         # Verified first, so an unconfirmed account can't probe who is on the list.
         if not email_verified:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=EMAIL_NOT_VERIFIED)
+        if not email_safe:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=UNSAFE_EMAIL)
         if not await _email_is_allowed(db, email):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NOT_ON_LIST)
         user = User(id=user_id, role="couple", name=name, email=email)
@@ -131,6 +138,8 @@ async def get_current_user(
         await db.commit()
         await db.refresh(user)
 
+    # An existing account keeps the access it already has; an address that can't be
+    # compared safely just never picks up new access-list rows.
     if email_verified and await link_memberships(db, user, email):
         await db.commit()
 
@@ -157,6 +166,10 @@ def _unauthorized() -> HTTPException:
 
 
 async def _email_is_allowed(db: AsyncSession, email: str) -> bool:
+    try:
+        email = normalise_email(email)
+    except UnsafeEmailError:
+        return False
     if not email:
         return False
     if email in bootstrap_emails():
