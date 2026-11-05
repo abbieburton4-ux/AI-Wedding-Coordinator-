@@ -52,8 +52,8 @@ export function Signup() {
         </>
       }
     >
-      {accessMessage && <p className="mb-4 text-sm text-destructive">{accessMessage}</p>}
-      {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
+      {accessMessage && <p role="alert" className="mb-4 text-sm text-destructive">{accessMessage}</p>}
+      {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
 
       {unconfirmedEmail ? (
         <ConfirmEmail email={unconfirmedEmail} />

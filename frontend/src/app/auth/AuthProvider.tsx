@@ -18,6 +18,7 @@ import {
 } from "firebase/auth";
 import { firebaseAuth, firebaseEnabled } from "./firebase";
 import { API_BASE_URL } from "../api/config";
+import { fetchSessionProfile } from "./sessionProfile";
 
 export type Role = "couple";
 
@@ -76,28 +77,10 @@ async function fetchMe(token: string): Promise<AuthUser | null> {
   return user;
 }
 
-const NOT_ON_LIST =
-  "This account isn't on the wedding's access list yet. Ask the couple to add you, " +
-  "then sign in again.";
-
 async function fetchMeWithStatus(
   token: string,
-): Promise<{ user: AuthUser | null; denied: string | null }> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.status === 403) {
-      // The backend says why: not on the list, or email not confirmed yet.
-      const body = (await res.json().catch(() => null)) as { detail?: unknown } | null;
-      const detail = typeof body?.detail === "string" ? body.detail : NOT_ON_LIST;
-      return { user: null, denied: detail };
-    }
-    if (!res.ok) return { user: null, denied: null };
-    return { user: (await res.json()) as AuthUser, denied: null };
-  } catch {
-    return { user: null, denied: null };
-  }
+): Promise<{ user: AuthUser | null; denied: string | null; error: string | null }> {
+  return fetchSessionProfile(`${API_BASE_URL}/api/v1/auth/me`, token);
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -108,12 +91,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /** Ask the backend who this Firebase account is; sign out of Firebase if refused. */
   const resolveFirebaseUser = useCallback(async (fbUser: FirebaseUser, forceRefresh = false) => {
-    const token = await fbUser.getIdToken(forceRefresh);
-    const { user: me, denied } = await fetchMeWithStatus(token);
-    setUser(me);
-    setAccessMessage(denied);
-    // Not on the list: sign out of Google too, so they can try another account.
-    if (denied && firebaseAuth) await firebaseSignOut(firebaseAuth);
+    try {
+      const token = await fbUser.getIdToken(forceRefresh);
+      const { user: me, denied, error } = await fetchMeWithStatus(token);
+      setUser(me);
+      setAccessMessage(denied ?? error);
+      // Only access-list denial signs out; transient errors can be retried.
+      if (denied && firebaseAuth) await firebaseSignOut(firebaseAuth);
+      return Boolean(me);
+    } catch {
+      setUser(null);
+      setAccessMessage("Your sign-in session couldn't be refreshed. Please sign in again.");
+      return false;
+    }
   }, []);
 
   const getToken = useCallback(async (): Promise<string | null> => {
@@ -175,13 +165,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInEmail = useCallback(async (email: string, password: string) => {
     if (!firebaseAuth) throw new Error("Firebase is not configured.");
-    await signInWithEmailAndPassword(firebaseAuth, email, password);
-  }, []);
+    const previousUid = firebaseAuth.currentUser?.uid;
+    const credential = await signInWithEmailAndPassword(firebaseAuth, email, password);
+    // Firebase needn't emit an auth-state change when the same account retries.
+    if (previousUid === credential.user.uid && !needsConfirmation(credential.user)) {
+      setUnconfirmedEmail(null);
+      await resolveFirebaseUser(credential.user, true);
+    }
+  }, [resolveFirebaseUser]);
 
   const signInGoogle = useCallback(async () => {
     if (!firebaseAuth) throw new Error("Firebase is not configured.");
-    await signInWithPopup(firebaseAuth, new GoogleAuthProvider());
-  }, []);
+    const previousUid = firebaseAuth.currentUser?.uid;
+    const credential = await signInWithPopup(firebaseAuth, new GoogleAuthProvider());
+    if (previousUid === credential.user.uid) {
+      setUnconfirmedEmail(null);
+      await resolveFirebaseUser(credential.user, true);
+    }
+  }, [resolveFirebaseUser]);
 
   const devSignIn = useCallback(async (uid: string) => {
     localStorage.setItem(DEV_UID_KEY, uid);

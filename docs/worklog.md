@@ -5,6 +5,31 @@ Newest entries at the top. One dated section per working session.
 
 ---
 
+## 2026-11-05 — Firebase sign-in verification and visible failures
+
+Real Firebase sign-ins were refused because the backend requested Google's
+public keys at `/jwks/` (HTTP 404), rather than `/jwk/` (HTTP 200). Corrected
+the endpoint without changing token signature, issuer, audience, email
+confirmation or wedding-access checks.
+
+The frontend previously ignored non-403 profile failures. It now shows errors
+for rejected tokens, backend/network failures and incomplete profile responses,
+while keeping access-list denial distinct. Repeated sign-in with the same
+Firebase account re-checks the backend instead of depending on a new Firebase
+auth-state event. Token-refresh failures are also visible. No automatic
+confirmation emails or messages were added.
+
+Regression coverage pins the signing-key URL and constructor configuration,
+and exercises profile success, 401/403 responses, malformed responses,
+server/network failures and successful retry using Node's built-in test runner:
+`node --test frontend/src/app/auth/sessionProfile.test.js`.
+
+Verification: all five backend scripts, all seven frontend regression tests and
+the production build passed. Google's signing keys were also retrieved using
+the actual configured PyJWT client. After rebuilding and restarting, the
+running backend returned HTTP 200 for the user's profile and wedding-list
+requests. The signed-in workspace was not independently browser-tested.
+
 ## 2026-11-04 (cleanup) — Legacy business screens removed (PD-003)
 
 **Context:** The app still carried VenueFlow's SaaS surfaces: a payment gate that held back vendor matching, a mock checkout that recorded a €299 "succeeded" payment nobody made, planner and admin areas, and a public marketing site. The owner approved removing them, with nothing to keep.
