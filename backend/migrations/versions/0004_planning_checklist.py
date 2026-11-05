@@ -5,7 +5,9 @@ Revises: 0003
 Create Date: 2026-11-05 13:20:49.342948
 
 """
+import datetime
 from typing import Sequence, Union
+from zoneinfo import ZoneInfo
 
 from alembic import op
 import sqlalchemy as sa
@@ -44,13 +46,26 @@ def upgrade() -> None:
     with op.batch_alter_table('checklist_tasks', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_checklist_tasks_wedding_id'), ['wedding_id'], unique=False)
 
-    # Plain ADD COLUMNs, so SQLite doesn't copy the weddings table. Existing weddings
-    # start with neither set; the checklist treats a missing "set on" day as today.
+    # Plain ADD COLUMNs, so SQLite doesn't copy the weddings table.
     # The old timeline_items rows are left alone here: manage_checklist.py merges them
     # into the checklist after the owner's list is loaded, then removes them.
     with op.batch_alter_table('weddings', schema=None) as batch_op:
         batch_op.add_column(sa.Column('wedding_date_set_on', sa.Date(), nullable=True))
         batch_op.add_column(sa.Column('checklist_imported_at', sa.DateTime(), nullable=True))
+
+    # A wedding that already has a date counts it as set on the day the checklist
+    # arrives: stages already past then are "catch up", and later ones can be overdue.
+    # Today is the date in Chicago, where the wedding is (app.utils.checklist); it's
+    # repeated here so the migration doesn't depend on app code that may change.
+    today = datetime.datetime.now(ZoneInfo("America/Chicago")).date()
+    weddings = sa.table('weddings', sa.column('wedding_date', sa.Date()),
+                        sa.column('wedding_date_set_on', sa.Date()))
+    op.execute(
+        weddings.update()
+        .where(weddings.c.wedding_date.isnot(None))
+        .where(weddings.c.wedding_date_set_on.is_(None))
+        .values(wedding_date_set_on=today)
+    )
 
     # ### end Alembic commands ###
 

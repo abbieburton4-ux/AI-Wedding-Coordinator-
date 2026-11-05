@@ -5,10 +5,13 @@ In one transaction it:
 2. loads the owner's list from their own file, kept outside git (call (e));
 3. adds the approved Jewish traditions, J2 taking the place of item 11m-3;
 4. merges the AI planner's old timeline rows: each goes into the stage nearest its
-   due date, unless its title matches a task already on the list;
-5. checks every timeline row is accounted for, then deletes them.
+   due date, unless its title matches a task already on the list, in which case its
+   tick and notes move onto that task;
+5. reads the checklist back and checks every timeline row is on it, then deletes them.
 
-The caller commits only if nothing raised; a dry run rolls the same work back.
+The caller commits only if nothing raised. A dry run does the same work on the live
+database and rolls it back; it isn't a copy, so take a backup before ``--apply``
+(RUNBOOK, "Loading the owner's checklist").
 """
 import datetime
 import json
@@ -83,7 +86,7 @@ def import_checklist(
     wedding_date: Optional[datetime.date] = None,
     today: Optional[datetime.date] = None,
 ) -> ImportReport:
-    today = today or datetime.date.today()
+    today = today or rules.wedding_today()
     if wedding.checklist_imported_at is not None:
         raise ImportRefused(
             f"This wedding's checklist was already imported on "
@@ -95,13 +98,19 @@ def import_checklist(
         if wedding_date != wedding.wedding_date:
             wedding.wedding_date = wedding_date
             wedding.wedding_date_set_on = today
-            session.add(wedding)
+    if wedding.wedding_date is not None and wedding.wedding_date_set_on is None:
+        # Without a "set on" day, stages that pass from now on would never show as
+        # overdue; today is the first day the checklist counts from.
+        wedding.wedding_date_set_on = today
+    session.add(wedding)
 
     existing = session.exec(
         select(ChecklistTask).where(ChecklistTask.wedding_id == wedding.id)
     ).all()
     refs = {t.source_ref for t in existing if t.source_ref}
-    known_titles = {rules.title_key(t.title) for t in existing}
+    by_title = {}
+    for t in existing:
+        by_title.setdefault(rules.title_key(t.title), t)
     next_position = {}
     for t in existing:
         next_position[t.stage] = max(next_position.get(t.stage, 0), t.position)
@@ -113,12 +122,13 @@ def import_checklist(
         if ref in refs:
             return False
         next_position[stage] = next_position.get(stage, 0) + 1
-        session.add(ChecklistTask(
+        task = ChecklistTask(
             wedding_id=wedding.id, stage=stage, title=_clean(title), notes=notes,
             position=next_position[stage], source=source, source_ref=ref, done=done,
-        ))
+        )
+        session.add(task)
         refs.add(ref)
-        known_titles.add(rules.title_key(title))
+        by_title.setdefault(rules.title_key(title), task)
         return True
 
     traditions = {}
@@ -151,32 +161,35 @@ def import_checklist(
             "The wedding has AI timeline tasks to merge, which need a wedding date to "
             "place them; pass --wedding-date")
 
-    skipped_ids = set()
     for item in timeline:
         if f"ti:{item.id}" in refs:
             continue
-        if rules.title_key(item.title) in known_titles:
-            skipped_ids.add(item.id)
-            report.ai_skipped.append(item.title)
+        notes = (item.description or "").strip() or None
+        match = by_title.get(rules.title_key(item.title))
+        if match is not None:
+            # Same task already on the list: keep the AI row's tick and notes on it.
+            # The timeline never recorded when or by whom a row was done, so done_at
+            # stays empty rather than guessed.
+            carried = []
+            if item.status == "done" and not match.done:
+                match.done = True
+                carried.append("ticked")
+            if notes and not (match.notes or "").strip():
+                match.notes = notes
+                carried.append("notes copied")
+            if carried:
+                match.updated_at = utcnow()
+                session.add(match)
+            extra = f" ({', '.join(carried)})" if carried else ""
+            report.ai_skipped.append(f"{_clean(item.title)} = {match.title}{extra}")
             continue
         stage = rules.nearest_stage(wedding.wedding_date, item.due_at)
-        notes = (item.description or "").strip() or None
         add(stage.key, item.title, "ai_timeline", f"ti:{item.id}", notes=notes,
             done=item.status == "done")
         report.ai_added.append(f"{item.title} -> {stage.label}")
 
     session.flush()
-
-    # Before deleting anything, check each timeline row is now on the checklist or was
-    # skipped as a duplicate.
-    merged = set(session.exec(
-        select(ChecklistTask.source_ref).where(
-            ChecklistTask.wedding_id == wedding.id, ChecklistTask.source == "ai_timeline")
-    ).all())
-    missing = [i.id for i in timeline
-               if f"ti:{i.id}" not in merged and i.id not in skipped_ids]
-    if missing:
-        raise ImportRefused(f"{len(missing)} timeline rows weren't merged; nothing was deleted")
+    _check_timeline_accounted_for(session, wedding.id, timeline)
 
     for item in timeline:
         session.delete(item)
@@ -186,3 +199,41 @@ def import_checklist(
     session.add(wedding)
     session.flush()
     return report
+
+
+def _check_timeline_accounted_for(session: Session, wedding_id: str, timeline: list) -> None:
+    """Before anything is deleted, read the checklist back from the database and check
+    every timeline row is on it: merged as its own task with the same title, or matched
+    by title to a task that's at least as done. Anything else refuses the import."""
+    rows = session.exec(
+        select(ChecklistTask.source_ref, ChecklistTask.title, ChecklistTask.done)
+        .where(ChecklistTask.wedding_id == wedding_id)
+    ).all()
+    by_ref = {ref: (title, done) for ref, title, done in rows if ref}
+    done_by_title = {}
+    for _, title, done in rows:
+        key = rules.title_key(title)
+        done_by_title[key] = done_by_title.get(key, False) or done
+
+    current = session.exec(
+        select(TimelineItem.id).where(TimelineItem.wedding_id == wedding_id)
+    ).all()
+    if sorted(current) != sorted(i.id for i in timeline):
+        raise ImportRefused("The timeline changed during the import; nothing was deleted")
+
+    problems = []
+    for item in timeline:
+        was_done = item.status == "done"
+        merged = by_ref.get(f"ti:{item.id}")
+        if merged is not None:
+            title, done = merged
+            if title != _clean(item.title) or (was_done and not done):
+                problems.append(item.id)
+            continue
+        key = rules.title_key(item.title)
+        if key not in done_by_title or (was_done and not done_by_title[key]):
+            problems.append(item.id)
+    if problems:
+        raise ImportRefused(
+            f"{len(problems)} timeline rows aren't safely on the checklist; nothing was "
+            "deleted")

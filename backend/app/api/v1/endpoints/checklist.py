@@ -91,7 +91,7 @@ class ChecklistOut(BaseModel):
 
 def _today() -> datetime.date:
     # One place to read the date, so tests can fix it.
-    return datetime.date.today()
+    return rules.wedding_today()
 
 
 def _clean(text: str) -> str:

@@ -18,6 +18,7 @@ from app.db.models import (
     Booking, Venue, Supplier, Quote,
 )
 from app.utils.budget_compare import compare_quote
+from app.utils import checklist as checklist_rules
 from app.api.v1.access import (
     UNSAFE_EMAIL, bootstrap_emails, require_wedding_access, weddings_for_member,
 )
@@ -77,6 +78,11 @@ async def create_wedding(
         if theirs.first() is not None:
             raise HTTPException(status_code=409, detail="Your wedding has already been set up.")
 
+    today = checklist_rules.wedding_today()
+    if payload.wedding_date is not None and payload.wedding_date < today:
+        # Same rule as the checklist's date control.
+        raise HTTPException(status_code=422, detail="Please pick a date that hasn't passed yet")
+
     wedding = Wedding(
         couple_user_id=current_user.id,
         guest_count_estimate=payload.guest_count_estimate,
@@ -85,6 +91,8 @@ async def create_wedding(
         ceremony_type=payload.ceremony_type,
         style_notes=payload.style_notes,
         wedding_date=payload.wedding_date,
+        # The checklist's "Catch up" group counts from the day the date was set (PD-007).
+        wedding_date_set_on=today if payload.wedding_date else None,
         wedding_date_start=payload.wedding_date_start,
         wedding_date_end=payload.wedding_date_end,
         status="intake"
@@ -146,9 +154,14 @@ async def update_wedding(
     wedding = await require_wedding_access(db, wedding_id, current_user, "editor")
 
     updates = payload.model_dump(exclude_unset=True)
-    if "wedding_date" in updates and updates["wedding_date"] != wedding.wedding_date:
+    today = checklist_rules.wedding_today()
+    new_date = updates.get("wedding_date")
+    if new_date is not None and new_date != wedding.wedding_date and new_date < today:
+        # Same rule as the checklist's date control.
+        raise HTTPException(status_code=422, detail="Please pick a date that hasn't passed yet")
+    if "wedding_date" in updates and new_date != wedding.wedding_date:
         # The checklist's "Catch up" group counts from the day the date was set (PD-007).
-        wedding.wedding_date_set_on = date.today() if updates["wedding_date"] else None
+        wedding.wedding_date_set_on = today if new_date else None
     for field, value in updates.items():
         setattr(wedding, field, value)
     if updates:

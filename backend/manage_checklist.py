@@ -4,8 +4,9 @@ The owner's list comes from their own file, which stays outside git (its wording
 from a wedding website). The import also adds the approved Jewish traditions and
 merges the AI planner's old timeline into the checklist, then removes the timeline.
 Run it against the database the app uses (SYNC_DATABASE_URL), only when the owner
-has asked. Without --apply it's a dry run: it does the whole import, prints what
-would change, and then undoes it.
+has asked, after taking a backup (RUNBOOK, "Loading the owner's checklist"). Without
+--apply it's a dry run: it does the whole import on that database, prints what would
+change, and then rolls it back. It isn't a copy, which is why the backup comes first.
 
     python manage_checklist.py import --wedding <id> --file <path> [--wedding-date YYYY-MM-DD] [--apply]
 """

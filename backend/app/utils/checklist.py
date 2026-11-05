@@ -4,7 +4,10 @@ Due dates are never stored: each stage's date is the wedding date moved by the s
 offset, worked out whenever the checklist is read, so changing the date moves them all.
 
 The rule for past stages, in full:
-- ``anchor`` is the day the wedding date was last set or changed (today if unknown).
+- ``anchor`` is the day the wedding date was last set or changed. It's recorded
+  whenever a date is set (intake, the date control, the profile, the import, and the
+  0004 migration for weddings that already had one), so "today if unknown" is only a
+  fallback for rows written some other way.
 - A stage whose due date is before the anchor was already past when the date was
   chosen. All such stages are shown together as one "Catch up" group, due on the date
   of the first stage still ahead on the anchor day. Their unfinished tasks are
@@ -18,6 +21,15 @@ import datetime
 import re
 from dataclasses import dataclass
 from typing import Iterable, List, Optional
+from zoneinfo import ZoneInfo
+
+# The wedding is in Chicago (docs/product/wedding.md), so "today" for due dates, "catch
+# up" and "overdue" is the date there, not the server's.
+WEDDING_TZ = ZoneInfo("America/Chicago")
+
+
+def wedding_today() -> datetime.date:
+    return datetime.datetime.now(WEDDING_TZ).date()
 
 
 @dataclass(frozen=True)

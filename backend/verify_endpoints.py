@@ -780,7 +780,11 @@ def test_api_suite():
             assert c.patch(f"/api/v1/weddings/{wedding_id}", json={"wedding_date": "2027-09-04"},
                            headers=editor_headers).status_code == 200
             with Session(sync_engine) as s:
-                assert s.get(Wedding, wedding_id).wedding_date_set_on == dt.date.today()
+                assert s.get(Wedding, wedding_id).wedding_date_set_on == rules.wedding_today()
+            assert c.patch(f"/api/v1/weddings/{wedding_id}", json={"wedding_date": "2020-01-01"},
+                           headers=editor_headers).status_code == 422, "same rule as the checklist"
+            with Session(sync_engine) as s:
+                assert s.get(Wedding, wedding_id).wedding_date == D(2027, 9, 4)
             c.put(f"{cl_url}/date", json={"wedding_date": "2027-08-21"}, headers=editor_headers)
             print("   * Date changes: groups and labels recompute; clearing the date keeps tasks")
         finally:
@@ -807,7 +811,8 @@ def test_api_suite():
                           ceremony_type="Civil", guest_count_estimate=10, budget_total=1.0))
             s.flush()
             s.add(TimelineItem(id="ti_imp_dup", wedding_id="w_import", kind="planning",
-                               title="  PLACEHOLDER 9m   task 1. ", due_at=D(2026, 11, 20)))
+                               title="  PLACEHOLDER 9m   task 1. ", due_at=D(2026, 11, 20),
+                               description="Fictional AI note", status="done"))
             s.add(TimelineItem(id="ti_imp_new", wedding_id="w_import", kind="planning",
                                title="Fictional AI task", description="From the planner",
                                due_at=D(2027, 2, 20), status="done"))
@@ -859,7 +864,8 @@ def test_api_suite():
         assert (report.owner_tasks, report.tradition_tasks) == (19 * 3 - 1, 18), report
         assert report.ai_added == ["Fictional AI task -> 6 Months Before",
                                    "Fictional rehearsal -> 2–3 Days Before"], report.ai_added
-        assert report.ai_skipped == ["  PLACEHOLDER 9m   task 1. "]
+        assert report.ai_skipped == [
+            "PLACEHOLDER 9m task 1. = Placeholder 9m task 1 (ticked, notes copied)"], report.ai_skipped
         assert report.timeline_rows_removed == 3
         with Session(sync_engine) as s:
             w = s.get(Wedding, "w_import")
@@ -873,6 +879,9 @@ def test_api_suite():
             eleven = sorted((t for t in tasks if t.stage == "11m"), key=lambda t: t.position)
             assert [t.source_ref for t in eleven] == ["11m-1", "11m-2", "J2"]
             assert "officiat" not in " ".join(t.title for t in eleven).lower()
+            dup = next(t for t in tasks if t.source_ref == "9m-1")
+            assert dup.done and dup.notes == "Fictional AI note", "a duplicate keeps its tick"
+            assert dup.done_at is None, "the timeline never said when; nothing is guessed"
             ai = {t.source_ref: t for t in tasks if t.source == "ai_timeline"}
             assert ai["ti:ti_imp_new"].done and ai["ti:ti_imp_new"].notes == "From the planner"
             their_task = ai["ti:ti_imp_new"].id
@@ -894,6 +903,39 @@ def test_api_suite():
         with Session(sync_engine) as s:
             assert s.get(ChecklistTask, their_task).done is True, "untouched"
         print("   * Cross-wedding: another wedding's tasks are refused (404) and untouched")
+
+        # A wedding that already had the date (made at intake before "set on" existed),
+        # imported with the same date: the import records the day, so stages that pass
+        # afterwards are overdue and "Catch up" doesn't grow.
+        from app.utils.checklist_import import _check_timeline_accounted_for
+        with Session(sync_engine) as s:
+            s.add(Wedding(id="w_import2", couple_user_id="u_import", region="Sligo",
+                          ceremony_type="Civil", guest_count_estimate=10, budget_total=1.0,
+                          wedding_date=D(2027, 8, 21)))
+            s.flush()
+            s.add(TimelineItem(id="ti_imp2", wedding_id="w_import2", kind="planning",
+                               title="Fictional second AI task", due_at=D(2027, 1, 21)))
+            s.commit()
+        with Session(sync_engine) as s:
+            timeline2 = s.exec(sync_select(TimelineItem).where(
+                TimelineItem.wedding_id == "w_import2")).all()
+            try:
+                _check_timeline_accounted_for(s, "w_import2", timeline2)
+                raise AssertionError("rows not on the checklist must stop the delete")
+            except ImportRefused:
+                pass
+            import_checklist(s, s.get(Wedding, "w_import2"), owner_list, D(2027, 8, 21),
+                             today=D(2026, 11, 5))
+            s.commit()
+        with Session(sync_engine) as s:
+            w2 = s.get(Wedding, "w_import2")
+            assert w2.wedding_date_set_on == D(2026, 11, 5)
+            later = rules.plan_groups(w2.wedding_date, w2.wedding_date_set_on, D(2026, 12, 25))
+            assert later[0].stage_keys == ["12m", "11m", "10m"], "catch up doesn't grow"
+            assert [p.key for p in later if p.past] == ["9m", "8m"], "passed since: overdue"
+            assert s.get(TimelineItem, "ti_imp2") is None
+        print("   * Import with the date already set records the day, so later stages go overdue; "
+              "the pre-delete check refuses rows that aren't on the checklist")
         print("   * Import: owner's list (11m-3 replaced by J2), 18 traditions, AI timeline merged "
               "by nearest stage with duplicates skipped, timeline removed; runs once; refusals "
               "and dry runs write nothing")
@@ -1066,7 +1108,14 @@ def test_api_suite():
 
             assert c.post("/api/v1/weddings/", json=wedding_payload, headers=fam).status_code == 403
             couple = firebase_headers("fb_newcouple", "newcouple@example.test", True)
-            assert c.post("/api/v1/weddings/", json=wedding_payload, headers=couple).status_code == 201
+            assert c.post("/api/v1/weddings/", json=dict(wedding_payload, wedding_date="2020-01-01"),
+                          headers=couple).status_code == 422, "no past date at intake either"
+            res = c.post("/api/v1/weddings/", json=dict(wedding_payload, wedding_date="2027-08-21"),
+                         headers=couple)
+            assert res.status_code == 201, res.text
+            from app.utils.checklist import wedding_today
+            assert res.json()["wedding_date_set_on"] == wedding_today().isoformat(), \
+                "a date given at intake counts as set that day (PD-007)"
             assert c.post("/api/v1/weddings/", json=wedding_payload, headers=couple).status_code == 409
             print("   * Weddings: only the couple's own email can create one, and only one")
 

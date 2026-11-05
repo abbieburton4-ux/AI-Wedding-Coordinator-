@@ -96,13 +96,26 @@ def main() -> None:
             "created_at) VALUES ('ti1', 'w1', 'planning', 'Placeholder', '2027-01-01', "
             "'todo', '2026-01-01')"
         ))
+        conn.execute(text(
+            "INSERT INTO weddings (id, couple_user_id, region, ceremony_type, "
+            "guest_count_estimate, budget_total, currency, status, created_at, wedding_date) "
+            "VALUES ('w2', 'u1', 'Sligo', 'Civil', 10, 1000.0, 'EUR', 'intake', "
+            "'2026-01-01', '2027-08-21')"
+        ))
     command.upgrade(cfg, "head")
     with engine.connect() as conn:
         dates = conn.execute(text(
-            "SELECT wedding_date_set_on, checklist_imported_at FROM weddings")).fetchall()
+            "SELECT wedding_date_set_on, checklist_imported_at FROM weddings "
+            "WHERE id = 'w1'")).fetchall()
+        dated = conn.execute(text(
+            "SELECT wedding_date_set_on FROM weddings WHERE id = 'w2'")).scalar()
+        conn.execute(text("DELETE FROM weddings WHERE id = 'w2'"))
+        conn.commit()
         kept = conn.execute(text("SELECT id FROM timeline_items")).fetchall()
         tasks = conn.execute(text("SELECT COUNT(*) FROM checklist_tasks")).scalar()
     assert [tuple(r) for r in dates] == [(None, None)], dates
+    from app.utils.checklist import wedding_today
+    assert dated == wedding_today().isoformat(), "a dated wedding counts from the migration day"
     assert [tuple(r) for r in kept] == [("ti1",)], "the import merges these, not the migration"
     assert tasks == 0, tasks
 
