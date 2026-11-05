@@ -63,9 +63,11 @@ class Wedding(SQLModel, table=True):
     region: str
     ceremony_type: str
     guest_count_estimate: int
-    budget_total: float
+    # The intake estimate, a legacy float. Blank when the couple haven't decided their
+    # budget yet (PD-009); never 0 as a stand-in.
+    budget_total: Optional[float] = Field(default=None)
     # The couple's own total for the budget screen (PD-004), in whole US cents. Blank
-    # until they set it; separate from the intake estimate above, which is a float.
+    # until they set it; the setup form fills it in when they give a budget (PD-009).
     budget_total_cents: Optional[int] = Field(default=None)
     # The day wedding_date was last set or changed. Checklist stages already past on
     # that day form the "Catch up" group; stages that pass later show as overdue (PD-007).

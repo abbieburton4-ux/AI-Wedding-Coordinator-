@@ -4,6 +4,7 @@ import { Icon } from "../../shared/Icon";
 import { useWedding, useAgentMatcher, useApi } from "../../api";
 import { POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from "../../api/config";
 import { useActiveWedding } from "../WeddingProvider";
+import { formatCents } from "./budget/money";
 
 interface IntakeLog {
   id: string;
@@ -252,7 +253,7 @@ export function Dashboard() {
           Your AI coordinator is building your plan
         </h1>
         <p className="text-body-md text-on-surface-variant max-w-md">
-          Drafting a budget for a{" "}
+          Setting up your plan for a{" "}
           {wedding?.guest_count_estimate}-guest {wedding?.ceremony_type} wedding in {wedding?.region}.
         </p>
         {intakeStalled && (
@@ -297,7 +298,10 @@ export function Dashboard() {
                 {wedding.region} • {wedding.ceremony_type}
               </h2>
               <p className="text-sm text-on-surface-variant mt-1">
-                {wedding.guest_count_estimate} guests • €{wedding.budget_total.toLocaleString()} budget
+                {wedding.guest_count_estimate} guests •{" "}
+                {wedding.budget_total_cents != null
+                  ? `${formatCents(wedding.budget_total_cents)} budget`
+                  : "Budget not set yet"}
               </p>
             </div>
             <span className="px-3 py-1.5 bg-primary/10 text-primary rounded-full text-xs font-bold uppercase tracking-wider">

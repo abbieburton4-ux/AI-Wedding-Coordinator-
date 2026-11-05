@@ -86,6 +86,50 @@ def test_api_suite():
         assert wedding["status"] == "intake"
         assert wedding["guest_count_estimate"] == 120
         print(f"   * Creation Success: Wedding {wedding_id} committed in intake status")
+        # The older dollars field is only the intake estimate; it doesn't set the total.
+        assert wedding["budget_total"] == 35000.0 and wedding["budget_total_cents"] is None
+        assert wedding["currency"] == "USD", "the setup form records dollars (PD-009)"
+
+        # The setup form (PD-009): budget left blank, US dollars, Jewish ceremony.
+        setup_headers = {"Authorization": "Bearer mock-couple_setup"}
+        setup_payload = {
+            "guest_count_estimate": 225, "region": "Placeholder City, ST, Country",
+            "ceremony_type": "Jewish", "currency": "USD", "wedding_date": "2027-08-21",
+            "couple_name": "Fictional Pair",
+        }
+        for bad in ({"currency": "EUR"}, {"region": "   "}, {"guest_count_estimate": 0},
+                    {"budget_total_cents": 0}, {"budget_total": -5.0},
+                    {"budget_total_cents": 100, "budget_total": 1.0}):
+            res = c.post("/api/v1/weddings/", json=dict(setup_payload, **bad), headers=setup_headers)
+            assert res.status_code == 422, (bad, res.status_code, res.text)
+        queued.clear()
+        weddings_module.enqueue_agent_task = _record
+        try:
+            res = c.post("/api/v1/weddings/", json=setup_payload, headers=setup_headers)
+        finally:
+            weddings_module.enqueue_agent_task = real_enqueue
+        assert res.status_code == 201, res.text
+        setup = res.json()
+        assert setup["budget_total"] is None and setup["budget_total_cents"] is None, \
+            "a blank budget stays blank, never 0"
+        assert (setup["currency"], setup["ceremony_type"], setup["guest_count_estimate"]) == \
+            ("USD", "Jewish", 225)
+        assert queued == [("intake-planner", {"wedding_id": setup["id"]})], \
+            "saving the form never starts vendor matching (PD-003)"
+        res = c.patch(f"/api/v1/weddings/{setup['id']}",
+                      json={"guest_count_estimate": 230}, headers=setup_headers)
+        assert res.status_code == 200 and res.json()["budget_total"] is None
+        assert c.patch(f"/api/v1/weddings/{setup['id']}", json={"budget_total": 0},
+                       headers=setup_headers).status_code == 422, "0 never stands in for blank"
+        res = c.get(f"/api/v1/weddings/{setup['id']}/budget/overview", headers=setup_headers)
+        assert res.status_code == 200 and res.json()["totals"]["total_cents"] is None
+        # A budget given on the form is the couple's own total, in whole cents.
+        res = c.post("/api/v1/weddings/", json=dict(setup_payload, budget_total_cents=4_500_050),
+                     headers={"Authorization": "Bearer mock-couple_setup_budget"})
+        assert res.status_code == 201, res.text
+        assert res.json()["budget_total_cents"] == 4_500_050
+        assert res.json()["budget_total"] == 45000.5
+        print("   * Setup form: a blank budget saves as blank, in dollars, and only queues the planner")
         
         # Verify access control
         unauth_headers = {"Authorization": "Bearer mock-couple_2"}

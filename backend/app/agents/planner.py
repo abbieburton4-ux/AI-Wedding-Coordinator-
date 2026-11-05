@@ -1,10 +1,11 @@
 import json
 import logging
+from typing import Optional
 from pydantic import BaseModel, Field
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from google.genai import types
-from app.db.models import Wedding, User
+from app.db.models import Wedding
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
 from app.utils.constants import ALLOWED_BUDGET_CATEGORIES, normalize_category
@@ -45,9 +46,29 @@ SYSTEM_INSTRUCTION = (
     "Return valid JSON conforming to the response schema."
 )
 
+# The market rules above are Irish and in euros, so they can't judge any other budget
+# (B11). Without a total there is nothing to check (PD-009).
+SKIP_SUMMARIES = {
+    "no_budget": "Budget check not run: the couple haven't set a total budget yet.",
+    "not_irish_pricing": "Budget check not run: the planner's price guide covers Irish "
+                         "weddings in euros only, so it can't judge this budget.",
+}
+
+
+def _skip_reason(wedding: Wedding) -> Optional[str]:
+    if wedding.budget_total is None:
+        return "no_budget"
+    if (wedding.currency or "").upper() != "EUR":
+        return "not_irish_pricing"
+    return None
+
+
 @run_agent("intake_planner", "intake_plan")
 async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = False):
     """Checks the intake profile and drafts a budget split, kept in the decision log.
+
+    With no total budget, or a wedding outside the Irish euro price guide, it skips
+    the model call and moves the wedding to planning, so setup never stalls (PD-009).
 
     The planning checklist (PD-007) replaced the generated timeline, so this agent no
     longer writes timeline items, even if the model returns some.
@@ -62,21 +83,26 @@ async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = Fa
     model = model_for(agent_id)
     prompt_version = get_prompt_version(SYSTEM_INSTRUCTION)
     
-    # 1. Fetch wedding and couple info
+    # 1. Fetch the wedding
     result = await db.exec(select(Wedding).where(Wedding.id == wedding_id))
     wedding = result.first()
     if not wedding:
         raise ValueError(f"Wedding not found: {wedding_id}")
-        
-    couple_result = await db.exec(select(User).where(User.id == wedding.couple_user_id))
-    couple = couple_result.first()
-    if not couple:
-        raise ValueError(f"Couple user not found for ID: {wedding.couple_user_id}")
-        
-    # 2. Formulate context payload
+
+    skip_reason = _skip_reason(wedding)
+    if skip_reason:
+        # No model call, so there is no model, prompt, confidence or token count to record.
+        wedding.status = "planning"
+        db.add(wedding)
+        return (
+            {"budget_check": "skipped", "skip_reason": skip_reason,
+             "rationale_summary": SKIP_SUMMARIES[skip_reason]},
+            None, None, None, [],
+        )
+
+    # 2. Formulate context payload. The couple's names stay out (PD-009, rule 3).
     input_payload = {
         "wedding_id": str(wedding.id),
-        "couple_name": couple.name,
         "budget_total": wedding.budget_total,
         "currency": wedding.currency,
         "guest_count": wedding.guest_count_estimate,

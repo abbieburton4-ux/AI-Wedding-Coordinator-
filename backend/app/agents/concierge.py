@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from google.genai import types
-from app.db.models import Wedding, User, BudgetLine, ChecklistTask, Booking, Quote, Supplier, Venue
+from app.db.models import Wedding, BudgetLine, ChecklistTask, Booking, Quote, Supplier, Venue
 from app.utils.checklist import STAGE_BY_KEY, STAGE_KEYS, stage_due
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
@@ -30,14 +30,25 @@ SYSTEM_INSTRUCTION = (
     "rates and tell them clearly whether it fits.\n"
     "- NEVER invent vendors, prices, or commitments that aren't in the context. If the info isn't there, "
     "say so plainly and suggest the next step (e.g. 'run the matcher', 'log the quote').\n"
-    "- Use € and Irish context. Don't recite the whole context back — just answer the question.\n"
+    "- Give amounts in the currency the context shows them in; never convert or relabel them. "
+    "Don't recite the whole context back — just answer the question.\n"
     "Return valid JSON conforming to the response schema."
 )
 
 
+def _total_budget_text(wedding: Wedding) -> str:
+    """The couple's own total in dollars (PD-004) when set; otherwise an older euro
+    intake estimate, labelled as one; otherwise "not set yet", never 0 (PD-009)."""
+    cents = wedding.budget_total_cents
+    if cents is not None:
+        return f"${cents // 100:,}" + (f".{cents % 100:02d}" if cents % 100 else "") + " (US dollars)"
+    if wedding.budget_total is not None and (wedding.currency or "").upper() == "EUR":
+        return f"€{wedding.budget_total:,.0f} (euros, an estimate from the setup form)"
+    return "not set yet"
+
+
 async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
     """Assembles a compact, factual snapshot of the couple's wedding for grounding."""
-    couple = (await db.exec(select(User).where(User.id == wedding.couple_user_id))).first()
     budget = (await db.exec(
         select(BudgetLine).where(BudgetLine.wedding_id == wedding.id).order_by(BudgetLine.allocated_amount.desc())
     )).all()
@@ -51,12 +62,12 @@ async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
     bookings = (await db.exec(select(Booking).where(Booking.wedding_id == wedding.id))).all()
 
     lines: list[str] = []
-    lines.append(f"Couple: {couple.name if couple else 'the couple'}")
+    # The couple's names stay out of the prompt (PD-009, rule 3).
     lines.append(
         f"Wedding: {wedding.guest_count_estimate} guests · {wedding.ceremony_type} · {wedding.region} · "
         f"date {wedding.wedding_date or 'TBD'}."
     )
-    lines.append(f"Total budget: €{wedding.budget_total:,.0f}. Plan status: {wedding.status}.")
+    lines.append(f"Total budget: {_total_budget_text(wedding)}. Plan status: {wedding.status}.")
 
     if budget:
         lines.append("Budget lines (allocated / spent):")
