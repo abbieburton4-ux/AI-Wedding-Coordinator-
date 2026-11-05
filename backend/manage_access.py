@@ -18,6 +18,7 @@ from sqlmodel import Session, select  # noqa: E402
 
 from app.db.models import ACCESS_LEVELS, Wedding, WeddingMember  # noqa: E402
 from app.db.session import sync_engine  # noqa: E402
+from app.utils.email_match import UnsafeEmailError, is_safe_email, normalise_email  # noqa: E402
 
 
 def main() -> None:
@@ -38,12 +39,20 @@ def main() -> None:
             ).all()
             for row in rows:
                 state = "signed in" if row.user_id else "not signed in yet"
+                if not is_safe_email(row.email):
+                    state += "; has non-ASCII characters, so it can't match a new sign-in"
                 print(f"{row.level:7}  {row.email}  ({state})")
             return
 
         if not args.email:
             raise SystemExit("--email is required")
-        email = args.email.strip().lower()
+        try:
+            email = normalise_email(args.email)
+        except UnsafeEmailError:
+            raise SystemExit(
+                "That address has non-ASCII characters (for example, a look-alike letter "
+                "from another alphabet), so it can't be matched safely. Type it in plain letters."
+            )
         row = session.exec(
             select(WeddingMember).where(
                 WeddingMember.wedding_id == args.wedding, WeddingMember.email == email
