@@ -4,6 +4,21 @@ from typing import Optional, List, Dict, Any
 import datetime
 import uuid
 
+# Predictable constraint names, so later migrations can alter or drop a constraint by
+# name on both SQLite (batch mode) and Postgres. Set before any table is defined.
+# There is deliberately no "ck" entry: a check-constraint convention would rename the
+# existing named checks, so every CheckConstraint must be given an explicit name.
+# "ix" matches SQLAlchemy's default, which the existing indexes already use.
+# Never change this mapping once a real database exists: the existing migrations take
+# their constraint names from it at run time, so a change would make fresh databases
+# differ from deployed ones.
+SQLModel.metadata.naming_convention = {
+    "ix": "ix_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_N_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
+
 def generate_uuid_str() -> str:
     return str(uuid.uuid4())
 

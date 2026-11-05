@@ -20,7 +20,7 @@ from alembic import command  # noqa: E402
 from alembic.autogenerate import compare_metadata  # noqa: E402
 from alembic.config import Config  # noqa: E402
 from alembic.migration import MigrationContext  # noqa: E402
-from sqlalchemy import create_engine, text  # noqa: E402
+from sqlalchemy import create_engine, inspect, text  # noqa: E402
 from sqlmodel import SQLModel  # noqa: E402
 
 import app.db.models  # noqa: E402,F401  (registers every table on the metadata)
@@ -42,6 +42,27 @@ def main() -> None:
         for d in diff:
             print(f"   DIFF: {d}")
         raise SystemExit("FAILED: models and migrations differ; add a migration.")
+
+    print("2b. Checking every key, unique and check constraint has a name...")
+    with engine.connect() as conn:
+        insp = inspect(conn)
+        unnamed = []
+        for table in insp.get_table_names():
+            if table == "alembic_version":
+                continue
+            if not insp.get_pk_constraint(table).get("name"):
+                unnamed.append(f"{table} primary key")
+            unnamed += [f"{table} FK {fk['constrained_columns']}"
+                        for fk in insp.get_foreign_keys(table) if not fk.get("name")]
+            unnamed += [f"{table} unique {uq['column_names']}"
+                        for uq in insp.get_unique_constraints(table) if not uq.get("name")]
+            # No "ck" convention exists, so each check constraint must be named by hand.
+            unnamed += [f"{table} check {ck['sqltext']}"
+                        for ck in insp.get_check_constraints(table) if not ck.get("name")]
+    if unnamed:
+        for u in unnamed:
+            print(f"   UNNAMED: {u}")
+        raise SystemExit("FAILED: constraints without a name can't be altered or dropped later.")
 
     print("3. Checking that 0002 makes each existing couple their wedding's owner...")
     command.downgrade(cfg, "0001")
