@@ -9,13 +9,18 @@ interface BudgetLine {
   spent_amount: number;
 }
 
-interface TimelineItem {
-  id: string;
-  title: string;
-  description?: string;
-  due_at: string;
-  status: string;
-  kind: string;
+/** Just what the overview needs from GET /weddings/{id}/checklist (PD-007). */
+export interface ChecklistSummary {
+  done: number;
+  total: number;
+  groups: {
+    key: string;
+    kind: "catch_up" | "stage";
+    label: string;
+    due_on: string | null;
+    current: boolean;
+    tasks: { id: string; title: string; done: boolean; label: "catch_up" | "overdue" | null }[];
+  }[];
 }
 
 interface Booking {
@@ -56,7 +61,7 @@ interface WeddingData {
 interface WeddingFullState {
   wedding: WeddingData | null;
   budgetLines: BudgetLine[];
-  timelineItems: TimelineItem[];
+  checklist: ChecklistSummary | null;
   bookings: Booking[];
 }
 
@@ -74,7 +79,7 @@ export function useWedding(weddingId: string | null) {
   const [data, setData] = useState<WeddingFullState>({
     wedding: null,
     budgetLines: [],
-    timelineItems: [],
+    checklist: null,
     bookings: [],
   });
 
@@ -84,17 +89,17 @@ export function useWedding(weddingId: string | null) {
     try {
       // Sub-resources use .catch so a single failing endpoint can never blank
       // the whole dashboard (the wedding fetch itself must succeed).
-      const [wedding, budgetLines, timelineItems, bookings] = await Promise.all([
+      const [wedding, budgetLines, checklist, bookings] = await Promise.all([
         request<WeddingData>(`/weddings/${weddingId}`),
         request<BudgetLine[]>(`/weddings/${weddingId}/budget`).catch(() => [] as BudgetLine[]),
-        request<TimelineItem[]>(`/weddings/${weddingId}/timeline`).catch(() => [] as TimelineItem[]),
+        request<ChecklistSummary>(`/weddings/${weddingId}/checklist`).catch(() => null),
         request<Booking[]>(`/weddings/${weddingId}/bookings`).catch(() => [] as Booking[]),
       ]);
 
       setData({
         wedding,
         budgetLines,
-        timelineItems,
+        checklist,
         bookings,
       });
     } catch {

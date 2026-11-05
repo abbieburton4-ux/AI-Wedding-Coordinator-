@@ -1,12 +1,10 @@
 import json
 import logging
-import uuid
-from datetime import datetime, timedelta, date
 from pydantic import BaseModel, Field
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from google.genai import types
-from app.db.models import Wedding, User, TimelineItem
+from app.db.models import Wedding, User
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
 from app.utils.constants import ALLOWED_BUDGET_CATEGORIES, normalize_category
@@ -19,24 +17,17 @@ class BudgetLineDraft(BaseModel):
     allocated_amount: float = Field(description="Amount allocated in EUR")
     rationale: str = Field(description="Brief explanation of why this amount was allocated")
 
-class TimelineItemDraft(BaseModel):
-    title: str = Field(description="Short milestone title")
-    description: str = Field(description="Brief description of what to do")
-    months_before: float = Field(description="Due date as number of months before the wedding date (e.g., 12.0 for 1 year, 0.5 for 2 weeks, 0.0 for wedding day)")
-    kind: str = Field(description="Must be 'planning' or 'day_of'")
-
 class IntakeResult(BaseModel):
     is_budget_realistic: bool = Field(description="False if the budget is clearly too low for the estimated guest count in that Irish region (e.g. €5,000 for 150 guests in Dublin). True otherwise.")
     guardrail_warning: str = Field(description="Reason why the budget is unrealistic (with Irish market-rate comparisons), or empty if realistic.")
     budget_lines: list[BudgetLineDraft] = Field(description="Allocated budget split across categories.")
-    timeline_items: list[TimelineItemDraft] = Field(description="Timeline planning milestones.")
     rationale_summary: str = Field(description="A short summary of the generated plan or guardrail violation.")
     confidence_score: float = Field(description="A score between 0.0 and 1.0 representing the agent's confidence.")
 
 
 SYSTEM_INSTRUCTION = (
     "You are an expert Irish wedding coordinator. Your job is to draft a comprehensive budget allocation "
-    "and planning timeline for a couple based on their intake form. You must validate if their budget is realistic.\n\n"
+    "for a couple based on their intake form. You must validate if their budget is realistic.\n\n"
     "IRISH MARKET RULES & BUDGET TARGETS:\n"
     "- A typical wedding in Ireland has a total budget of €25,000 to €45,000 for 120-180 guests.\n"
     "- Average cost per head for hotel/catering is €75-€120.\n"
@@ -47,21 +38,19 @@ SYSTEM_INSTRUCTION = (
     "where catering alone would exceed €12,000), you MUST trigger a budget guardrail warning by setting "
     "is_budget_realistic=false and writing a helpful guardrail_warning explaining the market averages in Ireland.\n\n"
     "CEREMONY BUDGET SPLITS:\n"
-    "- 'Irish Catholic': Seed budget lines including a church donation/fee (~€400-500) and standard allocations. "
-    "Timeline must include the mandatory pre-marriage course (Accord) at least 6 months before.\n"
-    "- 'Civil/Humanist': Seed budget lines with an officiant fee (~€350-450) and omit church donation. "
-    "Timeline must include booking the HSE registry appointment (requires 3 months notice minimum in Ireland).\n"
+    "- 'Irish Catholic': Seed budget lines including a church donation/fee (~€400-500) and standard allocations.\n"
+    "- 'Civil/Humanist': Seed budget lines with an officiant fee (~€350-450) and omit church donation.\n"
     "- 'Hindu': Seed splits with decoration/mandap and multi-day elements (Mehndi, Sangeet) taking a higher split (~12% on decor/florals, 10% on pre-wedding events).\n"
-    "- 'Multi-cultural': Merge Catholic/Hindu or Civil/Hindu elements and explain in rationales.\n\n"
-    "TIMELINE HORIZONS:\n"
-    "- If the wedding is <6 months away, generate an accelerated 'sprint' timeline (marking early tasks as high priority).\n"
-    "- If the wedding date is TBD (date is null, but range is given), write timeline descriptions that adapt (e.g. 'Book venue - 12 months before target range').\n"
+    "- 'Multi-cultural': Merge Catholic/Hindu or Civil/Hindu elements and explain in rationales.\n"
     "Return valid JSON conforming to the response schema."
 )
 
-@run_agent("intake_planner", "timeline_generate")
+@run_agent("intake_planner", "intake_plan")
 async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = False):
-    """Orchestrates intake analysis and seeds the timeline.
+    """Checks the intake profile and drafts a budget split, kept in the decision log.
+
+    The planning checklist (PD-007) replaced the generated timeline, so this agent no
+    longer writes timeline items, even if the model returns some.
 
     When ``force`` is True the budget-realism guardrail is acknowledged rather
     than blocking: the warning is still recorded on the decision log (so the
@@ -166,8 +155,7 @@ async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = Fa
         )
 
     # 5. Success Path: Mutate Database
-    # Success moves the wedding into planning: the budget and timeline below are the
-    # couple's full plan (PD-003 removed the paid "preview" stage).
+    # Success moves the wedding into planning (PD-003 removed the paid "preview" stage).
     wedding.status = "planning"
     db.add(wedding)
     
@@ -175,43 +163,6 @@ async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = Fa
     # PD-004 dollar tables, which they fill in themselves (or from the AI split they ask
     # for); the old euro BudgetLine rows are no longer created (B42).
 
-    # Seed timeline items
-    wedding_date_str = wedding.wedding_date or wedding.wedding_date_start
-    if wedding_date_str:
-        # Check if date is date object or string
-        base_date = wedding_date_str if isinstance(wedding_date_str, date) else datetime.strptime(wedding_date_str, "%Y-%m-%d").date()
-    else:
-        base_date = date.today() + timedelta(days=365)  # 1 year out fallback
-        
-    # Fit the plan to the time the couple actually has. The agent returns standard
-    # Irish lead times (months_before up to ~24), but a couple starting e.g. 7 months
-    # out must not get tasks dated in the past. If the longest lead exceeds the days
-    # remaining, compress every milestone proportionally into [today, wedding date];
-    # always floor a due date at today as a safety net.
-    today = date.today()
-    items = result_dict.get("timeline_items", [])
-    available_days = (base_date - today).days
-    max_days_before = max((int(i.get("months_before", 0) * 30.5) for i in items), default=0)
-    scale = (available_days / max_days_before) if (max_days_before > available_days and available_days > 0) else 1.0
-
-    for item in items:
-        days_before = int(item["months_before"] * 30.5 * scale)
-        due_at = base_date - timedelta(days=days_before)
-        if due_at < today:
-            due_at = today  # never schedule a milestone before the couple started
-
-        timeline_item = TimelineItem(
-            id=f"ti_{uuid.uuid4().hex[:10]}",
-            wedding_id=wedding.id,
-            kind=item["kind"],
-            title=item["title"],
-            description=item["description"],
-            due_at=due_at,
-            status="todo",
-            generated_by_agent_id=agent_id
-        )
-        db.add(timeline_item)
-        
     # Return details for log recording
     return (
         result_dict,

@@ -70,13 +70,14 @@ def on_startup():
         logger.error(f"Error during startup database seeding: {e}")
 
 # Include Routers
-from app.api.v1.endpoints import weddings, webhooks, auth, inquiries, voice, members, budget
+from app.api.v1.endpoints import weddings, webhooks, auth, inquiries, voice, members, budget, checklist
 from app.worker import tasks
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(weddings.router, prefix="/api/v1/weddings", tags=["Weddings"])
 app.include_router(members.router, prefix="/api/v1/weddings", tags=["Access"])
 app.include_router(budget.router, prefix="/api/v1/weddings", tags=["Budget"])
+app.include_router(checklist.router, prefix="/api/v1/weddings", tags=["Checklist"])
 app.include_router(inquiries.router, prefix="/api/v1/inquiries", tags=["Inquiries"])
 app.include_router(voice.router, prefix="/api/v1/voice", tags=["Voice"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["Webhooks"])

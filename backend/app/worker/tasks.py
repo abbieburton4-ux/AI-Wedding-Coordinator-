@@ -39,7 +39,7 @@ async def task_intake_planner(
     payload: IntakePlannerTaskSchema, 
     db: AsyncSession = Depends(get_db)
 ):
-    """Worker task running the intake planner (budget + timeline).
+    """Worker task running the intake planner (draft budget).
 
     On success the wedding moves to 'planning' (set by the agent). Venue and supplier
     matching run separately, only when the couple ask for them (PD-003, B11).

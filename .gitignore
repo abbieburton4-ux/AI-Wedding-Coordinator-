@@ -100,3 +100,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# The owner's checklist source (PD-007): its wording stays out of git
+wedding-checklist-prompt.md

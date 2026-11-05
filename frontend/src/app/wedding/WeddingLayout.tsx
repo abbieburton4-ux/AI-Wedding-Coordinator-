@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   { path: "/wedding/budget", label: "Budget", deskIcon: "payments", mobileLabel: "Budget", mobileIcon: "account_balance_wallet", mobile: true },
   { path: "/wedding/guests", label: "Guests & Seating", deskIcon: "group", mobileLabel: "Guests", mobileIcon: "people", mobile: true },
   { path: "/wedding/seating", label: "Seating Plan", deskIcon: "table_restaurant", mobileLabel: "Seating", mobileIcon: "table_restaurant", mobile: false },
-  { path: "/wedding/timeline", label: "Timeline", deskIcon: "auto_schedule", mobileLabel: "Timeline", mobileIcon: "event", mobile: true },
+  { path: "/wedding/checklist", label: "Checklist", deskIcon: "checklist", mobileLabel: "Checklist", mobileIcon: "checklist", mobile: true },
 ];
 
 const ACCESS_PATH = "/wedding/access";
