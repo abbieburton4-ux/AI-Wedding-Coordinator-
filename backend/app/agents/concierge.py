@@ -9,6 +9,7 @@ from app.db.models import Wedding, BudgetLine, ChecklistTask, Booking, Quote, Su
 from app.utils.checklist import STAGE_BY_KEY, STAGE_KEYS, stage_due
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
+from app.agents.privacy import send_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +129,8 @@ async def run_concierge(db: AsyncSession, wedding_id: str, message: str):
     response = None
     for attempt in range(3):
         try:
-            response = await client.aio.models.generate_content(
+            response = await send_prompt(
+                db, wedding_id, client,
                 model=model,
                 contents=prompt,
                 config=types.GenerateContentConfig(

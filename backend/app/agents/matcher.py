@@ -8,6 +8,7 @@ from google.genai import types
 from app.db.models import Wedding, Venue, Supplier, Booking, BudgetLine
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
+from app.agents.privacy import send_prompt
 from app.utils.constants import region_matches
 
 logger = logging.getLogger(__name__)
@@ -132,10 +133,11 @@ async def run_venue_matcher(db: AsyncSession, wedding_id: str):
     }
     
     client = get_client()
-    prompt = f"Match venues for the following couple profile and options:\n{json.dumps(input_payload, indent=2)}"
+    prompt = f"Match venues for the following couple profile and options:\n{json.dumps(input_payload, indent=2, ensure_ascii=False)}"
     
     # Call Gemini
-    response = await client.aio.models.generate_content(
+    response = await send_prompt(
+        db, wedding_id, client,
         model=model,
         contents=prompt,
         config=types.GenerateContentConfig(
@@ -267,10 +269,11 @@ async def run_supplier_matcher(db: AsyncSession, wedding_id: str, category: str)
     }
     
     client = get_client()
-    prompt = f"Match suppliers in category '{category}' for the following profile:\n{json.dumps(input_payload, indent=2)}"
+    prompt = f"Match suppliers in category '{category}' for the following profile:\n{json.dumps(input_payload, indent=2, ensure_ascii=False)}"
     
     # Call Gemini
-    response = await client.aio.models.generate_content(
+    response = await send_prompt(
+        db, wedding_id, client,
         model=model,
         contents=prompt,
         config=types.GenerateContentConfig(

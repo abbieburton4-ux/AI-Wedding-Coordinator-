@@ -27,12 +27,13 @@ async def sendgrid_inbound_parse(request: Request, db: AsyncSession = Depends(ge
     subject = form_data.get("subject", "")
     sender = form_data.get("from", "")
 
-    logger.info(f"SendGrid Inbound Webhook: Received email from {sender} to {to_address} (Subject: {subject})")
+    # Sender and subject can name the couple or guests, so they stay out of the logs.
+    logger.info("SendGrid Inbound Webhook: received an email")
 
     # Match booking ID from 'to' address
     match = BOOKING_EMAIL_RE.search(to_address)
     if not match:
-        logger.warning(f"Inbound email to '{to_address}' did not match booking address regex. Ignored.")
+        logger.warning("Inbound email address did not match a booking. Ignored.")
         return {"status": "ignored", "reason": "invalid_address"}
 
     booking_id = match.group(1)

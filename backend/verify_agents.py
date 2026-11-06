@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import re
 import asyncio
 import uuid
 from unittest.mock import patch, MagicMock
@@ -631,6 +632,157 @@ async def run_async_verification():
             context = await _build_context(db, w_setup)
             assert "Total budget: $50,000.50 (US dollars)." in context and "€" not in context, context
             print("   * Concierge context: the couple's dollar total, never shown in euros")
+
+    # PD-008 (B49): no guest or party name, contact detail or dietary note reaches
+    # Gemini or the decision log, from any agent. All data here is fictional.
+    print("\nTEST 12c: Guest and party personal data never reaches a prompt (PD-008)...")
+    from types import SimpleNamespace
+    from app.db.models import Guest
+    from app.agents.concierge import run_concierge
+    from app.agents.budget_split import run_budget_splitter
+    from app.agents import privacy
+
+    forbidden = [
+        "ottoline", "quarrington", "ottoline.q@example.test", "555 0142", "5550142",
+        "barnaby", "fennimore", "201-3344", "2013344", "peanut allergy", "epipen",
+        "priya", "david", "priya.david@example.com", "holt", "3125550199",
+        "type-1 diabetic", "wilhelmina", "thackeray", "siobh", "bhriain",
+        "\\u00e1",
+    ]
+
+    def leaks(text) -> list:
+        lowered = (text or "").lower()
+        return [term for term in forbidden if term in lowered]
+
+    sent = []
+
+    async def capture(*args, **kwargs):
+        sent.append(kwargs)
+        contents = kwargs.get("contents") or ""
+        if "COUPLE'S QUESTION" in contents:
+            return MockResponse(json.dumps({"reply": "Yes, that works.", "confidence_score": 0.8}))
+        if "Suggest a starting split" in contents:
+            return MockResponse(json.dumps({"lines": [
+                {"category": "Venue", "percent": 90, "rationale": "Main cost."},
+                {"category": "[name]'s travel", "percent": 10, "rationale": "Travel."}],
+                "rationale_summary": "One line."}))
+        if "Create a wedding plan" in contents:
+            return MockResponse(json.dumps({
+                "is_budget_realistic": True, "guardrail_warning": "", "budget_lines": [],
+                "rationale_summary": "Fine.", "confidence_score": 0.9}))
+        if "Match " in contents:
+            return MockResponse(json.dumps({
+                "shortlist": [], "rationale_summary": "None.", "confidence_score": 0.5}))
+        return MockResponse(json.dumps({
+            "is_available": True, "line_items": [], "total_amount": 3200.0,
+            "currency": "EUR", "rationale_text": "Per-head menu.", "confidence_score": 0.9}))
+
+    priv_client = MagicMock()
+    priv_client.aio.models.generate_content = capture
+    wid = "wedding_planning_test"
+    with patch("app.agents.planner.get_client", return_value=priv_client), \
+         patch("app.agents.matcher.get_client", return_value=priv_client), \
+         patch("app.agents.extractor.get_client", return_value=priv_client), \
+         patch("app.agents.concierge.get_client", return_value=priv_client), \
+         patch("app.agents.budget_split.get_client", return_value=priv_client):
+        async with async_session_maker() as db:
+            db.add_all([
+                Guest(wedding_id=wid, name="Ottoline Quarrington",
+                      email="ottoline.q@example.test", phone="+353 87 555 0142",
+                      dietary="Severe peanut allergy, carries an EpiPen"),
+                Guest(wedding_id=wid, name="Barnaby Fennimore-Holt",
+                      phone="(555) 201-3344", dietary="vegetarian"),
+                Guest(wedding_id=wid, name="Siobhán Ní Bhriain"),
+                Guest(wedding_id=wid, name="Wilhelmina Thackeray",
+                      phone="3125550199", dietary="Type-1 diabetic"),
+                ChecklistTask(wedding_id=wid, stage="9m", position=1,
+                              title="Ask Ottoline Quarrington about the cake"),
+            ])
+            w_priv = (await db.exec(select(Wedding).where(Wedding.id == wid))).first()
+            w_priv.style_notes = "Rustic, with Barnaby playing harp; ask Priya and Siobhán."
+            db.add(w_priv)
+            await db.commit()
+            logs_before = {log.id for log in (await db.exec(select(AgentDecisionLog))).all()}
+
+            question = (
+                "Can Ottoline Quarrington (ottoline.q@example.test, 087 555 0142) sit near "
+                "Barnaby? She has a severe peanut allergy, carries an EpiPen. "
+                "We have 12 vegetarian guests and a budget of €3,200 for 2027-06-12. Priya. "
+                "Also can ottoline and FENNIMORE and holt sit together? Call 3125550199. "
+                "One guest is type 1, diabetic. Siobhan says hi."
+            )
+            await run_concierge(db, wid, message=question)
+            concierge_prompt = sent[-1]["contents"]
+            assert "12 vegetarian guests" in concierge_prompt, "counts and categories may be sent"
+            assert "€3,200" in concierge_prompt and "2027-06-12" in concierge_prompt
+            assert "[name]" in concierge_prompt and "[dietary note]" in concierge_prompt
+
+            await run_quote_extractor(
+                db, wid, "booking_photo_test",
+                "Dear Priya and David,\nBarnaby Fennimore-Holt's vegetarian menu is fine. "
+                "Ottoline QUARRINGTON can reach me on +1 (555) 201-3344 or "
+                "ottoline.q@example.test. 12 vegetarian mains at €40 each; total €3,200.",
+            )
+            extractor_prompt = sent[-1]["contents"]
+            assert "12 vegetarian mains at €40 each; total €3,200." in extractor_prompt
+
+            await run_intake_planner(db, wid, force=True)
+            await run_venue_matcher(db, wid)
+            await run_supplier_matcher(db, wid, "photography")
+            split = await run_budget_splitter(db, wid, total_cents=1_000_000,
+                                      category_names=["Venue", "Siobhán's travel"])
+
+            assert split.get("status") != "blocked", split
+            assert [line["name"] for line in split["lines"]] == ["Venue", "Siobhán's travel"], \
+                "a category named after a guest is sent without the name, then mapped back"
+            assert len(sent) == 6, f"every agent called the model once ({len(sent)})"
+            for call in sent:
+                instruction = getattr(call.get("config"), "system_instruction", "") or ""
+                assert not leaks(call.get("contents")), leaks(call.get("contents"))
+                assert not leaks(instruction), leaks(instruction)
+            print("   * Concierge, quote extractor, planner, both matchers and the budget "
+                  "splitter: no names, contacts or dietary notes sent; counts kept")
+
+            new_logs = [log for log in (await db.exec(select(AgentDecisionLog))).all()
+                        if log.id not in logs_before]
+            assert len(new_logs) == 6, len(new_logs)
+            for log in new_logs:
+                stored = json.dumps([log.input_payload, log.output_payload,
+                                     log.rationale_summary, log.error_message],
+                                    ensure_ascii=False)
+                assert not leaks(stored), (log.agent_id, leaks(stored))
+            print("   * Decision log rows hold no guest or party personal data")
+
+            # Refuses, rather than sends, if a detail is still there after redaction.
+            calls_before = len(sent)
+            try:
+                await privacy.send_prompt(
+                    db, wid, priv_client, model="m", contents="Seat plan",
+                    config=SimpleNamespace(system_instruction="Greet Ottoline Quarrington."))
+                raise AssertionError("a prompt holding a guest name must not be sent")
+            except privacy.PersonalDataInPrompt:
+                pass
+            assert len(sent) == calls_before, "nothing was sent"
+            print("   * A prompt that still holds a guest detail is refused, not sent")
+
+    # Every model call goes through the guardrail: nothing else uses the Gemini client.
+    app_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "app")
+    allowed_files = {os.path.join("agents", "privacy.py"), os.path.join("agents", "base.py")}
+    client_use = re.compile(r"generate_content|\.models\.|\.chats\b|\.files\b|\.live\b"
+                            r"|count_tokens|genai\.Client")
+    direct = []
+    for root, _dirs, files in os.walk(app_dir):
+        for name in files:
+            path = os.path.join(root, name)
+            rel = os.path.relpath(path, app_dir)
+            if name.endswith(".py") and rel not in allowed_files:
+                with open(path, encoding="utf-8") as fh:
+                    source = fh.read()
+                if client_use.search(source) or ("get_client(" in source
+                                                 and "send_prompt(" not in source):
+                    direct.append(rel)
+    assert direct == [], f"call Gemini only through privacy.send_prompt: {direct}"
+    print("   * Only privacy.send_prompt calls the model")
 
     # The production path must reach the same decorated agent, not an HTTP stub.
     print("\nTEST 13: Direct production dispatch uses the decorated agent...")

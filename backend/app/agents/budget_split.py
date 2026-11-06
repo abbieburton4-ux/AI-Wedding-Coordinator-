@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import get_client, get_prompt_version, model_for
+from app.agents.privacy import load_personal_terms, redact, send_prompt
 from app.agents.orchestrator import run_agent
 from app.utils.constants import ALLOWED_BUDGET_CATEGORIES, normalize_category
 
@@ -133,19 +134,26 @@ async def run_budget_splitter(
     own = {}
     for name in category_names:
         own.setdefault(category_key(name), name)
-    allowed = set(own) | {category_key(c) for c in ALLOWED_BUDGET_CATEGORIES}
+    # A category named after a guest goes to the model with the name removed; the
+    # answer is mapped back to the couple's own name (PD-008).
+    terms = await load_personal_terms(db, wedding_id)
+    sent = {}
+    for key, name in own.items():
+        sent.setdefault(category_key(redact(name, terms)), key)
+    allowed = set(own) | set(sent) | {category_key(c) for c in ALLOWED_BUDGET_CATEGORIES}
 
     facts = {
         "total_budget_usd": f"{total_cents // 100}.{total_cents % 100:02d}",
-        "couple_categories": list(own.values()),
+        "couple_categories": [redact(name, terms) for name in own.values()],
         "standard_categories": sorted(ALLOWED_BUDGET_CATEGORIES),
         "guest_count": guest_count,
         "ceremony_type": ceremony_type,
     }
     client = get_client()
-    response = await client.aio.models.generate_content(
+    response = await send_prompt(
+        db, wedding_id, client,
         model=model,
-        contents=f"Suggest a starting split for this budget:\n{json.dumps(facts, indent=2)}",
+        contents=f"Suggest a starting split for this budget:\n{json.dumps(facts, indent=2, ensure_ascii=False)}",
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,
             response_mime_type="application/json",
@@ -176,6 +184,8 @@ async def run_budget_splitter(
         if not isinstance(line, dict):
             return done(_blocked("invalid_share", "a line wasn't readable"))
         key = category_key(line.get("category"))
+        if key not in own and key in sent:
+            key = sent[key]
         if key not in allowed:
             return done(_blocked(
                 "category_whitelist", f"unknown category {line.get('category')!r}"

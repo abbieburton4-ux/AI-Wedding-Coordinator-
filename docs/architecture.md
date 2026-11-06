@@ -143,8 +143,9 @@ Every agent is a function: `(input_payload) → (output_payload, AgentDecisionLo
 
 Every agent call must:
 1. Open an `AgentDecisionLog` row with `status='pending'` before the Gemini call.
-2. Record `model_id`, `prompt_version`, `agent_id`, `trigger`, `parent_decision_id` (if chained), `input_payload`.
-3. Call Gemini, capturing `latency_ms`, `tokens_input`, `tokens_output`, and any `external_api_calls`.
+2. Record `model_id`, `prompt_version`, `agent_id`, `trigger`, `parent_decision_id` (if chained), `input_payload` (with the same personal details removed).
+3. Call Gemini only through `app/agents/privacy.send_prompt` (PD-008). It removes the names, emails and phone numbers of the wedding's guests and access list, guests' dietary notes (other than plain categories), and anything shaped like an email or phone number, and refuses to send if any known detail is left. Counts and categories ("12 vegetarian") still go. Names the app doesn't hold, such as a new name in a vendor's email, can't be reliably spotted. Prompts are built with `ensure_ascii=False`, and a `\u` escape in a prompt is refused, so accented names can't slip past. `verify_agents.py` fails if any other file uses the Gemini client.
+   Capture `latency_ms`, `tokens_input`, `tokens_output`, and any `external_api_calls`.
 4. Validate the output against the agent's output schema (Zod/Pydantic). Schema failure → `status='error'`, `error_kind='schema_violation'`.
 5. Apply guardrails (price ceilings, PII filters, hallucination checks). Block → `status='blocked_by_guardrail'`.
 6. On success: write `output_payload`, `rationale_summary`, `confidence_score`; mutate domain entities (`Booking`, `Contract`, etc.) in the same DB transaction. Flip `status='success'`.
