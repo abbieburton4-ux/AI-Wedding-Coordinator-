@@ -8,28 +8,27 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 ## Next up
 
-*Updated 2026-11-05 by the product lane. Re-rank if this date is more than 14 days old.*
+*Updated 2026-11-06 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B47** — fix the frontend's security advisories (13, 10 high) before real data goes in. `in review` (#42). After merge: pull into Replit, re-import into AI Studio, and sign in with Google once to confirm sign-in still works.
-2. **B53** — the live checklist is empty until the one-time import of the owner's list runs. `needs-owner: run the import on Replit (the team gives step-by-step instructions)`
-3. **B49** — make sure no AI feature sends guest names, contact details or dietary notes to Gemini (PD-008 follow-up, ratified). `ready` (before real guest data goes in)
-4. **B48** — a "This date is confirmed" switch that hides the "Dates are provisional" note. `ready` (owner, 2026-11-05: "yes to the provisional dates note")
-5. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
-6. **B44** — move the other parts that still read the old euro budget lines to the new budget. `ready`
-7. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
-8. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-9. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-10. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
-11. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
-12. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
-13. **B34** — database-level guard against the same email being added twice. `ready`
-14. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
-15. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
-16. **B8** — record missing token counts as empty, not 0. `ready`
-17. **B17** — stop tracking the test database files. `ready`
-18. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy. `needs-owner: guardrail files need a session the owner runs`
-19. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
+1. **B53** — the live checklist is empty until the one-time import of the owner's list runs. `needs-owner: run the import on Replit (the team gives step-by-step instructions)`
+2. **B49** — make sure no AI feature sends guest names, contact details or dietary notes to Gemini (PD-008 follow-up, ratified). `ready` (before real guest data goes in)
+3. **B48** — a "This date is confirmed" switch that hides the "Dates are provisional" note. `ready` (owner, 2026-11-05: "yes to the provisional dates note")
+4. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
+5. **B44** — move the other parts that still read the old euro budget lines to the new budget. `ready`
+6. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
+7. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+8. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
+9. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
+10. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
+11. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+12. **B34** — database-level guard against the same email being added twice. `ready`
+13. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+14. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
+15. **B8** — record missing token counts as empty, not 0. `ready`
+16. **B17** — stop tracking the test database files. `ready`
+17. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy. `needs-owner: guardrail files need a session the owner runs`
+18. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
 
 ## Open
 
@@ -70,7 +69,6 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 - **B41 — Small follow-ups from the B39 review (PR #23).** The independent review found nothing blocking, plus three should-fix items: (1) `manage_access.py` flags access-list rows that contain look-alike letters but can't remove them, because `remove` refuses non-ASCII input; let `remove` take a row id. (2) No test proves an existing, linked member keeps access if their sign-in address has a look-alike letter (`auth.py:141-143`). (3) The refusal in wedding creation (`weddings.py:58-61`) is untested. Copy (decided-by-agent, reversible): the refusal message should tell people to ask the couple to add a different address, not to "type in plain letters". *Depends on:* PD-002 note, 2026-11-05 (ratified).
 - **B43 — Small follow-ups from the B23 fix review (PR #25).** (1) The guardrail that strips prices from the AI split's reasons misses bare numbers ("Around 12,000 for the venue", "1.5 million", "twelve thousand dollars"); also catch 3+ digit numbers with thousands separators and number + thousand/million (`budget_split.py:31-38`). Rule 2. (2) When a reason is removed, the screen says nothing; show a short note (`budget_split.py:123` warnings are ignored by the UI). (3) Renaming checks for a clash even when the name hasn't changed, so if two look-alike categories ever exist (only via two simultaneous adds), editing either one's amount fails with 409 (`budget.py:371-373`); check only when the normalised name changes. (4) "Over your total by" and the over-total banner both show (`Budget.tsx:180-187`); keep one. *Depends on:* PD-004 (ratified).
 - **B44 — Other parts still read the old euro budget lines.** Found in PR #28 (B42). The quote extractor's budget alert and spent roll-up, the venue and supplier matchers (which fall back to a share of the total budget), the concierge's budget context, and the Dashboard's "Budget lines" count still read the planner's old `BudgetLine` rows. Since B42 the planner no longer makes them, so on a newly planned wedding the Dashboard count reads 0 and these parts see no budget. Nothing breaks, and existing rows are kept. *Fix (recommended, reversible):* move each to the new budget tables (PD-004), with the extractor and matcher changes following `agent-features`. *Depends on:* PD-004 (ratified). *Follow-up from #39 (B51):* this includes the old euro budget-warning card.
-- **B47 — Frontend dependency security advisories.** Found during the owner's Replit setup (2026-11-05, logged there as a second "B43"): 13 npm audit findings (10 high, 2 moderate, 1 low), including Vite, react-router and Firebase's own dependencies. *Why it matters:* the app is about to hold real guest data on a public web address. *Fix:* update compatible dependencies, review Firebase and Node version needs before any major upgrade, then run the verify gate and a sign-in check; no unreviewed `npm audit fix --force`. *Depends on:* B46.
 - **B49 — Keep guest details away from the free AI.** PD-008: the app uses Gemini's free tier, where Google may use what it's sent and human reviewers may read it. The owner decided (2026-11-05, "yes") that the AI never receives guest names, contact details or dietary notes, only counts and categories. *Fix:* check every agent's prompt and context (concierge, planner, matchers, quote extractor, and anything reading the `Guest` table or inbound email), strip or summarise guest personal data, add a guardrail and a test in `verify_agents.py` that fails if guest fields reach a prompt. Inbound vendor emails may contain guest names; say how they're handled. *Depends on:* PD-008 (ratified). Must be done before real guest data goes in (B19).
 - **B52 — Node 20 is past upstream support.** Found in PR #42 (B47): Replit and CI run Node 20. *Fix:* move both to Node 22, then run the verify gate and a build on Replit. *Depends on:* nothing; low priority.
 - **B53 — The live checklist starts empty.** Found in PR #42 (B47): on a fresh database the Checklist screen shows no tasks. Expected: all tasks, including the 18 approved Jewish traditions, are added only by `manage_checklist.py import`, from the owner's own file kept out of git (PD-007). *Why it matters:* the checklist is must-have 2, and it'll be empty on Replit until the import runs. *Fix:* the owner runs the import once on Replit, dry run first, after the wedding is created; agents don't write to the live database (rule 6). *Depends on:* the owner, and the wedding existing on Replit.
@@ -104,6 +102,7 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-06 | **B47** — frontend security advisories patched, 13 down to one Firebase cause the app doesn't ship; owner to confirm Google sign-in on Replit | #42 |
 | 2026-11-05 | **B51** — the setup form fits this wedding: Chicago, USD, Jewish ceremony, budget optional (PD-009); browser-tested | #39 |
 | 2026-11-05 | **B46** — the owner's Replit setup and Google sign-in fix made merge-ready: installs outside Replit, migrations on startup, readable AI errors | #34 |
 | 2026-11-05 | **B24** — shared planning checklist (PD-007): stages, catch up, overdue, provisional date; the owner's list, Jewish-tradition tasks and old AI tasks load through a one-time import after hosting | #32 |
