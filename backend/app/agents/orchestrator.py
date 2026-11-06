@@ -6,6 +6,8 @@ from functools import wraps
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import AgentDecisionLog
+from app.agents.privacy import load_personal_terms, scrub
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,21 @@ def run_agent(agent_name: str, decision_type: str):
             user_id = kwargs.pop("user_id", None)
             trigger = kwargs.pop("trigger", "couple_action")
             
+            # The log keeps no guest or party personal details (rule 3, PD-008). If they
+            # can't be loaded, the row is still written, without input, and the agent's
+            # own model call fails the same check and records the error.
+            try:
+                terms = await load_personal_terms(db, wedding_id)
+            except Exception:
+                await db.rollback()
+                terms = None
+
+            def safe(value, generic=True):
+                return scrub(value, terms, generic) if terms is not None else value
+
+            logged_input = (safe(kwargs) if terms is not None
+                            else {"input_withheld": "personal-data check unavailable"})
+
             # Create pending audit log row
             log = AgentDecisionLog(
                 id=decision_id,
@@ -41,7 +58,7 @@ def run_agent(agent_name: str, decision_type: str):
                 trigger=trigger,
                 decision_type=decision_type,
                 status="pending",
-                input_payload=kwargs
+                input_payload=logged_input
             )
             db.add(log)
             await db.commit()
@@ -78,19 +95,19 @@ def run_agent(agent_name: str, decision_type: str):
                 if result_dict.get("status") == "blocked":
                     log.status = "blocked_by_guardrail"
                     log.error_kind = result_dict.get("error_kind", "guardrail_violation")
-                    log.error_message = result_dict.get("warning")
+                    log.error_message = safe(result_dict.get("warning"))
                 else:
                     log.status = "success"
                 
                 log.model_id = model_id
                 log.prompt_version = prompt_version
-                log.output_payload = result_dict
+                log.output_payload = safe(result_dict, generic=False)
                 log.confidence_score = confidence_score
                 log.latency_ms = latency
                 log.tokens_input, log.tokens_output = tokens
                 log.external_api_calls = api_calls
                 log.follow_up_actions = follow_ups
-                log.rationale_summary = result_dict.get("rationale_summary", "")
+                log.rationale_summary = safe(result_dict.get("rationale_summary", ""), generic=False)
                 
                 db.add(log)
                 await db.commit()
@@ -105,8 +122,10 @@ def run_agent(agent_name: str, decision_type: str):
                 latency = int((time.time() - start_time) * 1000)
                 # Some exceptions (notably httpx timeouts) have an empty str(); fall
                 # back to repr() so error_message is never blank.
-                error_message = str(e) or repr(e)
-                logger.error("Agent %s failed: %s", agent_name, error_message, exc_info=True)
+                # Database and validation errors can quote the values involved.
+                error_message = safe(str(e) or repr(e))
+                logger.error("Agent %s failed: %s", agent_name, error_message,
+                             exc_info=settings.DEVELOPMENT_MODE)
 
                 log.status = "error"
                 log.error_kind = type(e).__name__

@@ -8,6 +8,7 @@ from google.genai import types
 from app.db.models import Wedding
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
+from app.agents.privacy import send_prompt
 from app.utils.constants import ALLOWED_BUDGET_CATEGORIES, normalize_category
 
 logger = logging.getLogger(__name__)
@@ -115,11 +116,12 @@ async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = Fa
     }
     
     client = get_client()
-    prompt = f"Create a wedding plan for the following profile:\n{json.dumps(input_payload, indent=2)}"
+    prompt = f"Create a wedding plan for the following profile:\n{json.dumps(input_payload, indent=2, ensure_ascii=False)}"
     
     # Call Gemini asynchronously
     logger.info(f"Invoking {model} for intake planner...")
-    response = await client.aio.models.generate_content(
+    response = await send_prompt(
+        db, wedding_id, client,
         model=model,
         contents=prompt,
         config=types.GenerateContentConfig(

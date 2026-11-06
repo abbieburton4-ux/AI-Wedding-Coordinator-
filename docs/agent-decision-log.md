@@ -30,6 +30,7 @@ Indexes & constraints
 - CONSTRAINT ensure `decision_type` is from a known enum set (validate in app)
 
 Implementation notes
+- `run_agent` removes guest and party personal data before storing a row (PD-008, `app/agents/privacy.py`): from `input_payload` and `error_message`, known names, emails, phone numbers and dietary notes plus anything shaped like an email or phone number; from `output_payload` and `rationale_summary`, only the known details, so a vendor's own address in a draft inquiry stays. If the check can't load, `input_payload` is `{"input_withheld": ...}`.
 - Keep `input_payload` and `output_payload` compact: include the minimal context needed to explain the decision. Example keys: `user_message`, `parsed_slots`, `pricing_factors`, `selected_line_items`, `rationale`.
 - `rationale` should be a short human-readable string in `output_payload.rationale` explaining *why* the agent chose that action.
 - Record all external writes (Stripe charge id, contract url, calendar event id) in `external_api_calls` for verifiability.
