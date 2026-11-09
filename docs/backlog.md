@@ -8,12 +8,12 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 ## Next up
 
-*Updated 2026-11-06 by the product lane. Re-rank if this date is more than 14 days old.*
+*Updated 2026-11-09 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B53** — the live checklist is empty until the one-time import of the owner's list runs. `needs-owner: run the import on Replit (the team gives step-by-step instructions)`
-2. **B49** — make sure no AI feature sends guest names, contact details or dietary notes to Gemini (PD-008 follow-up, ratified). `in review` (#44). `needs-owner: names the filter doesn't know yet (typed into chat, a task or a pasted vendor email): (1) show the cleaned text to check before sending (recommended), (2) send automatically, as #44 does now, or (3) turn off AI quote reading`
-3. **B48** — a "This date is confirmed" switch that hides the "Dates are provisional" note. `ready` (owner, 2026-11-05: "yes to the provisional dates note")
+2. **B49** — make sure no AI feature sends guest names, contact details or dietary notes to Gemini (PD-008 follow-up, ratified). `in review` (#44). Owner chose option 1 (2026-11-09, PD-008 follow-up 2): show the cleaned text and send only on a click. The reply bot on #44 did not apply it (run of 2026-11-09 made no change); `ready`: the owner asked the team to finish #44 from the main session (2026-11-09: "yes, finish 44 here"), after B48
+3. **B48** — a "This date is confirmed" switch that hides the "Dates are provisional" note, in all four places it appears. `ready` (owner, 2026-11-05: "yes to the provisional dates note"; date final, 2026-11-09)
 4. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
 5. **B44** — move the other parts that still read the old euro budget lines to the new budget. `ready`
 6. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
@@ -60,9 +60,7 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B11 — Ireland-only catalogue, but the wedding is in the US.** The regions (`utils/constants.py`), EUR and the vendor catalogue (`seed_data_real.py`) are all Irish. `wedding.md` now puts the wedding in Chicago, IL, United States (owner, 2026-11-04), so none of the 25 venues or 26 suppliers, and none of the regions, apply. The intake planner's budget logic assumes Irish pricing. *Why it matters:* venue and supplier matching can't recommend anything usable for this wedding. If it ran as it is, it would suggest Irish vendors. *Fix:* engineering change to raise, approach not yet decided. Covers regions, catalogue (cited Chicago-area vendors via `add-vendors`), and currency. The app currently assumes EUR everywhere, but the couple want amounts in US dollars (`wedding.md`, owner, 2026-11-04). Any new money fields use integer cents or `Decimal` (AGENTS.md rule 4). The couple prefer Chicago vendors, and don't want euro quotes converted (owner, 2026-11-05: "no need for the conversion as chicago vendors would be preferred"). *Depends on:* a product decision on how to handle the catalogue, to be proposed. The venue status (shortlist being visited, not booked) suggests Chicago suppliers matter more than venues. *Ranking:* the currency part ranks with B23 (budgeting is must-have 1). The catalogue part ranks below the must-haves. *Follow-up from #39 (B51):* the AI budget check is built on Irish euro prices, so it's switched off for this wedding until it has US price rules.
 
-- **B48 — The checklist always says "Dates are provisional".** Found in PR #32 (B24). PD-007 doesn't say whether the note goes once the date is final. *Fix (decided, owner, 2026-11-05: "yes to the provisional dates note"):* a "This date is confirmed" switch for owners and editors; the note goes when it's on, and comes back if it's switched off. *Scope (decided-by-agent, reversible, 2026-11-09, found in #46):* "provisional" appears in four places (setup form hint, Checklist banner, the assistant's due-date replies, the import tool's help text); all four follow the switch. The owner said the date is final (2026-11-09), so the couple can switch it on once this lands.
-
-- **B54 — The setup form still suggests 21 August 2027.** `in review` (#46). The owner changed the date to 23 October 2027 (2026-11-09, `wedding.md`), but the setup form's pre-filled date (`Intake.tsx`, PD-009) is still the old one. *Why it matters:* a wedding created from the form would start on the wrong date, and every checklist due date counts back from it. *Fix:* pre-fill 23 October 2027; if the wedding already exists, the couple change the date in the app (PD-007), and agents don't write to the live database. *Depends on:* nothing; the owner confirmed 2027 and that the date is final (2026-11-09). The same answer means the couple can turn on "This date is confirmed" once B48 lands.
+- **B48 — The checklist always says "Dates are provisional".** Found in PR #32 (B24). PD-007 doesn't say whether the note goes once the date is final. *Fix (decided, owner, 2026-11-05: "yes to the provisional dates note"):* a "This date is confirmed" switch for owners and editors; the note goes when it's on, and comes back if it's switched off. *Scope (decided-by-agent, reversible, 2026-11-09, found in #46):* "provisional" appears in four places (setup form hint, Checklist banner, the assistant's due-date replies, the import tool's help text); all four follow the switch. The owner said the date is final (2026-11-09), so the couple can switch it on once this lands. Changing the date leaves the switch as it is; the owner sees no need to decide this: "the date is not going to change, so dont need to worry about that" (2026-11-09).
 
 ### Housekeeping
 
@@ -104,6 +102,7 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-09 | **B54** — the setup form pre-fills the final date, 23 October 2027; the couple change an existing wedding's date on the Checklist screen | #46 |
 | 2026-11-06 | **B47** — frontend security advisories patched, 13 down to one Firebase cause the app doesn't ship; owner to confirm Google sign-in on Replit | #42 |
 | 2026-11-05 | **B51** — the setup form fits this wedding: Chicago, USD, Jewish ceremony, budget optional (PD-009); browser-tested | #39 |
 | 2026-11-05 | **B46** — the owner's Replit setup and Google sign-in fix made merge-ready: installs outside Replit, migrations on startup, readable AI errors | #34 |
