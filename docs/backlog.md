@@ -11,7 +11,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-09 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B65–B69** — the full budget tracker, five steps (PD-013). `needs-owner: approve PD-013 and calls (a)–(d)`
+1. **B65–B69** — the full budget tracker, five steps (PD-013). ratified 2026-11-09; B65 `in progress`, then B66–B69 in order
 2. **B64** — "Not selected" vendor status (PD-012 follow-up 2). `in review` (#69). Publish shows one addition: `ALTER TABLE couple_vendors ADD COLUMN not_selected BOOLEAN DEFAULT false NOT NULL`
 3. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
 4. **B56** — the Wildman BT payments on the Budget screen (the checklist tasks V1–V3 came in with the load, #56). `ready`
@@ -68,7 +68,7 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B64 — A "Not selected" vendor status.** Owner, 2026-11-09. PD-012 follow-up 2 (ratified): muted red, faded tile at the bottom of its section; doesn't count toward the category status. *Ratified 2026-11-09.* Likely a database change only if statuses are checked in the database; say what Publish will show.
 
-- **B65–B69 — The full budget tracker (PD-013, proposed).** The owner's brief, 2026-11-09, split into five steps: B65 expenses and payments that add up (database change; folds in B44, B45 and the budget half of B56); B66 dashboard and allocation; B67 categories and the expense list (small database change); B68 charts and upcoming payments; B69 export (CSV and a printable page). *Depends on:* the owner approving PD-013 and calls (a)–(d). Nothing is built or changed in the database before that.
+- **B65–B69 — The full budget tracker (PD-013, ratified 2026-11-09).** The owner's brief, 2026-11-09, split into five steps: B65 expenses and payments that add up (database change; folds in B44, B45 and the budget half of B56); B66 dashboard and allocation; B67 categories and the expense list (small database change); B68 charts and upcoming payments; B69 export (CSV and a printable page). Receipts and contracts are Google Drive links; default categories as in call (b); the engineering team enters Wildman BT in B65 as a one-time data step.
 
 ### Housekeeping
 
