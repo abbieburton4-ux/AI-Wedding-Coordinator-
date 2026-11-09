@@ -12,7 +12,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
-2. **B53** — the live checklist is empty until the one-time import of the owner's list runs. The wedding is on the published app (production database), which the Shell can\'t reach safely. `ready` (PD-011, ratified 2026-11-09): a one-time "Load my checklist" step in the app, for owners and editors, which also adds the Wildman BT tasks V1–V3 (B56)
+2. **B53** — the live checklist is empty until the one-time import of the owner's list runs. The wedding is on the published app (production database), which the Shell can\'t reach safely. `in review` (#56): a "Load my checklist" card on the Checklist screen for owners and editors; practice run first (97 owner tasks, 18 traditions, 3 Wildman BT tasks), then "Add these tasks". After merging, the published app needs republishing on Replit before the owner uses it.
 3. **B56** — put the venue's payment dates into the app: tasks V1–V3 on the checklist and the Wildman BT payments on the budget (owner, 2026-11-09). `ready`
 4. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
 5. **B44** — move the other parts that still read the old euro budget lines to the new budget. `ready`
@@ -27,7 +27,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 14. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
 15. **B8** — record missing token counts as empty, not 0. `ready`
 16. **B17** — stop tracking the test database files. `ready`
-17. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch and the B49 check-before-sending rule (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
+17. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) and the in-app checklist load (PD-011) (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
 18. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
 
 ## Open
