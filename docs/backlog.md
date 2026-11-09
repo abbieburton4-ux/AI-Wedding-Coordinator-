@@ -11,24 +11,25 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-09 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B53** — the live checklist is empty until the one-time import of the owner's list runs. `needs-owner: run the import on Replit (the team gives step-by-step instructions)`
-2. **B49** — make sure no AI feature sends guest names, contact details or dietary notes to Gemini (PD-008 follow-up, ratified). `in review` (#44). Owner chose option 1 (2026-11-09, PD-008 follow-up 2): show the cleaned text and send only on a click. The reply bot on #44 did not apply it (run of 2026-11-09 made no change); `ready`: the owner asked the team to finish #44 from the main session (2026-11-09: "yes, finish 44 here"), after B48
-3. **B48** — a "This date is confirmed" switch that hides the "Dates are provisional" note, in all four places it appears. `ready` (owner, 2026-11-05: "yes to the provisional dates note"; date final, 2026-11-09)
-4. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
-5. **B44** — move the other parts that still read the old euro budget lines to the new budget. `ready`
-6. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
-7. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-8. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-9. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
-10. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
-11. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
-12. **B34** — database-level guard against the same email being added twice. `ready`
-13. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
-14. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
-15. **B8** — record missing token counts as empty, not 0. `ready`
-16. **B17** — stop tracking the test database files. `ready`
-17. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy. `needs-owner: guardrail files need a session the owner runs`
-18. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
+1. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. `needs-owner: send the venue the questions, or sign as is`
+2. **B53** — the live checklist is empty until the one-time import of the owner's list runs. `needs-owner: run the import on Replit (the team gives step-by-step instructions)`
+3. **B49** — make sure no AI feature sends guest names, contact details or dietary notes to Gemini (PD-008 follow-up, ratified). `in review` (#44). Owner chose option 1 (2026-11-09, PD-008 follow-up 2): show the cleaned text and send only on a click. The reply bot on #44 did not apply it (run of 2026-11-09 made no change); `ready`: the owner asked the team to finish #44 from the main session (2026-11-09: "yes, finish 44 here"), after B48
+4. **B56** — put the venue's payment dates into the app: tasks V1–V3 on the checklist and the Wildman BT payments on the budget (owner, 2026-11-09). `ready` (after B49)
+5. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
+6. **B44** — move the other parts that still read the old euro budget lines to the new budget. `ready`
+7. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
+8. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+9. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
+10. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
+11. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
+12. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+13. **B34** — database-level guard against the same email being added twice. `ready`
+14. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+15. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
+16. **B8** — record missing token counts as empty, not 0. `ready`
+17. **B17** — stop tracking the test database files. `ready`
+18. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy. `needs-owner: guardrail files need a session the owner runs`
+19. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
 
 ## Open
 
@@ -58,9 +59,11 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 ### Making it fit this wedding
 
+- **B55 — Questions for Wildman BT before signing.** From the product lane's review of the draft contract (2026-11-09; facts in `wedding.md`). The deposit ($6,000, non-refundable) is due Wed 11 Nov 2026, and once signed the date can't move except for events like storms or a pandemic, and then only once. Questions, most urgent first: (1) hold the date a few more days while we review? (2) a full refund if Wildman BT cancels, closes or can't host, in writing; (3) add the groom as a second Contracting Party (only the owner is named, so only she is liable); (4) pay by check to avoid the 3% card fee; (5) how many extra valet attendants for 220 guests, and the cost (60 cars included); (6) chuppah set-up and attaching to the beams or floor; (7) how the ceremony-to-reception flip works and whether it counts toward the 7 live hours; (8) rehearsal time and wedding-suite access; (9) is event insurance required, and how much; (10) opt out of the venue's photos, or no guests' faces; (11) how security deposit deductions are decided, with a walkthrough before and after; (12) bringing our own alcohol through an approved caterer, and any fees. Also for later: whether to buy the $1,500 day-of coordinator package; the contract asks for a named day-of contact either way. *Fix:* the couple send the questions (people send, never the app: rule 1). *Depends on:* the owner.
+- **B56 — The venue's payment dates aren't in the app yet.** Owner, 2026-11-09: "record the payment dates and the extra $2,000 security deposit in the wedding facts and budget and checklist". Recorded in `wedding.md`, [budget.md](product/budget.md) and [checklist-list.md](product/checklist-list.md), part 3. The app isn't live yet (B14), and agents don't write to the live database (rule 6). *Fix:* add tasks V1–V3 to the checklist's one-time import, alongside the Jewish-tradition tasks, so they appear when the owner runs it (B53), with the fixed dates kept in the task wording. For the budget, either the couple enter the four rows from `budget.md` on the Budget screen, or the same import adds them; the engineer recommends one. The $2,000 security deposit is refundable, so it's shown as a payment but not counted in the venue's cost. Nothing is marked paid (rule 4). *Depends on:* B53 for loading; nothing else.
+
 - **B11 — Ireland-only catalogue, but the wedding is in the US.** The regions (`utils/constants.py`), EUR and the vendor catalogue (`seed_data_real.py`) are all Irish. `wedding.md` now puts the wedding in Chicago, IL, United States (owner, 2026-11-04), so none of the 25 venues or 26 suppliers, and none of the regions, apply. The intake planner's budget logic assumes Irish pricing. *Why it matters:* venue and supplier matching can't recommend anything usable for this wedding. If it ran as it is, it would suggest Irish vendors. *Fix:* engineering change to raise, approach not yet decided. Covers regions, catalogue (cited Chicago-area vendors via `add-vendors`), and currency. The app currently assumes EUR everywhere, but the couple want amounts in US dollars (`wedding.md`, owner, 2026-11-04). Any new money fields use integer cents or `Decimal` (AGENTS.md rule 4). The couple prefer Chicago vendors, and don't want euro quotes converted (owner, 2026-11-05: "no need for the conversion as chicago vendors would be preferred"). *Depends on:* a product decision on how to handle the catalogue, to be proposed. The venue status (shortlist being visited, not booked) suggests Chicago suppliers matter more than venues. *Ranking:* the currency part ranks with B23 (budgeting is must-have 1). The catalogue part ranks below the must-haves. *Follow-up from #39 (B51):* the AI budget check is built on Irish euro prices, so it's switched off for this wedding until it has US price rules.
 
-- **B48 — The checklist always says "Dates are provisional".** Found in PR #32 (B24). PD-007 doesn't say whether the note goes once the date is final. *Fix (decided, owner, 2026-11-05: "yes to the provisional dates note"):* a "This date is confirmed" switch for owners and editors; the note goes when it's on, and comes back if it's switched off. *Scope (decided-by-agent, reversible, 2026-11-09, found in #46):* "provisional" appears in four places (setup form hint, Checklist banner, the assistant's due-date replies, the import tool's help text); all four follow the switch. The owner said the date is final (2026-11-09), so the couple can switch it on once this lands. Changing the date leaves the switch as it is; the owner sees no need to decide this: "the date is not going to change, so dont need to worry about that" (2026-11-09).
 
 ### Housekeeping
 
@@ -102,6 +105,7 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-09 | **B48** — a "This date is confirmed" switch hides the "Dates are provisional" note | #49 (#48, an earlier copy, to close unmerged) |
 | 2026-11-09 | **B54** — the setup form pre-fills the final date, 23 October 2027; the couple change an existing wedding's date on the Checklist screen | #46 |
 | 2026-11-06 | **B47** — frontend security advisories patched, 13 down to one Firebase cause the app doesn't ship; owner to confirm Google sign-in on Replit | #42 |
 | 2026-11-05 | **B51** — the setup form fits this wedding: Chicago, USD, Jewish ceremony, budget optional (PD-009); browser-tested | #39 |
