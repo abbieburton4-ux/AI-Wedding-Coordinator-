@@ -11,8 +11,8 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-09 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B62** — the couple add their own vendors in each Vendors section (PD-012 call (a), ratified). `in progress`
-2. **B63** — vendor tiles with coloured statuses and a per-category status summary (PD-012 follow-up). `ready` (after B62)
+1. **B62** — the couple add their own vendors in each Vendors section (PD-012 call (a), ratified). `in review` (#64). Publish will show two new tables (`couple_vendors`, `couple_vendor_quotes`) and their indexes, additions only; Wildman BT starts as "Contacted", never "Booked"
+2. **B63** — vendor tiles with coloured statuses and a per-category status summary (PD-012 follow-up). `in progress` (built on #64)
 3. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
 4. **B56** — the Wildman BT payments on the Budget screen (the checklist tasks V1–V3 came in with the load, #56). `ready`
 5. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
