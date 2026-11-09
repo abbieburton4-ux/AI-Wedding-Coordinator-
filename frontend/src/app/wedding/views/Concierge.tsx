@@ -25,6 +25,7 @@ export function Concierge() {
   const [messages, setMessages] = useState<Message[]>(SEED);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -37,6 +38,7 @@ export function Concierge() {
 
     setMessages((prev) => [...prev, { role: "user", text: trimmed }]);
     setDraft("");
+    setNotice(null);
     scroll();
 
     if (!weddingId) {
@@ -66,10 +68,11 @@ export function Concierge() {
         err instanceof Error && !(err instanceof TypeError) && !err.message.startsWith("Request failed")
           ? err.message
           : "";
-      setMessages((prev) => [
-        ...prev,
-        { role: "ai", text: said || "I had trouble reaching my tools just now — please try again in a moment." },
-      ]);
+      // Give the question back so they can change it or try again, and say what happened
+      // in the app's own voice, not Aurelia's.
+      setMessages((prev) => prev.slice(0, -1));
+      setDraft(trimmed);
+      setNotice(said || "Aurelia couldn't answer just now, so nothing was sent. Please try again in a moment.");
     } finally {
       setSending(false);
       scroll();
@@ -140,6 +143,11 @@ export function Concierge() {
       </main>
 
       <div className="fixed bottom-0 w-full p-4 bg-background">
+        {notice && (
+          <p role="alert" className="max-w-2xl mx-auto mb-2 px-4 text-sm text-error">
+            {notice}
+          </p>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();

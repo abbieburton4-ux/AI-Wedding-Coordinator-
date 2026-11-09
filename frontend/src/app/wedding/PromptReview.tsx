@@ -17,8 +17,11 @@ export function PromptReviewProvider({ children }: { children: ReactNode }) {
   const [review, setReview] = useState<ReviewRequest | null>(null);
   const resolver = useRef<((send: boolean) => void) | null>(null);
   const textRef = useRef<HTMLPreElement>(null);
+  // Where the person was, so focus goes back there (not to <body>) when it closes.
+  const returnTo = useRef<HTMLElement | null>(null);
 
   const confirm = useCallback((next: ReviewRequest) => {
+    if (!resolver.current) returnTo.current = document.activeElement as HTMLElement | null;
     // A second request replaces the first, which counts as going back.
     resolver.current?.(false);
     return new Promise<boolean>((resolve) => {
@@ -38,11 +41,21 @@ export function PromptReviewProvider({ children }: { children: ReactNode }) {
       {children}
       <Dialog open={review !== null} onOpenChange={(open) => !open && finish(false)}>
         <DialogContent
-          className="wedding flex max-h-[90vh] flex-col gap-4 rounded-3xl bg-background text-on-surface sm:max-w-2xl"
+          className="wedding flex max-h-[90dvh] flex-col gap-4 rounded-3xl bg-background text-on-surface sm:max-w-2xl"
           onOpenAutoFocus={(e) => {
             // Start on the text, not the send button, so Enter can't send it unread.
             e.preventDefault();
             textRef.current?.focus();
+          }}
+          onCloseAutoFocus={(e) => {
+            // The button that opened this may be disabled while it works; wait a moment
+            // for it to come back, then return there.
+            e.preventDefault();
+            const target = returnTo.current;
+            returnTo.current = null;
+            window.setTimeout(() => {
+              if (target && target.isConnected && !target.hasAttribute("disabled")) target.focus();
+            }, 50);
           }}
         >
           <DialogHeader>
@@ -50,9 +63,10 @@ export function PromptReviewProvider({ children }: { children: ReactNode }) {
               Check this before it goes to the AI
             </DialogTitle>
             <DialogDescription className="text-on-surface-variant text-sm leading-relaxed">
-              This is exactly what will be sent to Google's AI, Gemini. Names, emails and phone
-              numbers the app already knows are taken out, and show as [name], [email] or
-              [phone].
+              This is exactly what will be sent to Google's AI, Gemini. On the free plan Google
+              may keep it and people there may read it, so guest details stay out. Names, emails,
+              phone numbers and dietary notes the app already knows are taken out, and show as
+              [name], [email], [phone] or [dietary note].
             </DialogDescription>
           </DialogHeader>
 
@@ -65,6 +79,7 @@ export function PromptReviewProvider({ children }: { children: ReactNode }) {
           <pre
             ref={textRef}
             tabIndex={0}
+            role="region"
             aria-label="The text that will be sent to the AI"
             className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-2xl border border-outline-variant/40 bg-surface-container-low p-4 font-body-md text-sm text-on-surface focus:border-primary focus:outline-none"
           >

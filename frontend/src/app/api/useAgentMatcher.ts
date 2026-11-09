@@ -56,7 +56,10 @@ export function useAgentMatcher(weddingId: string) {
 
     try {
       // Shows the couple what goes to the AI first; nothing is sent until they click (PD-008).
-      const sent = await sendReviewed(`/weddings/${weddingId}/match`);
+      const sent = await sendReviewed(`/weddings/${weddingId}/match`, {}, {
+        onReview: () => setStatus("idle"),
+        onSend: () => setStatus("running"),
+      });
       if (sent === null) {
         setStatus("idle");
         setRationale("");
@@ -128,7 +131,10 @@ export function useAgentMatcher(weddingId: string) {
       startTimeRef.current = Date.now();
 
       try {
-        const sent = await sendReviewed(`/weddings/${weddingId}/suppliers`, { category });
+        const sent = await sendReviewed(`/weddings/${weddingId}/suppliers`, { category }, {
+          onReview: () => setStatus("idle"),
+          onSend: () => setStatus("running"),
+        });
         if (sent === null) {
           setStatus("idle");
           setRationale("");

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 from app.config import settings
@@ -11,13 +11,13 @@ from app.api.v1.endpoints.auth import get_current_user
 from app.api.v1.access import require_wedding_access
 from app.utils.tasks import enqueue_agent_task
 from app.agents.extractor import run_quote_extractor
-from app.api.v1.review import needs_review
+from app.api.v1.review import MAX_PROMPT_CHARS, needs_review
 
 router = APIRouter()
 
 class QuoteExtractionRequest(BaseModel):
-    email_body: str
-    approved_prompt: Optional[str] = None
+    email_body: str = Field(max_length=MAX_PROMPT_CHARS)
+    approved_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_CHARS)
 
 @router.post("/{booking_id}/quote", status_code=status.HTTP_202_ACCEPTED)
 async def trigger_quote_extractor(

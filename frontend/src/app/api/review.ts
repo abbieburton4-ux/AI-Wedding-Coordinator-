@@ -36,6 +36,13 @@ function isReview(value: unknown): value is NeedsReview {
 // If the text keeps changing between the check and the click, stop rather than loop.
 const MAX_CHECKS = 3;
 
+export interface ReviewHooks {
+  /** The text is on screen and nothing is being sent (e.g. hide a "working" state). */
+  onReview?: () => void;
+  /** The person clicked send; the approved text is about to go. */
+  onSend?: () => void;
+}
+
 /**
  * POSTs an AI action. Returns the result once the person has approved the text, or
  * null if they went back without sending.
@@ -45,7 +52,11 @@ export function useReviewedRequest() {
   const confirm = useContext(ReviewContext);
 
   return useCallback(
-    async <T>(path: string, body: Record<string, unknown> = {}): Promise<T | null> => {
+    async <T>(
+      path: string,
+      body: Record<string, unknown> = {},
+      hooks: ReviewHooks = {},
+    ): Promise<T | null> => {
       let approved: string | undefined;
       for (let i = 0; i < MAX_CHECKS; i++) {
         const payload = approved === undefined ? body : { ...body, approved_prompt: approved };
@@ -54,8 +65,10 @@ export function useReviewedRequest() {
           body: JSON.stringify(payload),
         });
         if (!isReview(res)) return res as T;
+        hooks.onReview?.();
         const send = await confirm({ preview: res.preview, changed: !!res.changed });
         if (!send) return null;
+        hooks.onSend?.();
         // Send back exactly the text that was shown, never a re-typed copy.
         approved = res.preview;
       }

@@ -246,6 +246,14 @@ def scrub(value, terms: PersonalTerms, generic: bool = True):
     return value
 
 
+def _whole_names(terms: PersonalTerms) -> PersonalTerms:
+    """The terms for checking the app's own fixed instructions: whole names only, not
+    single name parts, which are often ordinary words there ("Mark is_available",
+    "Irish", "the couple's"). Contacts and dietary notes are all still checked."""
+    return PersonalTerms(names={n for n in terms.names if " " in n}, emails=terms.emails,
+                         phone_digits=terms.phone_digits, dietary_notes=terms.dietary_notes)
+
+
 async def send_prompt(db: AsyncSession, wedding_id: str, client, *, model, contents, config):
     """Calls Gemini with personal details removed from the prompt, once the person has
     approved that exact cleaned text.
@@ -261,7 +269,7 @@ async def send_prompt(db: AsyncSession, wedding_id: str, client, *, model, conte
     terms = await load_personal_terms(db, wedding_id)
     clean = redact(contents, terms)
     instruction = getattr(config, "system_instruction", None)
-    leftovers = find_personal(clean, terms) + find_personal(instruction, terms)
+    leftovers = find_personal(clean, terms) + find_personal(instruction, _whole_names(terms))
     if leftovers:
         raise PersonalDataInPrompt(f"Prompt not sent: it still held a {leftovers[0]}.")
     if _previewing.get():

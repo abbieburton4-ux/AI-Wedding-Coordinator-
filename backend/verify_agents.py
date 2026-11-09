@@ -827,6 +827,21 @@ async def run_async_verification():
             print("   * All six agents: no call without the click, none for other text; "
                   "the sent text is the previewed text")
 
+            # A first name that's also a word in the app's own instructions ("Mark
+            # is_available", "Irish") doesn't block the AI; the guest's name is still
+            # removed from what's sent.
+            guest_mark = Guest(wedding_id=wid, name="Mark Irish-Return")
+            db.add(guest_mark)
+            await db.commit()
+            for name, agent, args, kwargs in runs:
+                calls_before = len(sent)
+                await approved(agent, db, wid, *args, **kwargs)
+                assert len(sent) == calls_before + 1, f"{name}: refused over a name part"
+                assert "Irish-Return" not in sent[-1]["contents"], name
+            await db.delete(guest_mark)
+            await db.commit()
+            print("   * A guest called Mark (a word in the instructions) doesn't block the AI")
+
             # A preview changes nothing, even on a path that would (the planner's skip).
             w_skip = (await db.exec(select(Wedding).where(Wedding.id == "wedding_setup_test"))).first()
             w_skip.status = "intake"

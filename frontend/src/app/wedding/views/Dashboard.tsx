@@ -104,64 +104,84 @@ export function Dashboard() {
   }, [poll, refetch, fetchIntakeLog]);
 
   // ---- Recovery actions ----
-  const replan = useCallback(
+  const [replanError, setReplanError] = useState<string | null>(null);
+  // They went back from the check: the last result is out of date, nothing is running.
+  const [heldBack, setHeldBack] = useState(false);
+
+  /** Asks for the plan update, showing the text first if it needs the AI (PD-008). */
+  const sendReplan = useCallback(
     async (force: boolean) => {
       if (!weddingId) return;
       replanBaselineId.current = intakeLog?.id;
+      setReplanError(null);
       setReplanning(true);
-      setEditingBudget(false);
       setWaited(0);
       sawBuilding.current = true;
       try {
-        // Shows the couple what goes to the AI first; nothing is sent until they click (PD-008).
-        const sent = await sendReviewed(`/weddings/${weddingId}/replan?force=${force}`);
+        const sent = await sendReviewed(`/weddings/${weddingId}/replan?force=${force}`, {}, {
+          // No "building" screen while they read; only once they click send.
+          onReview: () => setReplanning(false),
+          onSend: () => setReplanning(true),
+        });
         if (sent === null) {
           setReplanning(false);
+          setHeldBack(true);
           return;
         }
-        await refetchWeddings();
-      } catch {
+        setHeldBack(false);
+      } catch (err) {
         setReplanning(false);
+        setReplanError(
+          err instanceof Error && !(err instanceof TypeError) && !err.message.startsWith("Request failed")
+            ? err.message
+            : "That didn't work just now, so nothing was sent. Please try again.",
+        );
       }
+      await refetchWeddings();
     },
     [weddingId, sendReviewed, intakeLog, refetchWeddings],
   );
 
+  const replan = useCallback(
+    async (force: boolean) => {
+      setEditingBudget(false);
+      await sendReplan(force);
+    },
+    [sendReplan],
+  );
+
   const saveBudgetAndReplan = useCallback(async () => {
     if (!weddingId) return;
-    replanBaselineId.current = intakeLog?.id;
-    setReplanning(true);
     setEditingBudget(false);
-    setWaited(0);
-    sawBuilding.current = true;
+    setReplanError(null);
     try {
       await request(`/weddings/${weddingId}`, {
         method: "PATCH",
         body: JSON.stringify({ budget_total: newBudget }),
       });
-      const sent = await sendReviewed(`/weddings/${weddingId}/replan?force=false`);
-      if (sent === null) {
-        // The new budget is saved; the check waits until they choose to send it.
-        setReplanning(false);
-        await refetchWeddings();
-        return;
-      }
-      await refetchWeddings();
-      await refetch();
-    } catch {
-      setReplanning(false);
+    } catch (err) {
+      setReplanError(err instanceof Error ? err.message : "Your new budget wasn't saved. Please try again.");
+      return;
     }
-  }, [weddingId, request, sendReviewed, intakeLog, newBudget, refetchWeddings, refetch]);
+    await sendReplan(false);
+    await refetch();
+  }, [weddingId, request, sendReplan, newBudget, refetch]);
 
-  const intakeBlocked = building && !replanning && intakeLog?.status === "blocked_by_guardrail";
-  const intakeFailed = building && !replanning && intakeLog?.status === "error";
+  const intakeBlocked =
+    building && !replanning && !heldBack && intakeLog?.status === "blocked_by_guardrail";
+  const intakeFailed = building && !replanning && !heldBack && intakeLog?.status === "error";
   const slow = waited >= POLL_TIMEOUT_MS;
   const intakeStalled = building && !replanning && !intakeBlocked && !intakeFailed && slow;
   // Nothing is running: a budget check that needs the AI waits for the couple to see
   // what it would send and click to send it (PD-008), so offer that, not a spinner.
   const intakeWaiting =
     building && !replanning && !intakeBlocked && !intakeFailed && intakeLogLoaded &&
-    intakeLog?.status !== "pending";
+    (heldBack || intakeLog?.status !== "pending");
+  const errorLine = replanError && (
+    <p role="alert" className="text-sm text-error max-w-md mx-auto mb-4">
+      {replanError}
+    </p>
+  );
 
   const shell = (children: ReactNode) => (
     <main className="pt-24 pb-32 px-margin-mobile md:pl-[calc(18rem+24px)] md:pr-margin-desktop max-w-[1120px] mx-auto">
@@ -188,6 +208,7 @@ export function Dashboard() {
           {intakeLog?.error_message ||
             "The budget looks low for this guest count and region against typical Irish market rates."}
         </p>
+        {errorLine}
 
         {editingBudget ? (
           <div className="flex flex-wrap items-end gap-3 mb-2">
@@ -255,6 +276,7 @@ export function Dashboard() {
         <p className="text-body-md text-on-surface-variant max-w-md mx-auto mb-6">
           The AI coordinator hit a temporary problem. Your details are saved — you can try again now.
         </p>
+        {errorLine}
         <button
           type="button"
           onClick={() => replan(false)}
@@ -278,6 +300,7 @@ export function Dashboard() {
           Your wedding details are saved. If updating the plan needs the AI, you'll first see
           exactly what would be sent, and nothing goes until you say so.
         </p>
+        {errorLine}
         {canEdit ? (
           <button
             type="button"

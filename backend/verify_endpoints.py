@@ -139,20 +139,6 @@ def test_api_suite():
         
         # 5. Matching endpoints
         print("5. Verifying matching triggers (P0 background tasks enqueuing)...")
-        # Dev sign-in names everyone "Mock Couple (<id>)", and a known name found in the
-        # app's own AI instructions ("the couple's style notes") makes the privacy check
-        # refuse the call. Real accounts carry people's names, so these get fictional ones.
-        from sqlmodel import Session as _Session
-        from app.db.models import User as _User
-
-        def fictional_names(**names):
-            with _Session(sync_engine) as s:
-                for user_id, name in names.items():
-                    s.get(_User, user_id).name = name
-                s.commit()
-
-        fictional_names(couple_test="Ingrid Vossberg")
-
         # Each AI action first returns the text it would send and sends nothing; the
         # couple's click repeats it with that text (PD-008 follow-up 2).
         queued.clear()
@@ -212,6 +198,26 @@ def test_api_suite():
         res = c.post("/api/v1/inquiries/booking_photo_test/quote", json=quote_payload, headers=headers)
         assert res.status_code == 403
         print("   * Access Control: blocked quote extraction on another wedding's booking")
+
+        # A euro budget check uses the AI, so /replan shows the text first and changes
+        # nothing until the click; a dollar wedding's check needs no AI, so no review.
+        couple_2 = {"Authorization": "Bearer mock-couple_2"}
+        queued.clear()
+        weddings_module.enqueue_agent_task = _record
+        try:
+            res = c.post("/api/v1/weddings/wedding_planning_test/replan", headers=couple_2)
+            assert res.json()["needs_review"] is True and queued == [], res.text
+            assert "Create a wedding plan" in res.json()["preview"]
+            res = c.post("/api/v1/weddings/wedding_planning_test/replan", headers=couple_2,
+                         json={"approved_prompt": res.json()["preview"]})
+            assert res.json()["status"] == "pending", res.text
+            assert queued[-1][1]["approved_prompt"], "the approved text goes to the worker"
+            queued.clear()
+            res = c.post(f"/api/v1/weddings/{wedding_id}/replan", headers=headers)
+            assert "needs_review" not in res.json() and len(queued) == 1, res.text
+        finally:
+            weddings_module.enqueue_agent_task = real_enqueue
+        print("   * Replan: the AI budget check waits for the click; a check without AI doesn't")
         
         # 7. Decision Logs & Masked CSV exports
         print("7. Verifying decision logs and PII-redacted CSV exports...")
@@ -278,7 +284,6 @@ def test_api_suite():
 
         fake_client = MagicMock()
         fake_client.aio.models.generate_content = _reply
-        fictional_names(viewer_1="Torvald Ashgrove", editor_1="Marisol Echeverri")
         with patch("app.agents.concierge.get_client", return_value=fake_client):
             res = c.post(concierge_url, json=question, headers=editor_headers)
             check = res.json()
@@ -295,7 +300,6 @@ def test_api_suite():
                          json=dict(question, approved_prompt=check["preview"]))
             assert res.json() == {"reply": "Yes, it fits."}, res.text
             assert sent_prompts == [check["preview"]], "the text sent is the text shown"
-        fictional_names(viewer_1="Mock Couple (viewer_1)", editor_1="Mock Couple (editor_1)")
         print("   * Concierge: shows the text first; the click sends exactly that text")
 
         # The inbound-email webhook has no one to check the text, so it never sends it.

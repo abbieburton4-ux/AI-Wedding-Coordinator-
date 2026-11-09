@@ -30,7 +30,7 @@ from app.agents.concierge import run_concierge
 from app.agents.planner import run_intake_planner
 from app.agents.matcher import run_venue_matcher, run_supplier_matcher
 from app.agents.privacy import PromptNotApproved
-from app.api.v1.review import Approval, needs_review
+from app.api.v1.review import MAX_PROMPT_CHARS, Approval, needs_review
 
 router = APIRouter()
 
@@ -474,7 +474,7 @@ async def trigger_venue_matching(
 
 class SupplierMatchRequest(BaseModel):
     category: str
-    approved_prompt: Optional[str] = None
+    approved_prompt: Optional[str] = PydField(default=None, max_length=MAX_PROMPT_CHARS)
 
 
 @router.post("/{wedding_id}/suppliers", status_code=status.HTTP_202_ACCEPTED)
@@ -506,8 +506,8 @@ async def trigger_supplier_matching(
 
 
 class ConciergeRequest(BaseModel):
-    message: str
-    approved_prompt: Optional[str] = None
+    message: str = PydField(max_length=MAX_PROMPT_CHARS)
+    approved_prompt: Optional[str] = PydField(default=None, max_length=MAX_PROMPT_CHARS)
 
 
 @router.post("/{wedding_id}/concierge")
