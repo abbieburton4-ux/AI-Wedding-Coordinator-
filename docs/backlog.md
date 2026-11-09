@@ -11,7 +11,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-09 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B64** — "Not selected" vendor status (PD-012 follow-up 2). `needs-owner: muted red, faded at the bottom, not counted in the summary?`
+1. **B64** — "Not selected" vendor status (PD-012 follow-up 2). `ready` (owner, 2026-11-09: "yes, that sounds good")
 2. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
 3. **B56** — the Wildman BT payments on the Budget screen (the checklist tasks V1–V3 came in with the load, #56). `ready`
 4. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
@@ -65,7 +65,7 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B58 — The RUNBOOK backup step doesn't work on Replit.** Found while writing the B53 steps (2026-11-09): the RUNBOOK's checklist-import backup uses `SYNC_DATABASE_URL`, which Replit's Shell doesn't set; there `DATABASE_URL` works, and the Shell always reaches the development database, not the published app's production one. *Fix:* update RUNBOOK for Replit. *Also for B14:* when the app is published, Replit offers to copy development data into production; that is when the imported checklist would carry over, and the publishing plan should cover it. If the wedding is already in production, the Shell can't reach it without pasting a secret, so a safe import route is needed first. *Depends on:* nothing. *#58 (B59):* the backup command now works in Replit's Shell; the publishing note remains.
 
-- **B64 — A "Not selected" vendor status.** Owner, 2026-11-09. PD-012 follow-up 2 (proposed): muted red, faded tile at the bottom of its section; doesn't count toward the category status. *Depends on:* the owner approving the colour and the summary rule. Likely a database change only if statuses are checked in the database; say what Publish will show.
+- **B64 — A "Not selected" vendor status.** Owner, 2026-11-09. PD-012 follow-up 2 (ratified): muted red, faded tile at the bottom of its section; doesn't count toward the category status. *Ratified 2026-11-09.* Likely a database change only if statuses are checked in the database; say what Publish will show.
 
 ### Housekeeping
 

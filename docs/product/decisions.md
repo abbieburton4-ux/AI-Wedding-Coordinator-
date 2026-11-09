@@ -269,7 +269,7 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - A summary at the top shows each of the seven categories with its status. *Decided-by-agent, reversible:* a category takes the furthest status of its vendors (booked if any vendor is booked; otherwise contacted; otherwise looking), and a category with no vendors shows "Still to do". Categories still to do or looking stand out, so the couple can see what's left. The summary only reflects what the couple set; the app never changes a status.
 **Reversible:** yes. The suggestions and matcher can return once a Chicago catalogue exists (B11).
 
-**Follow-up 2 (owner, 2026-11-09: "add a status option of Not Selected. what color do you recommend for this status?"), status: proposed.** A fourth status, **Not selected**, for vendors the couple have ruled out.
+**Follow-up 2 (owner, 2026-11-09: "add a status option of Not Selected. what color do you recommend for this status?"), ratified (owner, 2026-11-09, on the recommended colour and summary rule: "yes, that sounds good").** A fourth status, **Not selected**, for vendors the couple have ruled out.
 - *Recommended colour:* a muted red, with the tile faded and moved to the bottom of its section, so ruled-out vendors stay on record without crowding the ones still in play. Red reads as "no"; fading keeps it from looking urgent. Alternative: a darker grey, but that is easy to confuse with Looking.
 - *Recommended summary rule:* Not selected vendors don't count toward a category's status. A category whose vendors are all Not selected shows "Still to do", because it still needs a vendor.
 - As with the other statuses, only the couple set it; the app never changes it.
