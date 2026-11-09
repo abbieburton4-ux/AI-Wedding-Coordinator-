@@ -194,6 +194,8 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 **Technical choices settled by the team:** when merging, an AI task goes into the stage nearest its due date, and a task that says the same as one on the owner's list is skipped, not duplicated; the merge is checked on a copy before anything is deleted. The checklist is saved in the app's database through the backend, not in the browser (rule 11), with a migration (rule 6). Owners and editors can tick and edit; viewers can only read (PD-002). If the date changes, stages move into or out of "Catch up" to match. A stage that passes from now on, with tasks not done, shows as "overdue" ("dont lable them yet as overdue" covers the stages already past). The loverly.com list is loaded into the database by a one-off import from the owner's file, kept outside git. Seeds and tests use fictional placeholder tasks. Ticking a task never marks a payment paid or a booking confirmed (rule 4).
 **Rejected because:** a separate catch-up deadline would be a date nobody chose; separate checklists per person would split what the couple share; keeping the AI timeline would mean two lists. Call (c) chose merge-then-delete over keeping the AI timeline hidden. An earlier draft of this PD (options A: the owner's list with estimated dates, B: no dates until the date is fixed, C: a plain list) was replaced by this entry the same day, after the owner chose estimated dates from a provisional date.
 
+**Update (2026-11-09):** the owner set the date to 23 October 2027 and said it is final ("yes, 2027. date is final"). See `wedding.md`. The setup form follows in B54 (#46).
+
 ## PD-008 — Host the app on Replit (supersedes PD-006)
 
 **Date:** 2026-11-05 · **Status:** ratified (by the owner, one of the couple, 2026-11-05: "i am choosing replit"; calls (a)–(d) answered the same day)
@@ -225,3 +227,5 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - Saving the form still never contacts a vendor and never starts vendor matching (PD-003).
 **Technical choices settled by the team:** how the place and a blank budget are stored; the AI planner must not fail or leave the dashboard stuck on "building" when the budget is blank; the couple's names aren't sent to the AI (minimum context, rule 3). Vendor matching for Chicago stays with B11.
 **Rejected because:** B needs the owner to run a script and leaves a broken form behind; C blocks the couple or starts them on a wrong record.
+
+**Update (2026-11-09):** the owner set the date to 23 October 2027 and said it is final ("yes, 2027. date is final"). See `wedding.md`. The setup form follows in B54 (#46).
