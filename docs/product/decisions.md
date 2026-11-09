@@ -229,3 +229,13 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 **Rejected because:** B needs the owner to run a script and leaves a broken form behind; C blocks the couple or starts them on a wrong record.
 
 **Update (2026-11-09):** the owner set the date to 23 October 2027 and said it is final ("yes, 2027. date is final"). See `wedding.md`. The setup form follows in B54 (#46).
+
+## PD-010 — Turn off Aurelia, the in-app assistant (typed chat and voice)
+
+**Date:** 2026-11-09 · **Status:** ratified (by the owner, one of the couple, 2026-11-09: "you can turn off all of aurelia")
+**Context:** Backlog B57. After B49 (#44), every AI feature shows the cleaned text and sends only on a click (PD-008 follow-up 2), but voice calls with Aurelia send what is said to ElevenLabs, a different AI company, without a preview. Asked whether to apply the same check, keep voice as is, or switch voice off until the guest list exists, the owner said "turn off Aurelia"; asked whether that meant voice only or the typed chat too, she chose all of it.
+**Options:** A: turn off voice only. B: turn off all of Aurelia, typed chat and voice. C: keep both.
+**Decision:** B. Aurelia is switched off: nobody in the wedding party can open the typed chat or start a voice call, and the app sends nothing to ElevenLabs or to Gemini through the assistant. The other AI features (budget split, venue and supplier matching, pasted vendor emails, plan updates) stay on, with the check-before-sending rule.
+**Technical choices settled by the team:** turned off so it can come back with a small change (a setting, not deleting the code); the screens don't show a dead button or link; the backend refuses assistant calls too, not only the screens; past assistant records are kept, not deleted.
+**Reversible:** yes. The couple can ask for it back later, for example once the guest list exists (B19).
+**Rejected because:** A leaves a feature the owner doesn't want; C sends speech to a second AI company with no check.
