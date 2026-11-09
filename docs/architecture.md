@@ -111,6 +111,8 @@ The original venue-receptionist plan had Gemini Flash voice + Twilio voice. The 
 
 The agent drafts inquiry emails to suppliers, but suppliers reply in prose. Without an ingestion path the quote funnel stalls. SendGrid inbound parse webhook → API matches the reply to a `Booking` via a tracking address (`booking-<id>@inbox.venueflow.ie`) → enqueue a parse job → Gemini Flash extracts a structured quote → write `Quote` row + `AgentDecisionLog` with `parent_decision_id` linking to the original `inquiry_draft`.
 
+> **Today (PD-008 follow-up 2):** the webhook matches the booking but doesn't enqueue the parse job, because no one is there to check the text before it goes to Gemini, and it stores nothing. The couple paste the reply on the Vendors screen, check the cleaned text and click to send. Holding inbound emails for review would need somewhere to keep them (B50).
+
 ### Payments — removed
 
 The app takes no payments (PD-003). The Stripe Checkout and Billing code, the payment gate and the mock checkout were removed. Supplier deposits are still tracked only: couples pay suppliers directly (`SUPPLIER_PAYMENT`). The diagram and flows below still show the old Stripe path; they're historical.
@@ -143,8 +145,10 @@ Every agent is a function: `(input_payload) → (output_payload, AgentDecisionLo
 
 Every agent call must:
 1. Open an `AgentDecisionLog` row with `status='pending'` before the Gemini call.
-2. Record `model_id`, `prompt_version`, `agent_id`, `trigger`, `parent_decision_id` (if chained), `input_payload`.
-3. Call Gemini, capturing `latency_ms`, `tokens_input`, `tokens_output`, and any `external_api_calls`.
+2. Record `model_id`, `prompt_version`, `agent_id`, `trigger`, `parent_decision_id` (if chained), `input_payload` (with the same personal details removed).
+3. Call Gemini only through `app/agents/privacy.send_prompt` (PD-008). It removes the names, emails and phone numbers of the wedding's guests and access list, guests' dietary notes (other than plain categories), and anything shaped like an email or phone number, and refuses to send if any known detail is left. Counts and categories ("12 vegetarian") still go. Names the app doesn't hold, such as a new name in a vendor's email, can't be reliably spotted. Prompts are built with `ensure_ascii=False`, and a `\u` escape in a prompt is refused, so accented names can't slip past. `verify_agents.py` fails if any other file uses the Gemini client.
+   **Check before send (PD-008 follow-up 2).** Because unknown names can't be spotted, nothing is sent until the person has seen the cleaned text and clicked to send. Every AI route (`/concierge`, `/inquiries/{id}/quote`, `/match`, `/suppliers`, `/replan`, `/budget/suggest-split`) first calls the agent with `preview_only=True`: it runs up to its model call in its own session, `send_prompt` raises `PromptNeedsReview` instead of sending, every change is rolled back, no log row is written, and the route returns `{"needs_review": true, "preview": <exact text>}`. The person's click repeats the request with `approved_prompt` set to that text. The route goes ahead only if the agent's cleaned prompt is exactly that text, and `send_prompt` checks again before the call (`PromptNotApproved` otherwise, logged as an error; nothing sent). A run with no model call (the planner's skips) needs no check. The approved text travels in the task payload to the worker. Wedding creation queues the planner only when it makes no model call; otherwise the dashboard offers "Update my plan". The inbound-email webhook has no one to check the text, so it no longer runs the quote extractor; the couple paste replies on the Vendors screen. Queries that feed a prompt are ordered and the privacy patterns sorted, so the same data gives the same text in any process; if the data does change between the check and the click (a task ticked, a worker running later), nothing is sent and the person sees the new text, or the run is logged as `PromptNotApproved`. Each agent run may make one model call, since a second, different text wouldn't match the approval. The server enforces "exactly this text"; the click itself is the browser's. The app's fixed instructions are checked for whole names, contacts and dietary notes, not single name parts, which are often ordinary words there ("Mark", "Irish").
+   Capture `latency_ms`, `tokens_input`, `tokens_output`, and any `external_api_calls`.
 4. Validate the output against the agent's output schema (Zod/Pydantic). Schema failure → `status='error'`, `error_kind='schema_violation'`.
 5. Apply guardrails (price ceilings, PII filters, hallucination checks). Block → `status='blocked_by_guardrail'`.
 6. On success: write `output_payload`, `rationale_summary`, `confidence_score`; mutate domain entities (`Booking`, `Contract`, etc.) in the same DB transaction. Flip `status='success'`.
@@ -159,7 +163,7 @@ This logic lives in a single `runAgent()` helper. Agents themselves are just `{ 
 | `intake_planner` | Pro | Stripe webhook → `Wedding.status=planning` | `intake_plan` (draft budget split in the log; the timeline was replaced by the checklist, PD-007. Skips the model, and moves the wedding to planning, when the budget is blank or not in euros, PD-009) | 1, 2 |
 | `venue_matcher` | Pro | Wedding planning starts | `venue_match`, then N `inquiry_draft` | 4 |
 | `supplier_matcher` | Pro | Same as above, per category | `supplier_match`, `inquiry_draft` | 4 |
-| `quote_extractor` | Flash | SendGrid inbound parse | `quote_draft` (chained to `inquiry_draft`) | 4 |
+| `quote_extractor` | Flash | A reply the couple paste and approve (the SendGrid inbound parse no longer runs it, PD-008) | `quote_draft` (chained to `inquiry_draft`) | 4 |
 | `quote_negotiator` | Pro | Quote extracted, over budget | `quote_negotiate` | 4, 9 |
 | `contract_reviewer` | Pro | Contract uploaded to GCS | `contract_review` | 5 |
 | `budget_monitor` | Flash | `Quote.status='accepted'` or `SupplierPayment` insert | `budget_alert` | 9 |

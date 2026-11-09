@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Icon } from "../../shared/Icon";
 import { IMG } from "../../design-system/assets";
-import { useWedding, useAgentMatcher, useApi, USE_FASTAPI_BACKEND } from "../../../app/api";
+import { useWedding, useAgentMatcher, USE_FASTAPI_BACKEND } from "../../../app/api";
+import { useReviewedRequest } from "../../api/review";
 import { useActiveWedding } from "../WeddingProvider";
 import { formatCents } from "./budget/money";
 
@@ -39,7 +40,7 @@ type BudgetComparison =
 /** Quote loop: paste a vendor's email reply → quote_extractor parses it → the card
  *  compares it with the couple's budget. Polls until the agent's result lands. */
 function QuoteLogger({ booking, refetch }: { booking: VendorBooking; refetch: () => Promise<void> }) {
-  const { request } = useApi();
+  const sendReviewed = useReviewedRequest();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -52,10 +53,9 @@ function QuoteLogger({ booking, refetch }: { booking: VendorBooking; refetch: ()
     setSubmitting(true);
     setErr(null);
     try {
-      await request(`/inquiries/${booking.id}/quote`, {
-        method: "POST",
-        body: JSON.stringify({ email_body: text }),
-      });
+      // Shows the cleaned email first; nothing is sent until they click (PD-008).
+      const sent = await sendReviewed(`/inquiries/${booking.id}/quote`, { email_body: text });
+      if (sent === null) return; // went back to edit the pasted text
       // The extractor runs async on the worker — poll until the quote lands (which
       // re-renders this card into the "quote received" panel and unmounts us).
       for (let i = 0; i < 20 && mounted.current; i++) {
@@ -86,7 +86,7 @@ function QuoteLogger({ booking, refetch }: { booking: VendorBooking; refetch: ()
     <div>
       <p className="text-xs text-on-surface-variant mb-2">
         Paste the vendor's email reply — the AI reads the price, checks it against your budget,
-        and updates your tracker.
+        and updates your tracker. You'll see exactly what goes to the AI before it's sent.
       </p>
       <textarea
         value={text}

@@ -17,21 +17,27 @@ router = APIRouter(dependencies=[Depends(require_internal_caller)])
 
 
 # Task Request Schema Definitions
+# ``approved_prompt`` is the text the couple checked and clicked to send (PD-008).
+# Without it, or if the text to send has changed, the agent's model call is refused.
 class IntakePlannerTaskSchema(BaseModel):
     wedding_id: str
     force: bool = False
+    approved_prompt: Optional[str] = None
 
 
 class VenueMatcherTaskSchema(BaseModel):
     wedding_id: str
+    approved_prompt: Optional[str] = None
 
 class SupplierMatcherTaskSchema(BaseModel):
     wedding_id: str
     category: str
+    approved_prompt: Optional[str] = None
 
 class QuoteExtractorTaskSchema(BaseModel):
     booking_id: str
     email_body: str
+    approved_prompt: Optional[str] = None
 
 
 @router.post("/intake-planner", status_code=status.HTTP_200_OK)
@@ -48,7 +54,8 @@ async def task_intake_planner(
     try:
         # Run agent
         result = await run_intake_planner(
-            db, payload.wedding_id, force=payload.force, trigger="couple_action"
+            db, payload.wedding_id, force=payload.force, trigger="couple_action",
+            approved_prompt=payload.approved_prompt,
         )
 
         return {"status": "completed", "result": result}
@@ -65,7 +72,8 @@ async def task_venue_matcher(
     """Worker task executing the venue matcher agent to shortlist venues."""
     logger.info(f"Worker Task: starting venue-matcher for wedding {payload.wedding_id}")
     try:
-        result = await run_venue_matcher(db, payload.wedding_id, trigger="agent_initiated")
+        result = await run_venue_matcher(db, payload.wedding_id, trigger="agent_initiated",
+                                         approved_prompt=payload.approved_prompt)
         return {"status": "completed", "result": result}
     except Exception as e:
         logger.error(f"Worker Task: venue-matcher failed: {e}")
@@ -84,7 +92,8 @@ async def task_supplier_matcher(
             db, 
             payload.wedding_id, 
             payload.category, 
-            trigger="agent_initiated"
+            trigger="agent_initiated",
+            approved_prompt=payload.approved_prompt,
         )
         return {"status": "completed", "result": result}
     except Exception as e:
@@ -114,7 +123,8 @@ async def task_quote_extractor(
             booking.id, 
             payload.email_body, 
             trigger="supplier_response",
-            booking_id=booking.id
+            booking_id=booking.id,
+            approved_prompt=payload.approved_prompt,
         )
         return {"status": "completed", "result": result_dict}
     except Exception as e:

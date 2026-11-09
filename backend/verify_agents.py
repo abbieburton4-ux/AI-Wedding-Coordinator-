@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import re
 import asyncio
 import uuid
 from unittest.mock import patch, MagicMock
@@ -37,6 +38,14 @@ class MockResponse:
     def __init__(self, text, prompt_tokens=15, output_tokens=25):
         self.text = text
         self.usage_metadata = MockUsageMetadata(prompt_tokens, output_tokens)
+
+async def approved(agent, db, wedding_id, *args, **kwargs):
+    """Runs an agent the way the app does once the person has clicked send (PD-008):
+    a preview first, then the run with exactly the previewed text."""
+    check = await agent(db, wedding_id, *args, preview_only=True, **kwargs)
+    approval = {"approved_prompt": check["preview"]} if check["needs_review"] else {}
+    return await agent(db, wedding_id, *args, **approval, **kwargs)
+
 
 async def run_async_verification():
     print("--- STARTING ASYNC AGENT LOGIC VERIFICATION ---")
@@ -94,7 +103,7 @@ async def run_async_verification():
             await db.commit()
 
             # Run the planner agent
-            res_planner = await run_intake_planner(db, "wedding_intake_test")
+            res_planner = await approved(run_intake_planner, db, "wedding_intake_test")
             
             print(f"   * Status returned: {res_planner.get('status') or 'success'}")
             assert res_planner.get("is_budget_realistic") is True
@@ -168,7 +177,7 @@ async def run_async_verification():
                 
             mock_models.generate_content = mock_generate_content_blocked
             
-            res_planner_blocked = await run_intake_planner(db, "wedding_intake_test")
+            res_planner_blocked = await approved(run_intake_planner, db, "wedding_intake_test")
             print(f"   * Status returned: {res_planner_blocked.get('status')}")
             assert res_planner_blocked.get("status") == "blocked"
             assert "unrealistic" in res_planner_blocked.get("rationale_summary").lower()
@@ -211,7 +220,7 @@ async def run_async_verification():
                 
             mock_models.generate_content = mock_generate_content_whitelist
             
-            res_planner_whitelist = await run_intake_planner(db, "wedding_intake_test")
+            res_planner_whitelist = await approved(run_intake_planner, db, "wedding_intake_test")
             print(f"   * Status returned: {res_planner_whitelist.get('status')}")
             assert res_planner_whitelist.get("status") == "blocked"
             
@@ -260,7 +269,7 @@ async def run_async_verification():
                 
             mock_models.generate_content = mock_generate_content_venue
             
-            res_matcher = await run_venue_matcher(db, "wedding_intake_test")
+            res_matcher = await approved(run_venue_matcher, db, "wedding_intake_test")
             print(f"   * res_matcher: {res_matcher}")
             print(f"   * Matches found: {len(res_matcher.get('shortlist', []))}")
             assert len(res_matcher.get("shortlist", [])) == 1
@@ -294,7 +303,7 @@ async def run_async_verification():
                 
             mock_models.generate_content = mock_generate_content_hallucinate
             
-            res_hallucinate = await run_venue_matcher(db, "wedding_intake_test")
+            res_hallucinate = await approved(run_venue_matcher, db, "wedding_intake_test")
             print(f"   * Status returned: {res_hallucinate.get('status')}")
             assert res_hallucinate.get("status") == "blocked"
             
@@ -339,7 +348,7 @@ async def run_async_verification():
                 
             mock_models.generate_content = mock_generate_content_quote
             
-            res_extractor = await run_quote_extractor(
+            res_extractor = await approved(run_quote_extractor, 
                 db, 
                 "wedding_planning_test", 
                 "booking_photo_test", 
@@ -390,7 +399,7 @@ async def run_async_verification():
                 
             mock_models.generate_content = mock_generate_content_quote_over
             
-            res_over = await run_quote_extractor(
+            res_over = await approved(run_quote_extractor, 
                 db,
                 "wedding_planning_test",
                 "booking_photo_test",
@@ -423,7 +432,7 @@ async def run_async_verification():
 
             mock_models.generate_content = mock_generate_content_no_confidence
 
-            await run_venue_matcher(db, "wedding_intake_test")
+            await approved(run_venue_matcher, db, "wedding_intake_test")
 
             log_result = await db.exec(
                 select(AgentDecisionLog)
@@ -468,7 +477,7 @@ async def run_async_verification():
                 {"category": "catering", "percent": 33.3, "rationale": "Per head."},
             ])
             with patch("app.agents.budget_split.get_client", return_value=mock_client):
-                out = await run_budget_splitter(db, "wedding_intake_test", **split_kwargs)
+                out = await approved(run_budget_splitter, db, "wedding_intake_test", **split_kwargs)
             assert out.get("status") != "blocked", out
             amounts = [line["planned_cents"] for line in out["lines"]]
             assert sum(amounts) == 3_333_333, "the split must add up to exactly the total"
@@ -500,12 +509,12 @@ async def run_async_verification():
             for kind, lines in bad_replies:
                 mock_models.generate_content = split_reply(lines)
                 with patch("app.agents.budget_split.get_client", return_value=mock_client):
-                    out = await run_budget_splitter(db, "wedding_intake_test", **split_kwargs)
+                    out = await approved(run_budget_splitter, db, "wedding_intake_test", **split_kwargs)
                 assert out["status"] == "blocked" and out["error_kind"] == kind, (kind, out)
                 log = (await split_logs())[0]
                 assert log.status == "blocked_by_guardrail" and log.error_kind == kind
                 print(f"   * Blocked: {kind}")
-            out = await run_budget_splitter(db, "wedding_intake_test", total_cents=0,
+            out = await approved(run_budget_splitter, db, "wedding_intake_test", total_cents=0,
                                             category_names=[])
             assert out["error_kind"] == "no_total"
             print("   * Blocked: no_total (no model call without the couple's total)")
@@ -523,7 +532,7 @@ async def run_async_verification():
                 return MockResponse(body, prompt_tokens=1, output_tokens=1)
             mock_models.generate_content = _priced
             with patch("app.agents.budget_split.get_client", return_value=mock_client):
-                out = await run_budget_splitter(db, "wedding_intake_test", **split_kwargs)
+                out = await approved(run_budget_splitter, db, "wedding_intake_test", **split_kwargs)
             assert out.get("status") != "blocked", out
             reasons = [line["rationale"] for line in out["lines"]]
             assert reasons == [""] * len(priced) + clean, reasons
@@ -538,7 +547,7 @@ async def run_async_verification():
             mock_models.generate_content = split_reply(
                 [{"category": "venue", "percent": 100.0}], usage=False)
             with patch("app.agents.budget_split.get_client", return_value=mock_client):
-                out = await run_budget_splitter(db, "wedding_intake_test", **split_kwargs)
+                out = await approved(run_budget_splitter, db, "wedding_intake_test", **split_kwargs)
             assert out["lines"][0]["planned_cents"] == 3_333_333
             assert out["lines"][0]["rationale"] == "", "a missing rationale stays empty"
             log = (await split_logs())[0]
@@ -611,7 +620,7 @@ async def run_async_verification():
                     .order_by(AgentDecisionLog.timestamp.desc())
                 )).all()
 
-            out = await run_intake_planner(db, "wedding_setup_test")
+            out = await approved(run_intake_planner, db, "wedding_setup_test")
             assert out["budget_check"] == "skipped" and out["skip_reason"] == "no_budget", out
             assert "budget_lines" not in out, "no split is drafted without a budget"
             w_setup = (await db.exec(select(Wedding).where(Wedding.id == "wedding_setup_test"))).first()
@@ -630,7 +639,7 @@ async def run_async_verification():
             w_setup.status = "intake"
             db.add(w_setup)
             await db.commit()
-            out = await run_intake_planner(db, "wedding_setup_test")
+            out = await approved(run_intake_planner, db, "wedding_setup_test")
             assert out["skip_reason"] == "not_irish_pricing", out
             await db.refresh(w_setup)
             assert w_setup.status == "planning"
@@ -652,6 +661,249 @@ async def run_async_verification():
             context = await _build_context(db, w_setup)
             assert "Total budget: $50,000.50 (US dollars)." in context and "€" not in context, context
             print("   * Concierge context: the couple's dollar total, never shown in euros")
+
+    # PD-008 (B49): no guest or party name, contact detail or dietary note reaches
+    # Gemini or the decision log, from any agent. All data here is fictional.
+    print("\nTEST 12c: Guest and party personal data never reaches a prompt (PD-008)...")
+    from types import SimpleNamespace
+    from app.db.models import Guest
+    from app.agents.concierge import run_concierge
+    from app.agents.budget_split import run_budget_splitter
+    from app.agents import privacy
+
+    forbidden = [
+        "ottoline", "quarrington", "ottoline.q@example.test", "555 0142", "5550142",
+        "barnaby", "fennimore", "201-3344", "2013344", "peanut allergy", "epipen",
+        "priya", "david", "priya.david@example.com", "holt", "3125550199",
+        "type-1 diabetic", "wilhelmina", "thackeray", "siobh", "bhriain",
+        "\\u00e1",
+    ]
+
+    def leaks(text) -> list:
+        lowered = (text or "").lower()
+        return [term for term in forbidden if term in lowered]
+
+    sent = []
+
+    async def capture(*args, **kwargs):
+        sent.append(kwargs)
+        contents = kwargs.get("contents") or ""
+        if "COUPLE'S QUESTION" in contents:
+            return MockResponse(json.dumps({"reply": "Yes, that works.", "confidence_score": 0.8}))
+        if "Suggest a starting split" in contents:
+            return MockResponse(json.dumps({"lines": [
+                {"category": "Venue", "percent": 90, "rationale": "Main cost."},
+                {"category": "[name]'s travel", "percent": 10, "rationale": "Travel."}],
+                "rationale_summary": "One line."}))
+        if "Create a wedding plan" in contents:
+            return MockResponse(json.dumps({
+                "is_budget_realistic": True, "guardrail_warning": "", "budget_lines": [],
+                "rationale_summary": "Fine.", "confidence_score": 0.9}))
+        if "Match " in contents:
+            return MockResponse(json.dumps({
+                "shortlist": [], "rationale_summary": "None.", "confidence_score": 0.5}))
+        return MockResponse(json.dumps({
+            "is_available": True, "line_items": [], "total_amount": 3200.0,
+            "currency": "EUR", "rationale_text": "Per-head menu.", "confidence_score": 0.9}))
+
+    priv_client = MagicMock()
+    priv_client.aio.models.generate_content = capture
+    wid = "wedding_planning_test"
+    with patch("app.agents.planner.get_client", return_value=priv_client), \
+         patch("app.agents.matcher.get_client", return_value=priv_client), \
+         patch("app.agents.extractor.get_client", return_value=priv_client), \
+         patch("app.agents.concierge.get_client", return_value=priv_client), \
+         patch("app.agents.budget_split.get_client", return_value=priv_client):
+        async with async_session_maker() as db:
+            db.add_all([
+                Guest(wedding_id=wid, name="Ottoline Quarrington",
+                      email="ottoline.q@example.test", phone="+353 87 555 0142",
+                      dietary="Severe peanut allergy, carries an EpiPen"),
+                Guest(wedding_id=wid, name="Barnaby Fennimore-Holt",
+                      phone="(555) 201-3344", dietary="vegetarian"),
+                Guest(wedding_id=wid, name="Siobhán Ní Bhriain"),
+                Guest(wedding_id=wid, name="Wilhelmina Thackeray",
+                      phone="3125550199", dietary="Type-1 diabetic"),
+                ChecklistTask(wedding_id=wid, stage="9m", position=1,
+                              title="Ask Ottoline Quarrington about the cake"),
+            ])
+            w_priv = (await db.exec(select(Wedding).where(Wedding.id == wid))).first()
+            w_priv.style_notes = "Rustic, with Barnaby playing harp; ask Priya and Siobhán."
+            db.add(w_priv)
+            await db.commit()
+            logs_before = {log.id for log in (await db.exec(select(AgentDecisionLog))).all()}
+
+            question = (
+                "Can Ottoline Quarrington (ottoline.q@example.test, 087 555 0142) sit near "
+                "Barnaby? She has a severe peanut allergy, carries an EpiPen. "
+                "We have 12 vegetarian guests and a budget of €3,200 for 2027-06-12. Priya. "
+                "Also can ottoline and FENNIMORE and holt sit together? Call 3125550199. "
+                "One guest is type 1, diabetic. Siobhan says hi."
+            )
+            await approved(run_concierge, db, wid, message=question)
+            concierge_prompt = sent[-1]["contents"]
+            assert "12 vegetarian guests" in concierge_prompt, "counts and categories may be sent"
+            assert "€3,200" in concierge_prompt and "2027-06-12" in concierge_prompt
+            assert "[name]" in concierge_prompt and "[dietary note]" in concierge_prompt
+
+            await approved(run_quote_extractor, 
+                db, wid, "booking_photo_test",
+                "Dear Priya and David,\nBarnaby Fennimore-Holt's vegetarian menu is fine. "
+                "Ottoline QUARRINGTON can reach me on +1 (555) 201-3344 or "
+                "ottoline.q@example.test. 12 vegetarian mains at €40 each; total €3,200.",
+            )
+            extractor_prompt = sent[-1]["contents"]
+            assert "12 vegetarian mains at €40 each; total €3,200." in extractor_prompt
+
+            await approved(run_intake_planner, db, wid, force=True)
+            await approved(run_venue_matcher, db, wid)
+            await approved(run_supplier_matcher, db, wid, "photography")
+            split = await approved(run_budget_splitter, db, wid, total_cents=1_000_000,
+                                      category_names=["Venue", "Siobhán's travel"])
+
+            assert split.get("status") != "blocked", split
+            assert [line["name"] for line in split["lines"]] == ["Venue", "Siobhán's travel"], \
+                "a category named after a guest is sent without the name, then mapped back"
+            assert len(sent) == 6, f"every agent called the model once ({len(sent)})"
+            for call in sent:
+                instruction = getattr(call.get("config"), "system_instruction", "") or ""
+                assert not leaks(call.get("contents")), leaks(call.get("contents"))
+                assert not leaks(instruction), leaks(instruction)
+            print("   * Concierge, quote extractor, planner, both matchers and the budget "
+                  "splitter: no names, contacts or dietary notes sent; counts kept")
+
+            new_logs = [log for log in (await db.exec(select(AgentDecisionLog))).all()
+                        if log.id not in logs_before]
+            assert len(new_logs) == 6, len(new_logs)
+            for log in new_logs:
+                stored = json.dumps([log.input_payload, log.output_payload,
+                                     log.rationale_summary, log.error_message],
+                                    ensure_ascii=False)
+                assert not leaks(stored), (log.agent_id, leaks(stored))
+            print("   * Decision log rows hold no guest or party personal data")
+
+            # Refuses, rather than sends, if a detail is still there after redaction.
+            calls_before = len(sent)
+            try:
+                await privacy.send_prompt(
+                    db, wid, priv_client, model="m", contents="Seat plan",
+                    config=SimpleNamespace(system_instruction="Greet Ottoline Quarrington."))
+                raise AssertionError("a prompt holding a guest name must not be sent")
+            except privacy.PersonalDataInPrompt:
+                pass
+            assert len(sent) == calls_before, "nothing was sent"
+            print("   * A prompt that still holds a guest detail is refused, not sent")
+
+            # PD-008 follow-up 2: nothing is sent until the person has seen the cleaned
+            # text and clicked to send, and what's sent is exactly what they saw.
+            print("\nTEST 12d: Nothing reaches Gemini without the person's click (PD-008)...")
+            from app.agents.privacy import PromptNotApproved
+
+            def logs_now():
+                return db.exec(select(AgentDecisionLog))
+
+            runs = [
+                ("concierge", run_concierge, (), {"message": "Can Ottoline sit with 12 vegetarians?"}),
+                ("quote_extractor", run_quote_extractor,
+                 ("booking_photo_test", "Dear Priya, total €3,200 for 12 vegetarian mains."), {}),
+                ("intake_planner", run_intake_planner, (), {"force": True}),
+                ("venue_matcher", run_venue_matcher, (), {}),
+                ("supplier_matcher", run_supplier_matcher, ("photography",), {}),
+                ("budget_splitter", run_budget_splitter, (),
+                 {"total_cents": 1_000_000, "category_names": ["Venue", "Siobhán's travel"]}),
+            ]
+            for name, agent, args, kwargs in runs:
+                rows_before = len((await logs_now()).all())
+                calls_before = len(sent)
+
+                check = await agent(db, wid, *args, preview_only=True, **kwargs)
+                assert check["needs_review"] is True and check["preview"], (name, check)
+                preview = check["preview"]
+                assert not leaks(preview), (name, leaks(preview))
+                assert "[name]" in preview, f"{name}: known names are removed before the preview"
+                assert len(sent) == calls_before, f"{name}: a preview sends nothing"
+                assert len((await logs_now()).all()) == rows_before, \
+                    f"{name}: a preview writes no decision row, since nothing was decided"
+
+                # No click, or a click on any other text: refused and logged, not sent.
+                for other in (None, preview + " Ottoline", preview.replace("[name]", "Priya", 1),
+                              preview[:-1]):
+                    approval = {} if other is None else {"approved_prompt": other}
+                    try:
+                        await agent(db, wid, *args, **approval, **kwargs)
+                        raise AssertionError(f"{name}: sent without approval of this text")
+                    except PromptNotApproved:
+                        pass
+                    assert len(sent) == calls_before, f"{name}: nothing was sent"
+                refused = (await db.exec(
+                    select(AgentDecisionLog).where(AgentDecisionLog.agent_id == name)
+                    .order_by(AgentDecisionLog.timestamp.desc()))).first()
+                assert (refused.status, refused.error_kind) == ("error", "PromptNotApproved"), \
+                    (name, refused.status, refused.error_kind)
+
+                # The click on the previewed text sends exactly that text, once.
+                await agent(db, wid, *args, approved_prompt=preview, **kwargs)
+                assert len(sent) == calls_before + 1, f"{name}: the approved text was sent once"
+                assert sent[-1]["contents"] == preview, f"{name}: sent text equals previewed text"
+            print("   * All six agents: no call without the click, none for other text; "
+                  "the sent text is the previewed text")
+
+            # A first name that's also a word in the app's own instructions ("Mark
+            # is_available", "Irish") doesn't block the AI; the guest's name is still
+            # removed from what's sent.
+            guest_mark = Guest(wedding_id=wid, name="Mark Irish-Return")
+            db.add(guest_mark)
+            await db.commit()
+            for name, agent, args, kwargs in runs:
+                calls_before = len(sent)
+                await approved(agent, db, wid, *args, **kwargs)
+                assert len(sent) == calls_before + 1, f"{name}: refused over a name part"
+                assert "Irish-Return" not in sent[-1]["contents"], name
+            await db.delete(guest_mark)
+            await db.commit()
+            print("   * A guest called Mark (a word in the instructions) doesn't block the AI")
+
+            # A preview changes nothing, even on a path that would (the planner's skip).
+            w_skip = (await db.exec(select(Wedding).where(Wedding.id == "wedding_setup_test"))).first()
+            w_skip.status = "intake"
+            db.add(w_skip)
+            await db.commit()
+            calls_before = len(sent)
+            check = await run_intake_planner(db, "wedding_setup_test", preview_only=True)
+            assert check == {"needs_review": False}, check
+            await db.refresh(w_skip)
+            assert w_skip.status == "intake", "a preview keeps no change"
+            assert len(sent) == calls_before
+            print("   * A run with no AI call needs no check, and its preview changes nothing")
+
+            # Only send_prompt reaches the client, and it won't send outside an agent run.
+            try:
+                await privacy.send_prompt(db, wid, priv_client, model="m", contents="Seat plan",
+                                          config=SimpleNamespace(system_instruction=""))
+                raise AssertionError("send_prompt must not send without an approved text")
+            except PromptNotApproved:
+                pass
+            assert len(sent) == calls_before
+            print("   * Outside an approved agent run, nothing is sent")
+
+    # Every model call goes through the guardrail: nothing else uses the Gemini client.
+    app_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "app")
+    allowed_files = {os.path.join("agents", "privacy.py"), os.path.join("agents", "base.py")}
+    client_use = re.compile(r"generate_content|\.models\.|\.chats\b|\.files\b|\.live\b"
+                            r"|count_tokens|genai\.Client")
+    direct = []
+    for root, _dirs, files in os.walk(app_dir):
+        for name in files:
+            path = os.path.join(root, name)
+            rel = os.path.relpath(path, app_dir)
+            if name.endswith(".py") and rel not in allowed_files:
+                with open(path, encoding="utf-8") as fh:
+                    source = fh.read()
+                if client_use.search(source) or ("get_client(" in source
+                                                 and "send_prompt(" not in source):
+                    direct.append(rel)
+    assert direct == [], f"call Gemini only through privacy.send_prompt: {direct}"
+    print("   * Only privacy.send_prompt calls the model")
 
     # The production path must reach the same decorated agent, not an HTTP stub.
     print("\nTEST 13: Direct production dispatch uses the decorated agent...")

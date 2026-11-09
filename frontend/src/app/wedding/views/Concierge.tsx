@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Icon } from "../../shared/Icon";
-import { useApi } from "../../api";
+import { useReviewedRequest } from "../../api/review";
 import { useActiveWedding } from "../WeddingProvider";
 import { VoiceCall } from "../VoiceCall";
 
@@ -18,13 +18,14 @@ const SUGGESTIONS = ["Can we afford a live band?", "Are we on budget?", "What sh
 
 export function Concierge() {
   const navigate = useNavigate();
-  const { request } = useApi();
+  const sendReviewed = useReviewedRequest();
   const { activeWedding } = useActiveWedding();
   const weddingId = activeWedding?.id ?? null;
 
   const [messages, setMessages] = useState<Message[]>(SEED);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -37,6 +38,7 @@ export function Concierge() {
 
     setMessages((prev) => [...prev, { role: "user", text: trimmed }]);
     setDraft("");
+    setNotice(null);
     scroll();
 
     if (!weddingId) {
@@ -49,16 +51,28 @@ export function Concierge() {
 
     setSending(true);
     try {
-      const res = await request<{ reply: string }>(`/weddings/${weddingId}/concierge`, {
-        method: "POST",
-        body: JSON.stringify({ message: trimmed }),
+      // Shows the couple the exact text first; nothing is sent until they click (PD-008).
+      const res = await sendReviewed<{ reply: string }>(`/weddings/${weddingId}/concierge`, {
+        message: trimmed,
       });
+      if (res === null) {
+        // They went back: take the question out of the chat and put it back in the box.
+        setMessages((prev) => prev.slice(0, -1));
+        setDraft(trimmed);
+        return;
+      }
       setMessages((prev) => [...prev, { role: "ai", text: res.reply || "…" }]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: "ai", text: "I had trouble reaching my tools just now — please try again in a moment." },
-      ]);
+    } catch (err) {
+      // The server's own words when it gave some (say, a detail it couldn't take out).
+      const said =
+        err instanceof Error && !(err instanceof TypeError) && !err.message.startsWith("Request failed")
+          ? err.message
+          : "";
+      // Give the question back so they can change it or try again, and say what happened
+      // in the app's own voice, not Aurelia's.
+      setMessages((prev) => prev.slice(0, -1));
+      setDraft(trimmed);
+      setNotice(said || "Aurelia couldn't answer just now, so nothing was sent. Please try again in a moment.");
     } finally {
       setSending(false);
       scroll();
@@ -129,6 +143,11 @@ export function Concierge() {
       </main>
 
       <div className="fixed bottom-0 w-full p-4 bg-background">
+        {notice && (
+          <p role="alert" className="max-w-2xl mx-auto mb-2 px-4 text-sm text-error">
+            {notice}
+          </p>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
