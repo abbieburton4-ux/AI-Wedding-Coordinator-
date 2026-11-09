@@ -40,6 +40,17 @@
   --font-weight-normal: 400;
   --ring: #B49870;
 
+  /* Vendor statuses (PD-012): looking grey, contacted blue, booked green, and a
+     stronger "still to do" for a category with no vendors. Each pair is >= 6:1. */
+  --status-looking: #ECEAE7;
+  --status-looking-foreground: #4A4744;
+  --status-contacted: #E1EBF7;
+  --status-contacted-foreground: #1D4E89;
+  --status-booked: #DFF0E4;
+  --status-booked-foreground: #1D6337;
+  --status-todo: #9A3412;
+  --status-todo-foreground: #FFFFFF;
+
   --radius: 0.5rem;
 }
 
@@ -71,6 +82,15 @@
   --border: #403E3C;
   --input: #403E3C;
   --ring: #B49870;
+
+  --status-looking: #3A3836;
+  --status-looking-foreground: #E4E1DD;
+  --status-contacted: #1D3554;
+  --status-contacted-foreground: #C3D9F5;
+  --status-booked: #1B3F29;
+  --status-booked-foreground: #BDE5C9;
+  --status-todo: #F5A97A;
+  --status-todo-foreground: #2A1408;
 }
 
 @theme inline {
@@ -107,6 +127,15 @@
   --color-input-background: var(--input-background);
   --color-switch-background: var(--switch-background);
   --color-ring: var(--ring);
+
+  --color-status-looking: var(--status-looking);
+  --color-status-looking-foreground: var(--status-looking-foreground);
+  --color-status-contacted: var(--status-contacted);
+  --color-status-contacted-foreground: var(--status-contacted-foreground);
+  --color-status-booked: var(--status-booked);
+  --color-status-booked-foreground: var(--status-booked-foreground);
+  --color-status-todo: var(--status-todo);
+  --color-status-todo-foreground: var(--status-todo-foreground);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

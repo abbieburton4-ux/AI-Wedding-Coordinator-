@@ -62,7 +62,50 @@ const STATUSES: { value: VendorStatus; label: string }[] = [
   { value: "booked", label: "Booked" },
 ];
 
-const statusLabel = (s: VendorStatus) => STATUSES.find((x) => x.value === s)?.label ?? s;
+/** A category's status: its vendors' furthest status, or "todo" when it has none. */
+type CategoryStatus = VendorStatus | "todo";
+
+const STATUS_RANK: Record<VendorStatus, number> = { looking: 0, contacted: 1, booked: 2 };
+
+function categoryStatus(vendors: Vendor[]): CategoryStatus {
+  if (vendors.length === 0) return "todo";
+  return vendors.reduce<VendorStatus>(
+    (best, v) => (STATUS_RANK[v.status] > STATUS_RANK[best] ? v.status : best),
+    "looking",
+  );
+}
+
+// Colour is never the only cue: every badge carries the word, and an icon too.
+const STATUS_STYLE: Record<CategoryStatus, { label: string; icon: string; badge: string; edge: string }> = {
+  todo: {
+    label: "Still to do", icon: "priority_high",
+    badge: "bg-status-todo text-status-todo-foreground", edge: "border-l-status-todo",
+  },
+  looking: {
+    label: "Looking", icon: "search",
+    badge: "bg-status-looking text-status-looking-foreground", edge: "border-l-status-looking-foreground",
+  },
+  contacted: {
+    label: "Contacted", icon: "mail",
+    badge: "bg-status-contacted text-status-contacted-foreground", edge: "border-l-status-contacted-foreground",
+  },
+  booked: {
+    label: "Booked", icon: "check_circle",
+    badge: "bg-status-booked text-status-booked-foreground", edge: "border-l-status-booked-foreground",
+  },
+};
+
+function StatusBadge({ status, srPrefix = "Status: " }: { status: CategoryStatus; srPrefix?: string }) {
+  const s = STATUS_STYLE[status];
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs font-button-text ${s.badge}`}>
+      <Icon name={s.icon} size={14} />
+      <span className="sr-only">{srPrefix}</span>{s.label}
+    </span>
+  );
+}
+
+const sectionDomId = (key: string) => `vendor-category-${key}`;
 
 const textArea =
   "w-full rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-2 text-sm text-on-surface focus:border-primary focus:outline-none";
@@ -366,12 +409,12 @@ function VendorCard({
   }
 
   return (
-    <li className="flex flex-col gap-2 border-t border-outline-variant/20 pt-4 first:border-t-0 first:pt-0">
+    <li
+      className={`flex flex-col gap-2 rounded-2xl border border-outline-variant/30 border-l-4 ${STATUS_STYLE[vendor.status].edge} bg-surface-container-low/60 p-4`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="font-title-lg text-title-lg text-on-surface leading-tight">{vendor.name}</p>
-        <span className="shrink-0 rounded-full bg-primary/10 px-3 py-1 text-xs font-button-text text-primary">
-          <span className="sr-only">Status: </span>{statusLabel(vendor.status)}
-        </span>
+        <p className="font-title-lg text-title-lg text-on-surface leading-tight break-words min-w-0">{vendor.name}</p>
+        <StatusBadge status={vendor.status} />
       </div>
       {href && (
         <a
@@ -462,14 +505,17 @@ function SectionCard({
 
   return (
     <section
+      id={sectionDomId(section.key)}
+      tabIndex={-1}
       aria-labelledby={headingId}
-      className="bg-surface-container-lowest rounded-[2rem] border border-outline-variant/20 p-gutter flex flex-col gap-4"
+      className="scroll-mt-24 bg-surface-container-lowest rounded-[2rem] border border-outline-variant/20 p-gutter flex flex-col gap-4 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
     >
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <span className="w-10 h-10 shrink-0 rounded-full bg-primary/10 flex items-center justify-center">
           <Icon name={section.icon} size={20} className="text-primary" />
         </span>
         <h3 id={headingId} className="font-headline-sm text-headline-sm text-on-surface">{section.title}</h3>
+        <span className="ml-auto"><StatusBadge status={categoryStatus(vendors)} srPrefix="Section status: " /></span>
       </div>
       {vendors.length > 0 ? (
         <ul className="flex flex-col gap-4">
@@ -489,6 +535,67 @@ function SectionCard({
           <Icon name="add" size={18} /> Add a vendor<span className="sr-only"> to {section.title}</span>
         </button>
       ))}
+    </section>
+  );
+}
+
+// ---- The summary at the top ----------------------------------------------------------
+
+// Still to do stands out most, then looking; contacted and booked stay calm.
+const calmItem = "border border-outline-variant/30 bg-surface-container-low/60";
+const SUMMARY_ITEM: Record<CategoryStatus, string> = {
+  todo: "border-[3px] border-status-todo bg-status-todo/10",
+  looking: "border-2 border-status-looking-foreground bg-surface-container-lowest",
+  contacted: calmItem,
+  booked: calmItem,
+};
+
+function goToSection(key: string) {
+  const el = document.getElementById(sectionDomId(key));
+  if (!el) return;
+  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  el.focus({ preventScroll: true });
+}
+
+function CategorySummary({ vendors }: { vendors: Vendor[] }) {
+  const rows = SECTIONS.map((s) => ({
+    section: s,
+    status: categoryStatus(vendors.filter((v) => v.section === s.key)),
+  }));
+  const count = (st: CategoryStatus) => rows.filter((r) => r.status === st).length;
+  const parts = (["todo", "looking", "contacted", "booked"] as const)
+    .filter((st) => count(st) > 0)
+    .map((st) => `${count(st)} ${STATUS_STYLE[st].label.toLowerCase()}`);
+
+  return (
+    <section aria-labelledby="vendor-summary-heading" className="px-margin-mobile md:px-margin-desktop pt-2">
+      <h3 id="vendor-summary-heading" className="font-headline-sm text-headline-sm text-on-surface">
+        Where each section stands
+      </h3>
+      <p className="text-sm text-on-surface-variant mt-1">
+        {parts.join(", ")}. This shows only what you've set; the app never changes a status.
+      </p>
+      <ul className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {rows.map(({ section, status }) => (
+          <li key={section.key}>
+            <a
+              href={`#${sectionDomId(section.key)}`}
+              onClick={(e) => {
+                e.preventDefault();
+                goToSection(section.key);
+              }}
+              className={`flex min-h-12 items-center justify-between gap-2 rounded-2xl px-4 py-3 text-on-surface hover:bg-surface-container focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${SUMMARY_ITEM[status]}`}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <Icon name={section.icon} size={18} className="text-on-surface-variant" />
+                <span className="text-sm font-button-text break-words">{section.title}</span>
+              </span>
+              <StatusBadge status={status} srPrefix=": " />
+            </a>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -547,12 +654,15 @@ export function Vendors() {
       ) : vendors === null ? (
         <p className="px-margin-mobile md:px-margin-desktop py-6 text-on-surface-variant" aria-busy="true">Loading your vendors…</p>
       ) : (
-        <div className="px-margin-mobile md:px-margin-desktop py-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter items-start">
-          {SECTIONS.map((s) => (
-            <SectionCard key={s.key} section={s} vendors={vendors.filter((v) => v.section === s.key)}
-              base={base} canEdit={canEdit} reload={reload} request={request} />
-          ))}
-        </div>
+        <>
+          <CategorySummary vendors={vendors} />
+          <div className="px-margin-mobile md:px-margin-desktop py-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter items-start">
+            {SECTIONS.map((s) => (
+              <SectionCard key={s.key} section={s} vendors={vendors.filter((v) => v.section === s.key)}
+                base={base} canEdit={canEdit} reload={reload} request={request} />
+            ))}
+          </div>
+        </>
       )}
     </main>
   );
