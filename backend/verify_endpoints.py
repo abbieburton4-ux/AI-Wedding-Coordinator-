@@ -268,11 +268,11 @@ def test_api_suite():
                       headers=viewer_headers).status_code == 403
         print("   * Viewer: can read, blocked from edits and agent runs")
 
-        # The concierge shows the couple the exact text first, and sends only on their
-        # click, only that text (PD-008 follow-up 2). Gemini is mocked.
         import json as _json
         from types import SimpleNamespace
         from unittest.mock import MagicMock, patch
+        from app.config import Settings
+        from app.db.models import AgentDecisionLog
         concierge_url = f"/api/v1/weddings/{wedding_id}/concierge"
         question = {"message": "Can we afford a harpist?"}
         sent_prompts = []
@@ -284,7 +284,56 @@ def test_api_suite():
 
         fake_client = MagicMock()
         fake_client.aio.models.generate_content = _reply
-        with patch("app.agents.concierge.get_client", return_value=fake_client):
+
+        # Aurelia is off by default (PD-010): typed chat and voice both refuse, and
+        # nothing goes to Gemini or ElevenLabs, or into the decision log.
+        assert Settings.model_fields["ASSISTANT_ENABLED"].default is False
+        assert settings.ASSISTANT_ENABLED is False, "Aurelia must be off unless turned on"
+        off_detail = "Aurelia, the assistant, is turned off for this wedding."
+        with Session(sync_engine) as s:
+            log_rows_before = len(s.exec(sync_select(AgentDecisionLog)).all())
+        elevenlabs_calls = []
+
+        class _NoElevenLabs:
+            def __init__(self, *args, **kwargs):
+                elevenlabs_calls.append(args)
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def get(self, *args, **kwargs):
+                elevenlabs_calls.append(args)
+                return SimpleNamespace(status_code=200, json=lambda: {"token": "t"},
+                                       text="")
+
+        settings.ELEVENLABS_API_KEY = "test-only-not-a-key"
+        try:
+            with patch("app.agents.concierge.get_client", return_value=fake_client), \
+                 patch("app.api.v1.endpoints.voice.httpx.AsyncClient", _NoElevenLabs):
+                for body in (question, dict(question, approved_prompt="Can we afford a harpist?")):
+                    res = c.post(concierge_url, json=body, headers=editor_headers)
+                    assert res.status_code == 403 and res.json()["detail"] == off_detail, res.text
+                res = c.post(concierge_url, json=question, headers=headers)
+                assert res.status_code == 403 and res.json()["detail"] == off_detail, res.text
+                for who in (editor_headers, headers):
+                    res = c.get("/api/v1/voice/token", headers=who)
+                    assert res.status_code == 403 and res.json()["detail"] == off_detail, res.text
+        finally:
+            settings.ELEVENLABS_API_KEY = None
+        assert sent_prompts == [], "nothing reaches Gemini through the assistant while off"
+        assert elevenlabs_calls == [], "nothing reaches ElevenLabs while off"
+        with Session(sync_engine) as s:
+            assert len(s.exec(sync_select(AgentDecisionLog)).all()) == log_rows_before
+        print("   * Aurelia off: chat and voice refuse; nothing sent to Gemini or ElevenLabs")
+
+        # The concierge shows the couple the exact text first, and sends only on their
+        # click, only that text (PD-008 follow-up 2). Gemini is mocked. The switch is
+        # turned on here so the code stays proven for when Aurelia comes back.
+        with patch.object(settings, "ASSISTANT_ENABLED", True), \
+             patch("app.agents.concierge.get_client", return_value=fake_client):
             res = c.post(concierge_url, json=question, headers=editor_headers)
             check = res.json()
             assert check["needs_review"] is True and check["changed"] is False, res.text
@@ -300,6 +349,7 @@ def test_api_suite():
                          json=dict(question, approved_prompt=check["preview"]))
             assert res.json() == {"reply": "Yes, it fits."}, res.text
             assert sent_prompts == [check["preview"]], "the text sent is the text shown"
+        assert settings.ASSISTANT_ENABLED is False
         print("   * Concierge: shows the text first; the click sends exactly that text")
 
         # The inbound-email webhook has no one to check the text, so it never sends it.

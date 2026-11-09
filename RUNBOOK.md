@@ -26,7 +26,8 @@ mode with fictional data, simulated sign-in and a disposable SQLite database;
 never enter real information or publish it. Vite serves port 5000 and proxies
 `/api` to FastAPI on port 8000. `VITE_BASE=/` and an empty `VITE_API_URL` keep
 browser requests on the preview's own origin. Live AI requires a server-side
-`GEMINI_API_KEY` Secret; voice requires `ELEVENLABS_API_KEY`. See
+`GEMINI_API_KEY` Secret. Aurelia, the assistant (chat and voice), is off
+(PD-010; `ASSISTANT_ENABLED`, default `False`). See
 [replit.md](replit.md) for dependency installation, limitations and verification.
 
 The Docker instructions below remain available for non-Replit development.
@@ -216,7 +217,9 @@ node e2e.mjs        # screenshots are written next to it
 
 - **Wired to real data:** couple signup → intake → dashboard /
   budget / checklist / vendors; the vendor **quote loop** (log a reply → quote_extractor →
-  compared with the matching category's planned dollars on the budget screen, B42); the couple **AI Concierge** (Aurelia, grounded in the
-  couple's real budget/checklist/vendors).
+  compared with the matching category's planned dollars on the budget screen, B42). The couple
+  **AI Concierge** (Aurelia, typed chat and voice) is turned off (PD-010): the backend refuses it
+  unless `ASSISTANT_ENABLED=True`, and the screens hide it unless `AURELIA_ENABLED` in
+  `frontend/src/app/wedding/features.ts` is true. Past concierge log rows are kept.
 - **Still mock / next slices:** SendGrid inbound-email
   auto-ingest of vendor replies.
