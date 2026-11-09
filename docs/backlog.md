@@ -11,25 +11,24 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-09 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B60** — make publishing a database change on Replit safe, before B62. `in review` (#61): new tables and columns Replit already added are skipped on start; data steps still run via Alembic. Follow-up: test on PostgreSQL; a release that drops or alters a column still needs the team on the publish screen with the owner
-2. **B62** — the couple add their own vendors in each Vendors section (PD-012 call (a), ratified). `ready` (after B60)
-3. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
-4. **B56** — the Wildman BT payments on the Budget screen (the checklist tasks V1–V3 came in with the load, #56). `ready`
-5. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
-6. **B44** — move the other parts that still read the old euro budget lines to the new budget. `ready`
-7. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
-8. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-9. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-10. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
-11. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
-12. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
-13. **B34** — database-level guard against the same email being added twice. `ready`
-14. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
-15. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
-16. **B8** — record missing token counts as empty, not 0. `ready`
-17. **B17** — stop tracking the test database files. `ready`
-18. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`) (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
-19. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
+1. **B62** — the couple add their own vendors in each Vendors section (PD-012 call (a), ratified). `in progress`
+2. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
+3. **B56** — the Wildman BT payments on the Budget screen (the checklist tasks V1–V3 came in with the load, #56). `ready`
+4. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
+5. **B44** — move the other parts that still read the old euro budget lines to the new budget. `ready`
+6. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
+7. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+8. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
+9. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
+10. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
+11. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+12. **B34** — database-level guard against the same email being added twice. `ready`
+13. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+14. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
+15. **B8** — record missing token counts as empty, not 0. `ready`
+16. **B17** — stop tracking the test database files. `ready`
+17. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`) (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
+18. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
 
 ## Open
 
@@ -65,8 +64,6 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 - **B11 — Ireland-only catalogue, but the wedding is in the US.** The regions (`utils/constants.py`), EUR and the vendor catalogue (`seed_data_real.py`) are all Irish. `wedding.md` now puts the wedding in Chicago, IL, United States (owner, 2026-11-04), so none of the 25 venues or 26 suppliers, and none of the regions, apply. The intake planner's budget logic assumes Irish pricing. *Why it matters:* venue and supplier matching can't recommend anything usable for this wedding. If it ran as it is, it would suggest Irish vendors. *Fix:* engineering change to raise, approach not yet decided. Covers regions, catalogue (cited Chicago-area vendors via `add-vendors`), and currency. The app currently assumes EUR everywhere, but the couple want amounts in US dollars (`wedding.md`, owner, 2026-11-04). Any new money fields use integer cents or `Decimal` (AGENTS.md rule 4). The couple prefer Chicago vendors, and don't want euro quotes converted (owner, 2026-11-05: "no need for the conversion as chicago vendors would be preferred"). *Depends on:* a product decision on how to handle the catalogue, to be proposed. The venue status (shortlist being visited, not booked) suggests Chicago suppliers matter more than venues. *Ranking:* the currency part ranks with B23 (budgeting is must-have 1). The catalogue part ranks below the must-haves. *Follow-up from #39 (B51):* the AI budget check is built on Irish euro prices, so it's switched off for this wedding until it has US price rules.
 
 - **B58 — The RUNBOOK backup step doesn't work on Replit.** Found while writing the B53 steps (2026-11-09): the RUNBOOK's checklist-import backup uses `SYNC_DATABASE_URL`, which Replit's Shell doesn't set; there `DATABASE_URL` works, and the Shell always reaches the development database, not the published app's production one. *Fix:* update RUNBOOK for Replit. *Also for B14:* when the app is published, Replit offers to copy development data into production; that is when the imported checklist would carry over, and the publishing plan should cover it. If the wedding is already in production, the Shell can't reach it without pasting a secret, so a safe import route is needed first. *Depends on:* nothing. *#58 (B59):* the backup command now works in Replit's Shell; the publishing note remains.
-
-- **B60 — Publishing a database change may still need care.** Found in #58 (B59): now that the workspace stays up to date, a publish that ships a new migration will show Replit additions ("ADD COLUMN", "CREATE TABLE"). If Replit offers no skip, approving them would leave the published app unable to start, because Alembic would find the change already made. *Until fixed:* whenever a publish shows any database change, the owner stops and tells the team (`replit.md`). *Fix:* make future migrations safe when Replit has already applied them, or find a supported way to publish without Replit's schema step. *Depends on:* nothing; before the next migration ships.
 
 - **B62 — The couple add their own vendors.** PD-012 call (a), ratified 2026-11-09: in each Vendors section, owners and editors add, edit and remove a vendor (name, website, contact person, email or phone, status looking / contacted / booked set only by the couple, notes); viewers see them. Pasting a vendor's emailed reply returns on each vendor, with the check-before-sending rule. Vendor contact details are business details, but keep them out of git, logs and AI prompts beyond what a decision needs. *Depends on:* B61; and, if it needs a database change, B60 first, so publishing it is safe.
 
@@ -106,6 +103,7 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-09 | **B60** — a migration still succeeds when Replit's publish step has already added the new table or column; plain publish rules in `replit.md` (approve additions the team announced; stop on DROP, ALTER or renames). Follow-up: a PostgreSQL test; a dropping or altering release needs the team on the publish screen | #61 |
 | 2026-11-09 | **B61** — Vendors page shows the couple's seven sections (Venue: Wildman BT); AI suggestions, the matcher button and the Dashboard shortlist card removed (hidden, not deleted). Pasting a vendor reply returns with B62 | #60 |
 | 2026-11-09 | **B59** — Run in the Replit workspace brings the database up to date before the app starts; plain publishing steps; Shell check `db_status.py`; Replit backup command fixed (B58, backup half) | #58 |
 | 2026-11-09 | **B53** — the owner loaded her checklist on the published app with "Load my checklist" (PD-011), including the 18 Jewish-tradition tasks and the Wildman BT tasks V1–V3 (B56, checklist part) | #56 |
