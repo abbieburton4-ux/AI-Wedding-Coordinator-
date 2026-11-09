@@ -29,7 +29,10 @@ What this means for writing a migration:
 - If an object is already there but doesn't match (a table with different
   columns, a column with different nullability), the migration stops rather than
   guess. A person then has to look; nothing is changed past that point on
-  PostgreSQL, where the upgrade is one transaction.
+  PostgreSQL, where the upgrade is one transaction. The one exception: a table
+  may carry extra optional or defaulted columns that the models declare, because
+  Publish creates a table with the columns later migrations in the same release
+  add to it.
 - Drops and `alter_column` changes appear on the publish screen as DROP or ALTER
   COLUMN, and the owner is told to stop on those (replit.md). A release with one
   can't be published by the owner alone: someone from the team reads the SQL with
@@ -92,19 +95,46 @@ def _constraint_names(table: str) -> set:
     return names
 
 
+def _declared_columns(table: str) -> set:
+    """Column names the head models (env.py's target_metadata) give the table."""
+    metadata = op.get_context().opts.get("target_metadata")
+    found = metadata.tables.get(table) if metadata is not None else None
+    return {c.name for c in found.columns} if found is not None else set()
+
+
 def create_table(name: str, *columns_and_constraints, **kw) -> None:
-    """`op.create_table`, skipped when the table is already there with the same columns."""
+    """`op.create_table`, skipped when the table is already there with the same columns.
+
+    When this migration and a later one that adds a column to the table go out in one
+    publish, Publish creates the table with that column already in it. So a present
+    column this migration doesn't list is accepted if the models declare it and it's
+    optional or has a default (a later `add_column` then skips it). Any other extra
+    column stops the migration: one the models don't know is unexplained drift, and a
+    required one without a default would make this migration's own inserts fail."""
     if _has_table(name):
         wanted = {c.name: bool(c.nullable) for c in columns_and_constraints
                   if isinstance(c, sa.Column)}
-        present = {n: bool(c["nullable"]) for n, c in _columns(name).items()}
-        if wanted != present:
-            differ = sorted(set(wanted.items()) ^ set(present.items()))
+        columns = _columns(name)
+        present = {n: bool(c["nullable"]) for n, c in columns.items()}
+        extra = {n: v for n, v in present.items() if n not in wanted}
+        mismatch = set(wanted.items()) ^ (set(present.items()) - set(extra.items()))
+        # Only a column the models declare can have come from a later migration.
+        declared = _declared_columns(name)
+        unknown = sorted(n for n in extra if n not in declared)
+        unfillable = sorted(n for n in extra if n in declared and not columns[n]["nullable"]
+                            and columns[n].get("default") is None)
+        if mismatch:
             raise RuntimeError(
                 f"Table {name} already exists with different columns "
-                f"(name, nullable) {differ}. Refusing to guess; ask the team."
+                f"(name, nullable) {sorted(mismatch)}. Refusing to guess; ask the team."
             )
-        _skip(f"Table {name}")
+        if unknown or unfillable:
+            raise RuntimeError(
+                f"Table {name} already exists with extra columns: {unknown} isn't in the "
+                f"models, {unfillable} is required with no default. Refusing to guess; "
+                "ask the team."
+            )
+        _skip(f"Table {name}" + (f" (with later columns {sorted(extra)})" if extra else ""))
         return
     op.create_table(name, *columns_and_constraints, **kw)
 

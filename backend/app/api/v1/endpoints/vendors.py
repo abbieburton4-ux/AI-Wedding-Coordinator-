@@ -2,8 +2,8 @@
 
 Anyone on the access list can see them; only owners and editors add, edit or remove
 one, or paste a vendor's reply for the AI to read. The status (looking, contacted,
-booked) is whatever the couple set: nothing here or in any agent changes it (rule 4),
-and nothing here contacts a vendor (rule 1).
+booked, not selected) is whatever the couple set: nothing here or in any agent changes
+it (rule 4), and nothing here contacts a vendor (rule 1).
 
 Contact details are the vendor's business details. They're shown to the wedding
 party, but they aren't logged, and they're never sent to the AI: only the pasted reply
@@ -11,7 +11,7 @@ is, after the couple have checked the cleaned text (PD-008).
 """
 import datetime
 import re
-from typing import List, Literal, Optional
+from typing import Dict, Iterable, List, Literal, Optional
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -24,7 +24,9 @@ from app.api.v1.access import require_wedding_access
 from app.api.v1.endpoints.auth import get_current_user
 from app.api.v1.review import MAX_PROMPT_CHARS, needs_review
 from app.config import settings
-from app.db.models import CoupleVendor, CoupleVendorQuote, User, VENDOR_SECTIONS, utcnow
+from app.db.models import (
+    NOT_SELECTED, CoupleVendor, CoupleVendorQuote, User, VENDOR_SECTIONS, utcnow,
+)
 from app.db.session import get_db
 from app.utils.tasks import enqueue_agent_task
 
@@ -38,7 +40,12 @@ NOTES_MAX = 2000
 
 Section = Literal["venue", "food_drink", "flowers_decoration", "photo_video",
                   "entertainment", "hair_makeup", "transportation"]
-Status = Literal["looking", "contacted", "booked"]
+Status = Literal["looking", "contacted", "booked", "not_selected"]
+
+# A section's status is its furthest vendor's; "todo" when none is still in play.
+STATUS_RANK = {"looking": 0, "contacted": 1, "booked": 2}
+TODO = "todo"
+SectionStatus = Literal["looking", "contacted", "booked", "todo"]
 
 # No ? & = # % / either, so a saved address can't carry a mailto subject or body.
 EMAIL_RE = re.compile(r"^[^@\s<>()\[\],;:\"?&=#%/]+@[^@\s<>()\[\],;:\"?&=#%/]+\.[^@\s<>()\[\],;:\".?&=#%/]+$")
@@ -109,6 +116,8 @@ class VendorOut(BaseModel):
 class VendorsOut(BaseModel):
     sections: List[str]
     vendors: List[VendorOut]
+    # Each section's status for the summary: looking, contacted, booked or todo.
+    section_status: Dict[str, SectionStatus]
 
 
 # --- Cleaning -------------------------------------------------------------------------
@@ -178,6 +187,20 @@ CLEANERS = {
 
 # --- Helpers --------------------------------------------------------------------------
 
+def set_status(row: CoupleVendor, value: str) -> None:
+    # "Not selected" is a flag, so the stored status stays as it was (models.py).
+    if value == NOT_SELECTED:
+        row.not_selected = True
+    else:
+        row.status, row.not_selected = value, False
+
+
+def section_status(statuses: Iterable[str]) -> str:
+    """Ruled-out vendors don't count: a section with only those still needs a vendor."""
+    in_play = [s for s in statuses if s in STATUS_RANK]
+    return max(in_play, key=STATUS_RANK.__getitem__) if in_play else TODO
+
+
 async def _vendor(db: AsyncSession, wedding_id: str, vendor_id: str) -> CoupleVendor:
     row = (await db.exec(select(CoupleVendor).where(
         CoupleVendor.id == vendor_id, CoupleVendor.wedding_id == wedding_id))).first()
@@ -199,7 +222,8 @@ def _reply_out(q: Optional[CoupleVendorQuote]) -> Optional[ReplyOut]:
 def _out(row: CoupleVendor, latest: Optional[CoupleVendorQuote]) -> VendorOut:
     return VendorOut(
         id=row.id, section=row.section, name=row.name, website=row.website,
-        contact_name=row.contact_name, email=row.email, phone=row.phone, status=row.status,
+        contact_name=row.contact_name, email=row.email, phone=row.phone,
+        status=row.shown_status,
         notes=row.notes, updated_at=row.updated_at, latest_reply=_reply_out(latest),
     )
 
@@ -230,8 +254,12 @@ async def list_vendors(
         .order_by(CoupleVendor.created_at, CoupleVendor.id)
     )).all()
     latest = await _latest_replies(db, [r.id for r in rows])
-    return VendorsOut(sections=list(VENDOR_SECTIONS),
-                      vendors=[_out(r, latest.get(r.id)) for r in rows])
+    return VendorsOut(
+        sections=list(VENDOR_SECTIONS),
+        vendors=[_out(r, latest.get(r.id)) for r in rows],
+        section_status={sec: section_status(r.shown_status for r in rows if r.section == sec)
+                        for sec in VENDOR_SECTIONS},
+    )
 
 
 @router.post("/{wedding_id}/vendors", status_code=status.HTTP_201_CREATED,
@@ -242,8 +270,8 @@ async def add_vendor(
 ):
     await require_wedding_access(db, wedding_id, current_user, "editor")
     fields = {k: CLEANERS[k](getattr(payload, k)) for k in CLEANERS}
-    row = CoupleVendor(wedding_id=wedding_id, section=payload.section,
-                       status=payload.status, **fields)
+    row = CoupleVendor(wedding_id=wedding_id, section=payload.section, **fields)
+    set_status(row, payload.status)
     db.add(row)
     await db.commit()
     await db.refresh(row)
@@ -263,6 +291,8 @@ async def edit_vendor(
             setattr(row, key, CLEANERS[key](value))
         elif value is None:
             raise HTTPException(status_code=422, detail=f"Please choose a {key}")
+        elif key == "status":
+            set_status(row, value)
         else:
             setattr(row, key, value)
     row.updated_at = utcnow()

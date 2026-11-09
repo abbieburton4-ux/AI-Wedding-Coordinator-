@@ -11,7 +11,7 @@ import { inputClass, linkButton, primaryButton } from "./budget/parts";
  * else. The status is only what the couple set: the app never marks anything booked.
  */
 
-type VendorStatus = "looking" | "contacted" | "booked";
+type VendorStatus = "looking" | "contacted" | "booked" | "not_selected";
 
 interface LineItem {
   item: string;
@@ -41,9 +41,17 @@ interface Vendor {
   latest_reply: Reply | null;
 }
 
+/** A section's status, worked out by the server: its furthest vendor still in play,
+ *  or "todo" when it has none (Not selected vendors don't count). */
+type CategoryStatus = Exclude<VendorStatus, "not_selected"> | "todo";
+
+/** Anything a badge can show: a vendor's status, or a section's. */
+type BadgeStatus = VendorStatus | "todo";
+
 interface VendorsResponse {
   sections: string[];
   vendors: Vendor[];
+  section_status: Record<string, CategoryStatus>;
 }
 
 const SECTIONS = [
@@ -60,23 +68,11 @@ const STATUSES: { value: VendorStatus; label: string }[] = [
   { value: "looking", label: "Looking" },
   { value: "contacted", label: "Contacted" },
   { value: "booked", label: "Booked" },
+  { value: "not_selected", label: "Not selected" },
 ];
 
-/** A category's status: its vendors' furthest status, or "todo" when it has none. */
-type CategoryStatus = VendorStatus | "todo";
-
-const STATUS_RANK: Record<VendorStatus, number> = { looking: 0, contacted: 1, booked: 2 };
-
-function categoryStatus(vendors: Vendor[]): CategoryStatus {
-  if (vendors.length === 0) return "todo";
-  return vendors.reduce<VendorStatus>(
-    (best, v) => (STATUS_RANK[v.status] > STATUS_RANK[best] ? v.status : best),
-    "looking",
-  );
-}
-
 // Colour is never the only cue: every badge carries the word, and an icon too.
-const STATUS_STYLE: Record<CategoryStatus, { label: string; icon: string; badge: string; edge: string }> = {
+const STATUS_STYLE: Record<BadgeStatus, { label: string; icon: string; badge: string; edge: string }> = {
   todo: {
     label: "Still to do", icon: "priority_high",
     badge: "bg-status-todo text-status-todo-foreground", edge: "border-l-status-todo",
@@ -93,9 +89,24 @@ const STATUS_STYLE: Record<CategoryStatus, { label: string; icon: string; badge:
     label: "Booked", icon: "check_circle",
     badge: "bg-status-booked text-status-booked-foreground", edge: "border-l-status-booked-foreground",
   },
+  not_selected: {
+    label: "Not selected", icon: "block",
+    badge: "bg-status-not-selected text-status-not-selected-foreground",
+    edge: "border-l-status-not-selected-foreground/50",
+  },
 };
 
-function StatusBadge({ status, srPrefix = "Status: " }: { status: CategoryStatus; srPrefix?: string }) {
+// A ruled-out vendor's tile fades (surface and border only, so the text keeps its
+// contrast) and sits after the ones still in play.
+const TILE_SURFACE = "border-outline-variant/30 bg-surface-container-low/60";
+const TILE_FADED = "border-outline-variant/15 bg-surface-container-low/20";
+
+function inPlayFirst(vendors: Vendor[]): Vendor[] {
+  const out = (v: Vendor) => (v.status === "not_selected" ? 1 : 0);
+  return [...vendors].sort((a, b) => out(a) - out(b));
+}
+
+function StatusBadge({ status, srPrefix = "Status: " }: { status: BadgeStatus; srPrefix?: string }) {
   const s = STATUS_STYLE[status];
   return (
     <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs font-button-text ${s.badge}`}>
@@ -410,7 +421,7 @@ function VendorCard({
 
   return (
     <li
-      className={`flex flex-col gap-2 rounded-2xl border border-outline-variant/30 border-l-4 ${STATUS_STYLE[vendor.status].edge} bg-surface-container-low/60 p-4`}
+      className={`flex flex-col gap-2 rounded-2xl border border-l-4 ${vendor.status === "not_selected" ? TILE_FADED : TILE_SURFACE} ${STATUS_STYLE[vendor.status].edge} p-4`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="font-title-lg text-title-lg text-on-surface leading-tight break-words min-w-0">{vendor.name}</p>
@@ -480,10 +491,11 @@ function VendorCard({
 // ---- One section ---------------------------------------------------------------------
 
 function SectionCard({
-  section, vendors, base, canEdit, reload, request,
+  section, vendors, status, base, canEdit, reload, request,
 }: {
   section: (typeof SECTIONS)[number];
   vendors: Vendor[];
+  status: CategoryStatus;
   base: string;
   canEdit: boolean;
   reload: () => Promise<Vendor[] | null>;
@@ -515,11 +527,11 @@ function SectionCard({
           <Icon name={section.icon} size={20} className="text-primary" />
         </span>
         <h3 id={headingId} className="font-headline-sm text-headline-sm text-on-surface">{section.title}</h3>
-        <span className="ml-auto"><StatusBadge status={categoryStatus(vendors)} srPrefix="Section status: " /></span>
+        <span className="ml-auto"><StatusBadge status={status} srPrefix="Section status: " /></span>
       </div>
       {vendors.length > 0 ? (
         <ul className="flex flex-col gap-4">
-          {vendors.map((v) => (
+          {inPlayFirst(vendors).map((v) => (
             <VendorCard key={v.id} base={base} vendor={v} canEdit={canEdit} reload={reload} request={request} />
           ))}
         </ul>
@@ -558,11 +570,8 @@ function goToSection(key: string) {
   el.focus({ preventScroll: true });
 }
 
-function CategorySummary({ vendors }: { vendors: Vendor[] }) {
-  const rows = SECTIONS.map((s) => ({
-    section: s,
-    status: categoryStatus(vendors.filter((v) => v.section === s.key)),
-  }));
+function CategorySummary({ sectionStatus }: { sectionStatus: Record<string, CategoryStatus> }) {
+  const rows = SECTIONS.map((s) => ({ section: s, status: sectionStatus[s.key] ?? "todo" }));
   const count = (st: CategoryStatus) => rows.filter((r) => r.status === st).length;
   const parts = (["todo", "looking", "contacted", "booked"] as const)
     .filter((st) => count(st) > 0)
@@ -609,6 +618,7 @@ export function Vendors() {
   const base = `/weddings/${weddingId}/vendors`;
   const canEdit = myLevel === "owner" || myLevel === "editor";
   const [vendors, setVendors] = useState<Vendor[] | null>(null);
+  const [sectionStatus, setSectionStatus] = useState<Record<string, CategoryStatus>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const reload = useCallback(async (): Promise<Vendor[] | null> => {
@@ -616,6 +626,7 @@ export function Vendors() {
     try {
       const res = await request<VendorsResponse>(`/weddings/${weddingId}/vendors`);
       setVendors(res.vendors);
+      setSectionStatus(res.section_status);
       setLoadError(null);
       return res.vendors;
     } catch (err) {
@@ -655,10 +666,11 @@ export function Vendors() {
         <p className="px-margin-mobile md:px-margin-desktop py-6 text-on-surface-variant" aria-busy="true">Loading your vendors…</p>
       ) : (
         <>
-          <CategorySummary vendors={vendors} />
+          <CategorySummary sectionStatus={sectionStatus} />
           <div className="px-margin-mobile md:px-margin-desktop py-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter items-start">
             {SECTIONS.map((s) => (
               <SectionCard key={s.key} section={s} vendors={vendors.filter((v) => v.section === s.key)}
+                status={sectionStatus[s.key] ?? "todo"}
                 base={base} canEdit={canEdit} reload={reload} request={request} />
             ))}
           </div>

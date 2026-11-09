@@ -325,6 +325,25 @@ def check_publish_safety(real_head: str, new_revisions: list) -> None:
     assert not diff, diff
     assert [tuple(r) for r in venue_rows] == [("w1", "Wildman BT")], venue_rows
 
+    print("6a. Real migrations: 0007 already published, then 0008 on its own (B64)...")
+    # Development pinned at 0008, so later migrations don't change what this checks.
+    dev8, prod7 = url("dev8"), url("prod7")
+    command.upgrade(config_for(dev8), "0008")
+    command.upgrade(config_for(prod7), LAST_UNGUARDED)
+    seed_wedding(prod7)
+    command.upgrade(config_for(prod7), "0007")
+    added = publish_like_replit(dev8, prod7)
+    assert added == ["ADD COLUMN couple_vendors.not_selected"], \
+        f"0008 adds one column and nothing else: {added}"
+    command.upgrade(config_for(prod7), "head")
+    with create_engine(prod7).connect() as conn:
+        diff = compare_metadata(MigrationContext.configure(conn), SQLModel.metadata)
+        flags = conn.execute(text(
+            "SELECT name, status, not_selected FROM couple_vendors")).fetchall()
+    assert not diff, diff
+    assert [(r[0], r[1], bool(r[2])) for r in flags] == [
+        ("Wildman BT", "contacted", False)], flags
+
     fixture_dir = os.path.join(work, "fixture_versions")
     os.makedirs(fixture_dir)
     with open(os.path.join(fixture_dir, "zz_fixture.py"), "w") as fh:
@@ -373,6 +392,40 @@ def check_publish_safety(real_head: str, new_revisions: list) -> None:
     except RuntimeError as exc:
         assert "different columns" in str(exc), exc
     assert current_revision(odd) == real_head
+
+    # Step 6 shows the accepted case: 0007's table made by Publish with 0008's column,
+    # which the models declare. An undeclared column is drift, and a declared one that's
+    # required without a default would break the earlier migration's inserts: both stop.
+    print("6e2. A pre-applied table with an unexplained or unfillable extra column stops...")
+    for n, extra in enumerate(("zz_later INTEGER", "zz_later INTEGER NOT NULL DEFAULT 0")):
+        later = url(f"later_{n}")
+        command.upgrade(config_for(later, fixture_dir), real_head)
+        with create_engine(later).begin() as conn:
+            conn.execute(text(
+                "CREATE TABLE zz_fixture_notes (id VARCHAR NOT NULL, wedding_id VARCHAR NOT "
+                f"NULL, body VARCHAR NOT NULL, {extra}, CONSTRAINT pk_zz_fixture_notes "
+                "PRIMARY KEY (id))"))
+        try:
+            command.upgrade(config_for(later, fixture_dir), "head")
+            raise AssertionError(f"a column the models don't declare must stop: {extra}")
+        except RuntimeError as exc:
+            assert "isn't in the models" in str(exc), (extra, exc)
+        assert current_revision(later) == real_head
+    early = url("early_required")
+    command.upgrade(config_for(early), LAST_UNGUARDED)
+    with create_engine(early).begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE couple_vendors (id VARCHAR NOT NULL, wedding_id VARCHAR NOT NULL, "
+            "section VARCHAR NOT NULL, name VARCHAR NOT NULL, website VARCHAR, "
+            "contact_name VARCHAR, email VARCHAR, phone VARCHAR, status VARCHAR NOT NULL, "
+            "notes TEXT, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, "
+            "not_selected BOOLEAN NOT NULL, CONSTRAINT pk_couple_vendors PRIMARY KEY (id))"))
+    try:
+        command.upgrade(config_for(early), "head")
+        raise AssertionError("a required later column without a default must stop")
+    except RuntimeError as exc:
+        assert "required with no default" in str(exc), exc
+    assert current_revision(early) == LAST_UNGUARDED
 
     print("6f. safe_ops refuses changes that Publish couldn't make the same way...")
     with create_engine(odd).begin() as conn:
@@ -532,6 +585,15 @@ def main() -> None:
             "SELECT wedding_id, section, name, website, status FROM couple_vendors")).fetchall()
     assert [tuple(r) for r in vendors] == [
         ("w1", "venue", "Wildman BT", "https://www.wildmanbt.com/", "contacted")], vendors
+
+    print("3g. Checking that 0008 leaves every existing vendor's status as it was (B64)...")
+    command.downgrade(cfg, "0007")
+    command.upgrade(cfg, "head")
+    with engine.connect() as conn:
+        flags = conn.execute(text(
+            "SELECT name, status, not_selected FROM couple_vendors")).fetchall()
+    assert [(r[0], r[1], bool(r[2])) for r in flags] == [
+        ("Wildman BT", "contacted", False)], flags
 
     print("4. Downgrading to the start and back up again...")
     command.downgrade(cfg, "base")

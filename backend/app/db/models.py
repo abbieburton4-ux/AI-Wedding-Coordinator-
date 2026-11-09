@@ -567,6 +567,10 @@ VENDOR_SECTIONS = (
 )
 # Set only by the couple; no agent ever changes it (rule 4).
 VENDOR_STATUSES = ("looking", "contacted", "booked")
+# The fourth status the couple see, "Not selected" (PD-012 follow-up 2), is the
+# `not_selected` flag rather than a fourth `status` value: adding a column is all
+# Publish has to do, where widening the check constraint would mean a DROP (B60).
+NOT_SELECTED = "not_selected"
 
 
 class CoupleVendor(SQLModel, table=True):
@@ -596,9 +600,22 @@ class CoupleVendor(SQLModel, table=True):
     email: Optional[str] = None
     phone: Optional[str] = None
     status: str = Field(default="looking")
+    # The couple ruled this vendor out. While it's on, `status` keeps whatever it was
+    # (it may say "booked"), so always read the status through `shown_status`, never
+    # `status` alone. Choosing another status turns it off. Only the couple set it
+    # (rule 4).
+    not_selected: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=false()),
+    )
     notes: Optional[str] = Field(default=None, sa_column=Column(Text))
     created_at: datetime.datetime = Field(default_factory=utcnow)
     updated_at: datetime.datetime = Field(default_factory=utcnow)
+
+    @property
+    def shown_status(self) -> str:
+        """The status the couple chose: looking, contacted, booked or not_selected."""
+        return NOT_SELECTED if self.not_selected else self.status
 
 
 class CoupleVendorQuote(SQLModel, table=True):

@@ -122,6 +122,17 @@ publish should list **no** database changes.
   separate `ADD CONSTRAINT` lines; either is fine. No existing table changes, so
   there should be no `ADD COLUMN`, `ALTER COLUMN` or `DROP`. Wildman BT is added to
   the Venue section when the published app starts, not by Publish.
+- `0008` (B64, a "Not selected" vendor status): one new column and nothing else.
+  If `0007` is already published, Publish lists one line, `ADD COLUMN not_selected`
+  on `couple_vendors`, a required true/false column with `DEFAULT false`. The pane
+  may turn orange because it's required; that's expected. If `0007` goes out in the
+  same publish, there's no separate line: `not_selected` is one of the columns
+  inside `CREATE TABLE couple_vendors`. Either way there should be no `DROP` and no
+  `ALTER COLUMN`, and `ck_couple_vendor_status` doesn't change. Every existing
+  vendor keeps its status. The `not_selected` column must say `DEFAULT false`; if
+  it says `NOT NULL` without `DEFAULT false`, stop and tell the team.
+  [ASSUMPTION] This is what Alembic's PostgreSQL SQL looks like; Replit's own
+  screen hasn't been seen for it.
 
 **When you publish** (plain steps for the owner):
 1. In the workspace, **Pull** the latest code.
