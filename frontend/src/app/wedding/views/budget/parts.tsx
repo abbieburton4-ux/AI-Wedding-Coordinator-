@@ -303,9 +303,11 @@ export function MethodSuggestions() {
 function OpenLink({ url, label }: { url: string | null; label: string }) {
   const href = safeHttpUrl(url);
   if (!href) return null;
+  // The site's name is shown, so nobody clicks a link without seeing where it goes.
+  const host = new URL(href).hostname;
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline">
-      {label} <Icon name="open_in_new" size={14} /> <span className="sr-only">(opens in a new tab)</span>
+      {label} ({host}) <Icon name="open_in_new" size={14} /> <span className="sr-only">(opens in a new tab)</span>
     </a>
   );
 }

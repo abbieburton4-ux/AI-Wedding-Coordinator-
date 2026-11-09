@@ -771,7 +771,8 @@ def test_api_suite():
                 "Check", "Placeholder note"), "text tidied, blank means none"
             for bad in ("javascript:alert(1)", "data:text/html,x", "ftp://example.test/x",
                         "https://", "drive.example.test/file", "https://a b.test",
-                        "http://[broken"):
+                        "http://[broken", "https://drive.google.com@other.example.test/x",
+                        "https://example.test/a\x07b"):
                 res = c.patch(f"{b_url}/costs/{loft}", json={"link_url": bad}, headers=headers)
                 assert res.status_code == 422, (bad, res.status_code)
             assert c.patch(f"{b_url}/costs/{loft}", json={"contract_status": "accepted"},
@@ -906,7 +907,28 @@ def test_api_suite():
             assert c.delete(f"/api/v1/weddings/{wedding_id}/vendors/{vendor_id}",
                             headers=headers).status_code == 204
             assert expense(loft)[2]["vendor"] is None
+            with Session(sync_engine) as s:
+                from app.db.models import BudgetCost as _BudgetCostRow
+                assert s.get(_BudgetCostRow, loft).couple_vendor_id is None, \
+                    "the link itself is cleared, not just hidden"
             assert c.delete(f"{b_url}/categories/{exp_cat}", headers=headers).status_code == 204
+
+            # The status describes the cost, so refundable deposits never move it to
+            # paid or partly paid (the badge always agrees with "Paid").
+            from types import SimpleNamespace as _Row
+            from app.utils.budget_math import cost_figures
+
+            def _status(cost, *pays):
+                rows = [_Row(id=str(i), amount_cents=a, paid=p, refundable=r, due_on=None)
+                        for i, (a, p, r) in enumerate(pays)]
+                return cost_figures(_Row(final_cents=None, quoted_cents=cost,
+                                         estimated_cents=None), rows, _dt.date(2026, 11, 20))
+            f = _status(1_200_000, (200_000, True, True))
+            assert (f.status, f.paid_cents) == ("unpaid", 0), "only the deposit ticked"
+            f = _status(1_200_000, (1_200_000, True, False), (200_000, False, True))
+            assert (f.status, f.remaining_cents) == ("paid", 0), "deposit left to pay"
+            assert _status(None, (200_000, True, True)).status == "unpaid", "no cost yet"
+            assert _status(None).status == "unpaid"
         finally:
             budget_module._today = real_budget_today
         print("   * Expenses: final, else quote, else estimate; unpaid, partly paid, paid, "

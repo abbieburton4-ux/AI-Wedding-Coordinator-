@@ -309,8 +309,11 @@ def _link(text: Optional[str]) -> Optional[str]:
         host = parts.hostname
     except ValueError:
         parts, host = None, None
+    # A user name or password in a link ("https://drive.google.com@other.site/") hides
+    # where it really goes, so it's refused along with spaces and control characters.
     if (parts is None or parts.scheme.lower() not in ("http", "https") or not host
-            or any(ch.isspace() for ch in url)):
+            or "@" in parts.netloc
+            or any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in url)):
         raise HTTPException(status_code=422,
                             detail="Please paste a full web link starting with https://")
     return url

@@ -10,9 +10,10 @@ column, constraint or check changes, so every expense and payment already entere
 reads as before (archived off, not refundable, contract "none").
 
 The Wildman BT expense is a data step, so it's added here, when the app starts, on
-both publish paths (B60). It covers weddings that exist at upgrade time, skips any
-wedding whose budget already has a Wildman BT expense, and marks nothing paid
-(rule 4); the couple tick what they've paid.
+both publish paths (B60). It covers weddings that exist at upgrade time (a wedding
+created later, or a local `create_all` database, gets none), skips any wedding whose
+budget already has an expense naming Wildman, and marks nothing paid (rule 4); the
+couple tick what they've paid.
 """
 import datetime
 import uuid
@@ -127,7 +128,9 @@ def add_wildman_bt(bind) -> None:
     for (wedding_id,) in bind.execute(sa.select(weddings.c.id).order_by(weddings.c.id)):
         existing = bind.execute(sa.select(costs.c.vendor_name).where(
             costs.c.wedding_id == wedding_id)).scalars().all()
-        if any(_key(name) == _key(WILDMAN_NAME) for name in existing):
+        # Any expense already naming Wildman ("Wildman", "Wildman B.T. venue"): the
+        # couple entered it themselves, so a second $12,000 would double the venue.
+        if any('wildman' in _key(name) for name in existing):
             continue
 
         rows = bind.execute(

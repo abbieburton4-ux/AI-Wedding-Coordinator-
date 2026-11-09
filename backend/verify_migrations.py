@@ -160,7 +160,8 @@ def publish_like_replit(dev_url: str, prod_url: str) -> list:
     [ASSUMPTION] This stands in for Replit's own SQL on PostgreSQL using Alembic on
     SQLite. It proves the look-then-skip logic and that data steps run once; it
     doesn't model check constraints, enum types, type differences or Replit's
-    ordering. A PostgreSQL run is still to do.
+    ordering. It also assumes Publish keeps a foreign key's ON DELETE rule, as the
+    stand-in does. A PostgreSQL run is still to do.
     """
     dev_md = sa.MetaData()
     dev_md.reflect(create_engine(dev_url))
@@ -370,11 +371,21 @@ def check_publish_safety(real_head: str, new_revisions: list) -> None:
             "paid_on", "method", "reference", "notes", "link_url", "refundable")]
         + ["CREATE INDEX ix_budget_costs_couple_vendor_id",
            "ADD CONSTRAINT fk_budget_costs_couple_vendor_id_couple_vendors"]), added
+    # The stand-in can't copy checks, so add one by hand as Publish would: the
+    # migration must skip it and still add the other two.
+    with create_engine(prod8).begin() as conn:
+        with Operations.context(MigrationContext.configure(conn)) as ops:
+            with ops.batch_alter_table("budget_costs") as b:
+                b.create_check_constraint("ck_budget_cost_final",
+                                          "final_cents IS NULL OR final_cents >= 0")
     command.upgrade(config_for(prod8), "head")
     with create_engine(prod8).connect() as conn:
         diff = compare_metadata(MigrationContext.configure(conn), SQLModel.metadata)
         expense = conn.execute(text(
             "SELECT vendor_name, couple_vendor_id FROM budget_costs")).fetchall()
+        checks = sorted(ck["name"] for ck in inspect(conn).get_check_constraints("budget_costs"))
+    assert checks == ["ck_budget_cost_contract", "ck_budget_cost_estimated",
+                      "ck_budget_cost_final", "ck_budget_cost_quoted"], checks
     assert not diff, diff
     assert [tuple(r) for r in expense] == [("Wildman BT", "wildman-bt-w1")], expense
 
@@ -650,7 +661,28 @@ def main() -> None:
             "INSERT INTO weddings (id, couple_user_id, region, ceremony_type, "
             "guest_count_estimate, currency, status, created_at) "
             "VALUES ('w5', 'u1', 'Placeholder', 'Jewish', 10, 'USD', 'intake', '2026-01-01')"))
+        # A wedding where the couple typed the venue themselves, under another name.
+        conn.execute(text(
+            "INSERT INTO weddings (id, couple_user_id, region, ceremony_type, "
+            "guest_count_estimate, currency, status, created_at) "
+            "VALUES ('w6', 'u1', 'Placeholder', 'Jewish', 10, 'USD', 'intake', '2026-01-01')"))
+        conn.execute(text(
+            "INSERT INTO budget_categories (id, wedding_id, name, created_at, updated_at) "
+            "VALUES ('cat6', 'w6', 'Hall', '2026-01-01', '2026-01-01')"))
+        conn.execute(text(
+            "INSERT INTO budget_costs (id, wedding_id, category_id, vendor_name, "
+            "created_at, updated_at) VALUES ('cost6', 'w6', 'cat6', 'Wildman B.T. venue', "
+            "'2026-01-01', '2026-01-01')"))
     command.upgrade(cfg, "head")
+    with engine.begin() as conn:
+        w6 = conn.execute(text(
+            "SELECT COUNT(*) FROM budget_costs WHERE wedding_id = 'w6'")).scalar()
+        w6_cats = conn.execute(text(
+            "SELECT COUNT(*) FROM budget_categories WHERE wedding_id = 'w6'")).scalar()
+        conn.execute(text("DELETE FROM budget_costs WHERE wedding_id = 'w6'"))
+        conn.execute(text("DELETE FROM budget_categories WHERE wedding_id = 'w6'"))
+        conn.execute(text("DELETE FROM weddings WHERE id = 'w6'"))
+    assert (w6, w6_cats) == (1, 1), "an expense the couple typed is never doubled"
 
     def wildman(conn, wedding_id):
         cost = conn.execute(text(

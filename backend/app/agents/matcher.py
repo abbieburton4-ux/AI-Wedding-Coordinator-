@@ -8,7 +8,8 @@ from google.genai import types
 from app.db.models import Wedding, Venue, Supplier, Booking, BudgetCategory
 from app.agents.budget_split import category_key
 from app.agents.orchestrator import run_agent
-from app.utils.budget_compare import BUDGET_CURRENCY
+from app.utils.budget_compare import BUDGET_CURRENCY, to_cents
+from app.utils.budget_math import format_cents
 from app.agents.base import get_client, model_for, get_prompt_version
 from app.agents.privacy import send_prompt
 from app.utils.constants import region_matches
@@ -35,7 +36,9 @@ VENUE_SYSTEM_INSTRUCTION = (
     "1. Capacity: Venue max capacity must be >= couple's guest estimate, and min capacity must be <= guest estimate.\n"
     "2. Region: Prioritize venues in the preferred region. If no venues in the region fit the guest count/budget, "
     "you MUST suggest venues in adjacent regions, noting this clearly in your rationale. Never suggest hallucinated venues.\n"
-    "3. Budget: Match the estimated cost (rental + food per head * guests) against the allocated venue budget.\n"
+    "3. Budget: Match the estimated cost (rental + food per head * guests) against the allocated venue budget. "
+    "The budget is in the currency it states; if venue prices are in another currency, don't convert or "
+    "compare them directly, and say so in the rationale.\n"
     "4. Style: Match the couple's style notes (e.g. gothic castle, rustic, eco-friendly) with venue types.\n\n"
     "OUTPUT REQUIREMENT:\n"
     "- Return a ranked shortlist of up to 3 venues.\n"
@@ -51,6 +54,8 @@ SUPPLIER_SYSTEM_INSTRUCTION_TEMPLATE = (
     "MATCHING CRITERIA:\n"
     "1. Region: Prioritize suppliers located in or servicing the preferred region.\n"
     "2. Budget: Verify if their standard package prices fit within the allocated category budget. "
+    "The budget is in the currency it states; if prices are in another currency, don't convert or "
+    "compare them directly, and say so in the rationale. "
     "For photographers/music, this is package cost. For catering, check per head cost.\n"
     "3. Style: Match the couple's style notes (e.g. documentary photo, wildflower arrangements) with supplier attributes.\n\n"
     "OUTPUT REQUIREMENT:\n"
@@ -63,26 +68,38 @@ SUPPLIER_SYSTEM_INSTRUCTION_TEMPLATE = (
 
 async def _category_budget(db: AsyncSession, wedding: Wedding, category: str,
                            share_percent: int) -> dict:
-    """What the couple's own budget (PD-004) allows for a vendor category, in cents.
+    """What the couple's budget allows for a vendor category, as written text.
 
-    The planned amount of their budget category with the same name if they've set
-    one; otherwise a rough share of their total; otherwise null with "no budget set"
-    (PD-009), so the model is never told the budget is 0."""
-    key = category_key(category)
+    The planned amount of their budget category with the same name (PD-004) if
+    they've set one; otherwise a rough share of their own total; otherwise a share
+    of an older intake estimate, in that wedding's currency; otherwise null with "no
+    budget set" (PD-009), so the model is never told the budget is 0. The amount is
+    text with its currency sign, so cents can't be mistaken for dollars."""
+    keys = {category_key(category)}
+    if category_key(category) == "venue":
+        # The name PD-013 step 3 gives the venue category, which 0009 may create.
+        keys |= {"venue & catering", "venue and catering"}
     rows = (await db.exec(
         select(BudgetCategory).where(BudgetCategory.wedding_id == wedding.id)
         .order_by(BudgetCategory.created_at, BudgetCategory.id)
     )).all()
-    match = next((c for c in rows if category_key(c.name) == key
+    match = next((c for c in rows if category_key(c.name) in keys
                   and c.planned_cents is not None), None)
+    currency = BUDGET_CURRENCY
     if match:
-        cents, source = match.planned_cents, f"planned for the couple's {match.name} category"
+        amount = format_cents(match.planned_cents)
+        source = f"planned for the couple's {match.name} category"
     elif wedding.budget_total_cents:
-        cents = wedding.budget_total_cents * share_percent // 100
+        amount = format_cents(wedding.budget_total_cents * share_percent // 100)
         source = f"a rough {share_percent}% share of the couple's total budget"
+    elif to_cents(wedding.budget_total) is not None:
+        currency = (wedding.currency or "EUR").upper()
+        cents = to_cents(wedding.budget_total) * share_percent // 100
+        amount = f"{cents // 100:,}.{cents % 100:02d} {currency}"
+        source = f"a rough {share_percent}% share of an older setup-form estimate"
     else:
-        cents, source = None, "no budget set yet"
-    return {"amount_cents": cents, "currency": BUDGET_CURRENCY, "source": source}
+        amount, source = None, "no budget set yet"
+    return {"amount": amount, "currency": currency, "source": source}
 
 
 @run_agent("venue_matcher", "venue_match")

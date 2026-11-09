@@ -264,12 +264,20 @@ async def run_async_verification():
                 "confidence_score": 0.92
             }
             
+            venue_prompts = []
+
             async def mock_generate_content_venue(*args, **kwargs):
+                venue_prompts.append(kwargs.get("contents"))
                 return MockResponse(json.dumps(venue_response))
-                
+
             mock_models.generate_content = mock_generate_content_venue
-            
+
             res_matcher = await approved(run_venue_matcher, db, "wedding_intake_test")
+            # B44: the budget comes from the couple's own budget, as text with its
+            # currency, never the old euro budget line (15000.0 above) or raw cents.
+            assert venue_prompts and '"allocated_venue_budget": {' in venue_prompts[-1]
+            assert '"currency": "' in venue_prompts[-1] and "amount_cents" not in venue_prompts[-1]
+            assert "15000" not in venue_prompts[-1], "the old euro budget line isn't read"
             print(f"   * res_matcher: {res_matcher}")
             print(f"   * Matches found: {len(res_matcher.get('shortlist', []))}")
             assert len(res_matcher.get("shortlist", [])) == 1
@@ -814,16 +822,33 @@ async def run_async_verification():
             db.add(w_ctx)
             await db.commit()
             assert await _category_budget(db, w_ctx, "venue", 40) == {
-                "amount_cents": 1_500_000, "currency": "USD",
+                "amount": "$15,000", "currency": "USD",
                 "source": "planned for the couple's Venue category"}
             assert await _category_budget(db, w_ctx, "photography", 10) == {
-                "amount_cents": 500_000, "currency": "USD",
+                "amount": "$5,000", "currency": "USD",
                 "source": "a rough 10% share of the couple's total budget"}
+            venue_cat = await db.get(_Cat, "cat_c_venue")
+            venue_cat.name = "Venue & Catering"
+            db.add(venue_cat)
+            await db.commit()
+            assert (await _category_budget(db, w_ctx, "venue", 40))["amount"] == "$15,000", \
+                "the venue matcher reads the Venue & Catering category 0009 may create"
             w_ctx.budget_total_cents = None
             db.add(w_ctx)
             await db.commit()
-            assert (await _category_budget(db, w_ctx, "photography", 10))["amount_cents"] is None, \
+            assert await _category_budget(db, w_ctx, "photography", 10) == {
+                "amount": "3,000.00 EUR", "currency": "EUR",
+                "source": "a rough 10% share of an older setup-form estimate"}, \
+                "an older euro estimate is still used, labelled in its own currency"
+            saved_total = w_ctx.budget_total
+            w_ctx.budget_total = None
+            db.add(w_ctx)
+            await db.commit()
+            assert (await _category_budget(db, w_ctx, "photography", 10))["amount"] is None, \
                 "no budget is sent as null, never 0"
+            w_ctx.budget_total = saved_total
+            db.add(w_ctx)
+            await db.commit()
             for row_id, model in (("pay_c_1", _Pay), ("pay_c_2", _Pay), ("pay_c_3", _Pay),
                                   ("pay_c_4", _Pay), ("cost_c_hall", _Cost),
                                   ("cost_c_old", _Cost), ("cat_c_venue", _Cat)):

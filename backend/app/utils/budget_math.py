@@ -13,9 +13,10 @@ The rules, in full:
   never below 0; paying more than the cost shows as overpaid instead, per expense,
   never netted against another expense.
 - An expense's status is "overdue" when any payment on it (refundable or not) is
-  unpaid and was due before today in Chicago; otherwise "paid" when something is
-  ticked, nothing is left unticked and paid covers the cost; otherwise
-  "partly_paid" when anything is ticked; otherwise "unpaid".
+  unpaid and was due before today in Chicago; otherwise "paid" when it has a cost,
+  every non-refundable payment is ticked and paid covers the cost; otherwise
+  "partly_paid" when paid is above 0; otherwise "unpaid". Refundable deposits
+  don't affect paid or partly paid, so the status never contradicts "Paid".
 - Archived expenses keep their figures and status but are left out of every
   category and budget total, and out of the payments due.
 """
@@ -79,11 +80,14 @@ def cost_figures(cost, payments: List, today: datetime.date) -> CostFigures:
     scheduled = sum(p.amount_cents for p in owed)
     paid = sum(p.amount_cents for p in owed if p.paid)
 
+    # Paid and partly paid describe the cost, so a refundable deposit doesn't count
+    # towards either (only towards overdue): the badge always agrees with "Paid".
     if any(is_overdue(p, today) for p in payments):
         status = "overdue"
-    elif any(p.paid for p in payments):
-        all_ticked = all(p.paid for p in payments)
-        status = "paid" if all_ticked and paid >= total else "partly_paid"
+    elif total > 0 and paid >= total and all(p.paid for p in owed):
+        status = "paid"
+    elif paid > 0:
+        status = "partly_paid"
     else:
         status = "unpaid"
 
