@@ -55,28 +55,65 @@ configured; direct execution doesn't call those routes or require that secret.
 
 Rule 6 holds on Replit: the schema only changes through the Alembic migrations in
 `backend/migrations/versions/`. Every start of `scripts/replit-production.sh`, in
-the workspace and in the published app, runs `alembic upgrade head` against that
-environment's own database before serving anything. Migrations can carry data
-steps (for example `0002` makes each couple their wedding's owner), and only
-Alembic runs those. On PostgreSQL the upgrade is one transaction and is serialised
-across instances, so a failed or concurrent start can't half-apply it.
+the workspace and in the published app, first runs `python db_status.py upgrade`
+from `backend/`. That applies `alembic upgrade head` to that environment's own
+database, then checks it is at the latest migration, and stops before serving
+anything if it isn't. The app's own startup runs the same upgrade again, which by
+then does nothing. Migrations can carry data steps (for example `0002` makes each
+couple their wedding's owner), and only Alembic runs those. On PostgreSQL the
+upgrade is one transaction and is serialised across instances, so a failed or
+concurrent start can't half-apply it.
 
 The app refuses to start, rather than guess, if the database has app tables but no
-Alembic record, or if a migration fails (usually because something else already
-changed the schema). Don't fix either by editing the database by hand; ask the team.
+Alembic record, if a migration fails (usually because something else already
+changed the schema), or if `SYNC_DATABASE_URL` points at a different database from
+`DATABASE_URL` (don't set `SYNC_DATABASE_URL` or keep a `backend/.env` on Replit;
+the app derives it). Don't fix any of these by editing the database by hand; ask
+the team.
+
+**Pulling code doesn't update the database.** A running app keeps its old code and
+leaves the development database where it was until the app starts again. In B59
+the workspace had migration `0006` in its code but its database was still at
+`0005`, while the published app had applied `0006` when it started. Publish then
+offered to delete the new column from production to match. [ASSUMPTION] The
+likeliest cause is that the workspace app was never restarted after the Pull. A
+`backend/.env` copied from `.env.example` would also do it, by sending the
+workspace's migrations to a local SQLite file; the run script now refuses that.
+
+**A publish that brings a new migration will list additions.** Run puts the
+development database at the new migration while production is still one behind,
+so Publish offers to add the new table or column to production itself (step 4).
 
 **When you publish** (plain steps for the owner):
-1. Press **Run** in the workspace first and wait for the app to load. That brings
-   the development database up to date, so it is never behind production.
-2. Press **Publish**. If Replit shows a step about database or schema changes for
-   production, choose the option that does **not** apply them (skip / don't
-   apply). The published app applies its own changes when it starts.
-3. If that screen only lets you apply the changes, stop and tell the team before
-   publishing. [ASSUMPTION] Replit offers a way to skip; nobody has checked
-   this screen yet.
-4. Once published, open the app. If it shows an error page instead of sign-in,
-   tell the team. The app stops before changing anything itself, but if Replit
-   applied schema changes in step 2, those already happened.
+1. In the workspace, **Pull** the latest code.
+2. If the app is running, press **Stop**. Then press **Run** and wait for the app to
+   load. The console shows `Database is up to date (migration ...)`. If it says the
+   database is behind, or anything else, or the app doesn't load, stop and tell
+   the team.
+3. To double-check, open the **Shell** and type
+   `cd backend && python db_status.py check`. It must say
+   `Database is up to date`.
+4. Press **Publish**. Replit compares the development database with production and
+   may list changes it will make to production.
+   - If any line says **DROP** (for example `DROP COLUMN` or `DROP TABLE`), **don't
+     approve it**. Close the publish screen. In the Shell, type
+     `cd backend && alembic current` to see where the development database is,
+     then `python db_status.py upgrade` (the same as `alembic upgrade head`, with
+     the run script's safety checks), and run the check in step 3 again. Then try
+     Publish again. If DROP is still offered, stop and tell the team.
+   - If it lists only additions (`CREATE TABLE`, `ADD COLUMN`) and lets you skip
+     them, skip them: the published app applies its own changes when it starts.
+   - If it lists additions and won't let you skip, stop and tell the team before
+     publishing. [ASSUMPTION] Approving them would add the change to production
+     outside Alembic, and the published app would then refuse to start on that
+     migration until the team marks it as applied there. Nobody has seen this
+     screen with additions yet.
+5. Once published, open the app. If it shows an error page instead of sign-in,
+   tell the team. The app stops before changing anything itself, but anything
+   Replit applied in step 4 has already happened.
+
+The Shell always reaches the **development** database (`DATABASE_URL`), never the
+published app's production one.
 
 Startup then seeds only the vendor catalogue (never fictional users, weddings,
 budgets or bookings).
