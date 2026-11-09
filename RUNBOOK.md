@@ -14,9 +14,14 @@ This serves the built React app and FastAPI together on port 5000, uses the
 managed PostgreSQL database and Firebase, and disables both demo flags.
 Set `ACCESS_BOOTSTRAP_EMAILS` privately for the couple's first sign-ins.
 AI actions run within the request; no worker secret or task emulator is needed.
-Every start applies the Alembic migrations to that environment's own database
-(rule 6); when publishing, don't let Replit apply schema changes itself. Full
-configuration, publishing steps and verification are in [replit.md](replit.md).
+Every start of that script brings its own environment's database to the latest
+Alembic migration (`backend/db_status.py upgrade`) and stops before serving if it
+can't (rule 6). Pulling new code doesn't restart a running app, so stop and Run
+again before publishing: Publish makes production's schema match the development
+database, and a development database left behind offers to undo a migration
+(B59). `python db_status.py check` (from `backend/`) says whether it's up to date.
+Never approve a DROP on the publish screen. Full configuration, publishing steps
+and verification are in [replit.md](replit.md).
 
 The following demo command is retained for disposable data only, without Firebase:
 
@@ -105,14 +110,14 @@ In production (PD-002), set these in the deployment environment, never in git:
 
 ### Migrations
 
-Outside dev mode, the app applies Alembic migrations on startup. On Postgres, an advisory lock stops two processes starting at once from racing.
+Outside dev mode, the app applies Alembic migrations on startup. On Postgres, an advisory lock stops two processes starting at once from racing. `python db_status.py check` (from `backend/`) says whether the database is at the latest migration (exit 0), behind (1), or in some other state (2); `python db_status.py upgrade` applies the migrations first. Neither prints the connection URL.
 - **A database that dev mode built with `create_all`:** tell Alembic where it stands, once, before starting the app. If the database has no `wedding_members` table, run `alembic stamp 0001`; the next start adds the table and makes each couple an owner. If the table is already there, run `alembic stamp head`, then add each couple's owner row with `manage_access.py`.
 - **Loading the owner's checklist from the app (PD-011):** on the Checklist screen, an owner or editor sees "Load my checklist" until it has run. They pick the file; the app does a practice run that saves nothing and lists what it would add; "Add these tasks" saves it. It uses the wedding date already set on the Checklist screen, refuses the same things as the script below, and runs once. The file's text goes only into the new tasks: it isn't kept, logged or sent to the AI. A backup first is still wise where the hosting console offers one. No Shell or database secret is needed, so this is the route for the published app.
 - **Loading the owner's checklist with the script (PD-007), once, after hosting (B14):** the owner's list comes from their own file, which stays out of git. It adds the approved Jewish-tradition tasks and the Wildman BT payment tasks V1–V3 (PD-011), merges the AI planner's old timeline (a duplicate keeps its tick and notes on the matching task), and removes the timeline rows. A second run is refused. From `backend/`, against the app's database:
-  1. **Back up the database first.** The dry run works on the live database and undoes itself; it isn't a copy. On Postgres: `pg_dump "${SYNC_DATABASE_URL/+psycopg2/}" -Fc -f checklist-before-import.dump` (pg_dump needs the URL without `+psycopg2`) (or take an on-demand backup in the hosting console). On SQLite: stop the app and copy the database file. Keep the backup out of git: it holds guest data.
+  1. **Back up the database first.** The dry run works on the live database and undoes itself; it isn't a copy. On Postgres: `pg_dump "${SYNC_DATABASE_URL/+psycopg2/}" -Fc -f checklist-before-import.dump` (pg_dump needs the URL without `+psycopg2`) (or take an on-demand backup in the hosting console). On Replit's Shell, `SYNC_DATABASE_URL` isn't set; use `pg_dump "$DATABASE_URL" -Fc -f checklist-before-import.dump` instead. That Shell reaches only the development database, never the published app's production one. On SQLite: stop the app and copy the database file. Keep the backup out of git: it holds guest data.
   2. Dry run: `python manage_checklist.py import --wedding <id> --file <path to the owner's file> --wedding-date 2027-10-23`. It prints what it would add, merge and remove, then undoes it. Read it.
   3. Run the same command again with `--apply`. Before deleting any timeline row it reads the checklist back and checks every row is on it; if not, it refuses and saves nothing.
-  4. If something looks wrong afterwards, restore the backup (`pg_restore --clean -d "${SYNC_DATABASE_URL/+psycopg2/}" checklist-before-import.dump`, or copy the SQLite file back with the app stopped).
+  4. If something looks wrong afterwards, restore the backup (`pg_restore --clean -d "${SYNC_DATABASE_URL/+psycopg2/}" checklist-before-import.dump`, or `"$DATABASE_URL"` on Replit's Shell, or copy the SQLite file back with the app stopped).
 - **Never run `alembic downgrade` against a database holding real data.** The downgrades drop tables, including the access list.
 - **Writing a migration:** autogenerate renders `op.batch_alter_table` blocks (`render_as_batch`), so altering or dropping a column or constraint also works on SQLite. Keys and unique constraints get names from the convention on `SQLModel.metadata` (`fk_<table>_<column>_<referred table>`, `pk_<table>`, `uq_<table>_<columns>`); give every `CheckConstraint` an explicit name, which `verify_migrations.py` checks. Never change the convention once a real database exists: migrations `0001` and `0002` take their names from it at run time. Databases built before this convention have unnamed (SQLite) or Postgres-default (`<table>_<column>_fkey`, `<table>_pkey`) key names, so a migration that drops an existing foreign or primary key must look its name up rather than assume the convention. `verify_migrations.py` runs on SQLite only, which doesn't compare check constraints or server defaults; review those by hand until it also runs against Postgres.
 
