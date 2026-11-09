@@ -1,6 +1,7 @@
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import (
-    Boolean, Column, JSON, Text, Date, Time, CheckConstraint, UniqueConstraint, false,
+    Boolean, Column, JSON, String, Text, Date, Time, CheckConstraint, UniqueConstraint, false,
+    text,
 )
 from typing import Optional, List, Dict, Any
 import datetime
@@ -430,11 +431,25 @@ class BudgetCategory(SQLModel, table=True):
 
 
 class BudgetCost(SQLModel, table=True):
-    """A vendor cost under a category: who it's with and what they quoted."""
+    """An expense under a category: who it's with, what it costs, and its contract.
+
+    The cost the budget counts is final, else quoted, else estimated (see
+    ``utils/budget_math.py``). Only the couple change ``contract_status``; no agent
+    does (rule 4). Archived expenses are kept but left out of every total.
+    """
     __tablename__ = "budget_costs"
     __table_args__ = (
         CheckConstraint(
             "quoted_cents IS NULL OR quoted_cents >= 0", name="ck_budget_cost_quoted"
+        ),
+        CheckConstraint(
+            "estimated_cents IS NULL OR estimated_cents >= 0", name="ck_budget_cost_estimated"
+        ),
+        CheckConstraint(
+            "final_cents IS NULL OR final_cents >= 0", name="ck_budget_cost_final"
+        ),
+        CheckConstraint(
+            "contract_status IN ('none', 'sent', 'signed')", name="ck_budget_cost_contract"
         ),
     )
 
@@ -443,6 +458,24 @@ class BudgetCost(SQLModel, table=True):
     category_id: str = Field(foreign_key="budget_categories.id", index=True, ondelete="CASCADE")
     vendor_name: str = Field(description="Free text typed by the couple")
     quoted_cents: Optional[int] = None
+    estimated_cents: Optional[int] = None
+    final_cents: Optional[int] = None
+    contract_status: str = Field(
+        default="none",
+        sa_column=Column(String, nullable=False, server_default=text("'none'")),
+    )
+    payment_method: Optional[str] = None
+    notes: Optional[str] = Field(default=None, sa_column=Column(Text))
+    # A link the couple paste, such as the contract in their Google Drive (PD-013 a).
+    link_url: Optional[str] = None
+    # The vendor on the Vendors page this expense is with, if the couple linked one.
+    couple_vendor_id: Optional[str] = Field(
+        default=None, foreign_key="couple_vendors.id", index=True, ondelete="SET NULL"
+    )
+    archived: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=false()),
+    )
     created_at: datetime.datetime = Field(default_factory=utcnow)
     updated_at: datetime.datetime = Field(default_factory=utcnow)
 
@@ -469,6 +502,18 @@ class BudgetPayment(SQLModel, table=True):
     paid_at: Optional[datetime.datetime] = None
     paid_by_user_id: Optional[str] = Field(
         default=None, foreign_key="users.id", ondelete="SET NULL"
+    )
+    # The day the couple say they paid, which may differ from when they ticked it
+    # (paid_at). Set only on a paid payment, and cleared when it's unticked.
+    paid_on: Optional[datetime.date] = Field(default=None, sa_column=Column(Date))
+    method: Optional[str] = None
+    reference: Optional[str] = None
+    notes: Optional[str] = Field(default=None, sa_column=Column(Text))
+    link_url: Optional[str] = None
+    # A refundable security deposit: tracked, but not part of the expense's cost.
+    refundable: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=false()),
     )
     created_at: datetime.datetime = Field(default_factory=utcnow)
 

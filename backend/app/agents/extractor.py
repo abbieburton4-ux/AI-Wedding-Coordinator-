@@ -9,12 +9,14 @@ from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from google.genai import types
 from app.db.models import (
-    AgentDecisionLog, Booking, BudgetLine, CoupleVendor, CoupleVendorQuote, Quote, Supplier,
+    AgentDecisionLog, Booking, BudgetCategory, CoupleVendor, CoupleVendorQuote, Quote, Supplier,
     Venue,
 )
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
 from app.agents.privacy import send_prompt
+from app.utils.budget_compare import compare_quote
+from app.utils.budget_math import format_cents
 
 logger = logging.getLogger(__name__)
 
@@ -104,12 +106,11 @@ async def run_quote_extractor(db: AsyncSession, wedding_id: str, booking_id: str
     else:
         raise ValueError(f"Booking {booking_id} has neither supplier_id nor venue_id.")
 
-    # 2. Fetch budget allocation
-    budget_result = await db.exec(
-        select(BudgetLine).where(BudgetLine.wedding_id == wedding_id, BudgetLine.category == category)
-    )
-    budget_row = budget_result.first()
-    allocated_amount = budget_row.allocated_amount if budget_row else 0.0
+    # 2. The couple's own budget categories (PD-004), to compare the quote with.
+    budget_categories = (await db.exec(
+        select(BudgetCategory).where(BudgetCategory.wedding_id == wedding_id)
+        .order_by(BudgetCategory.created_at, BudgetCategory.id)
+    )).all()
 
     # 3. Call Gemini
     client = get_client()
@@ -160,24 +161,25 @@ async def run_quote_extractor(db: AsyncSession, wedding_id: str, booking_id: str
     booking.status = "quoted" if is_available else "declined"
     db.add(booking)
 
-    # 5b. Roll the quote into the LIVE budget so the couple's Budget page actually
-    # moves. MVP model: a category's spent_amount = the latest *available* quote total
-    # for that category (the projected spend the couple is tracking). Declined quotes
-    # don't count. This is what turns the static budget into a real tracker.
-    if is_available and budget_row is not None:
-        budget_row.spent_amount = total_amount
-        db.add(budget_row)
-    
-    # 6. Apply Budget Monitor Alert side effect (chain a budget_monitor log if over budget)
+    # The quote is never written into the couple's budget: its figures come from what
+    # the couple enter, and only they record a cost (PD-013, rule 4).
+
+    # 6. Budget alert (a budget_monitor log row) when an available quote is over the
+    # planned amount of the matching budget category. The same comparison as the
+    # vendor cards (B42): US dollars only, otherwise no alert rather than a guessed one.
     follow_ups = []
-    if total_amount > allocated_amount and allocated_amount > 0:
+    check = compare_quote(total_amount, result_dict.get("currency"), category,
+                          budget_categories)
+    if is_available and check["budget_comparison"] == "over":
         alert_id = str(uuid.uuid4())
+        planned_cents = check["planned_cents"]
+        quote_cents = planned_cents + check["over_by_cents"]
         alert_text = (
-            f"Budget alert for category '{category}': quote from {vendor_name} "
-            f"(€{total_amount:,.2f}) exceeds allocated budget (€{allocated_amount:,.2f}) "
-            f"by €{total_amount - allocated_amount:,.2f}."
+            f"Budget alert for {check['budget_category_name']}: the quote from "
+            f"{vendor_name} ({format_cents(quote_cents)}) exceeds what you planned "
+            f"({format_cents(planned_cents)}) by {format_cents(check['over_by_cents'])}."
         )
-        
+
         # Insert budget_monitor audit log row directly
         alert_log = AgentDecisionLog(
             id=alert_id,
@@ -191,8 +193,9 @@ async def run_quote_extractor(db: AsyncSession, wedding_id: str, booking_id: str
             decision_type="budget_alert",
             status="success",
             rationale_summary=alert_text,
-            input_payload={"allocated": allocated_amount, "quote_total": total_amount},
-            output_payload={"alert_message": alert_text, "category": category}
+            input_payload={"planned_cents": planned_cents, "quote_cents": quote_cents},
+            output_payload={"alert_message": alert_text, "category": category,
+                            "budget_category": check["budget_category_name"]}
         )
         db.add(alert_log)
         

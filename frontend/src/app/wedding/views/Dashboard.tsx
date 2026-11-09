@@ -5,7 +5,7 @@ import { useWedding, useApi } from "../../api";
 import { POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from "../../api/config";
 import { useActiveWedding } from "../WeddingProvider";
 import { useReviewedRequest } from "../../api/review";
-import { formatCents } from "./budget/money";
+import { AMOUNT_HINT, centsToInput, formatCents, parseDollars } from "./budget/money";
 
 interface IntakeLog {
   id: string;
@@ -52,7 +52,8 @@ export function Dashboard() {
   const [replanning, setReplanning] = useState(false);
   const replanBaselineId = useRef<string | undefined>(undefined);
   const [editingBudget, setEditingBudget] = useState(false);
-  const [newBudget, setNewBudget] = useState(0);
+  const [newBudget, setNewBudget] = useState("");
+  const [budgetError, setBudgetError] = useState<string | null>(null);
 
   const fetchIntakeLog = useCallback(async () => {
     if (!weddingId) return;
@@ -147,12 +148,19 @@ export function Dashboard() {
 
   const saveBudgetAndReplan = useCallback(async () => {
     if (!weddingId) return;
+    // The couple's own total in whole cents, the same figure the Budget screen shows (B44).
+    const cents = parseDollars(newBudget);
+    if (!cents) {
+      setBudgetError(AMOUNT_HINT);
+      return;
+    }
+    setBudgetError(null);
     setEditingBudget(false);
     setReplanError(null);
     try {
       await request(`/weddings/${weddingId}`, {
         method: "PATCH",
-        body: JSON.stringify({ budget_total: newBudget }),
+        body: JSON.stringify({ budget_total_cents: cents }),
       });
     } catch (err) {
       setReplanError(err instanceof Error ? err.message : "Your new budget wasn't saved. Please try again.");
@@ -201,24 +209,26 @@ export function Dashboard() {
         </div>
         <p className="text-body-md text-on-surface-variant mb-6">
           {intakeLog?.error_message ||
-            "The budget looks low for this guest count and region against typical Irish market rates."}
+            "The budget looks low for this guest count and region."}
         </p>
         {errorLine}
 
         {editingBudget ? (
           <div className="flex flex-wrap items-end gap-3 mb-2">
             <div className="flex-1 min-w-[200px]">
-              <label className="block font-button-text text-on-surface-variant mb-2 text-sm">
-                Updated total budget (€)
+              <label htmlFor="dashboard-new-budget" className="block font-button-text text-on-surface-variant mb-2 text-sm">
+                Updated total budget, in US dollars
               </label>
               <input
-                type="number"
-                min={0}
-                step={500}
+                id="dashboard-new-budget"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0.00"
                 value={newBudget}
-                onChange={(e) => setNewBudget(Number(e.target.value))}
+                onChange={(e) => setNewBudget(e.target.value)}
                 className="w-full rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-on-surface focus:border-primary focus:outline-none"
               />
+              {budgetError && <p role="alert" className="text-sm text-error mt-2">{budgetError}</p>}
             </div>
             <button
               type="button"
@@ -240,7 +250,8 @@ export function Dashboard() {
             <button
               type="button"
               onClick={() => {
-                setNewBudget(wedding?.budget_total ?? 0);
+                setNewBudget(centsToInput(wedding?.budget_total_cents ?? null));
+                setBudgetError(null);
                 setEditingBudget(true);
               }}
               className="bg-primary text-on-primary px-6 py-4 rounded-full font-button-text tracking-widest uppercase hover:opacity-90 transition-opacity"
@@ -343,7 +354,12 @@ export function Dashboard() {
 
   // ---- The live plan ----
   const summary = [
-    { label: "Budget lines", value: data.budgetLines.length, icon: "payments", to: "/wedding/budget" },
+    {
+      label: "Budget categories",
+      value: data.budget ? data.budget.categories.length : "—",
+      icon: "payments",
+      to: "/wedding/budget",
+    },
     {
       label: "Checklist tasks done",
       value: data.checklist ? `${data.checklist.done} / ${data.checklist.total}` : "—",

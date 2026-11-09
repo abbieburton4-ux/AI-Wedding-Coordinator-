@@ -56,12 +56,29 @@ export function formatInstantDay(isoDateTime: string): string {
 
 const COMMITTED_LABEL = {
   none: "Committed",
+  final: "Committed (final costs)",
   quote: "Committed (quoted)",
+  estimate: "Committed (estimates)",
   scheduled: "Committed (payments scheduled)",
-  mixed: "Committed (quotes and scheduled payments)",
+  mixed: "Committed (final, quoted, estimated or scheduled)",
 } as const;
 
 /** The heading for a "committed" figure, saying where the number comes from. */
 export function committedLabel(basis: keyof typeof COMMITTED_LABEL): string {
   return COMMITTED_LABEL[basis];
+}
+
+/**
+ * A pasted link, only if it's a web link. Anything else (javascript:, data:, a file
+ * path) isn't shown as a link, even though the API refuses to save one.
+ */
+export function safeHttpUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.username || parsed.password) return null;
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.href : null;
+  } catch {
+    return null;
+  }
 }

@@ -172,6 +172,8 @@ async def create_wedding(
 class WeddingUpdate(BaseModel):
     guest_count_estimate: Optional[int] = None
     budget_total: Optional[float] = PydField(default=None, gt=0)  # never 0 (PD-009)
+    # The couple's own total in whole US cents (PD-004), as the setup form sends it.
+    budget_total_cents: Optional[int] = PydField(default=None, gt=0, le=MAX_CENTS)
     region: Optional[str] = None
     ceremony_type: Optional[str] = None
     style_notes: Optional[str] = None
@@ -192,6 +194,15 @@ async def update_wedding(
     wedding = await require_wedding_access(db, wedding_id, current_user, "editor")
 
     updates = payload.model_dump(exclude_unset=True)
+    if "budget_total_cents" in updates:
+        if "budget_total" in updates:
+            raise HTTPException(status_code=422,
+                                detail="Send the budget once, in cents or dollars")
+        cents = updates["budget_total_cents"]
+        if cents is None:
+            raise HTTPException(status_code=422, detail="Please enter your total budget")
+        # The same exact conversion as the setup form, for the older readers.
+        updates["budget_total"] = float(Decimal(cents) / 100)
     today = checklist_rules.wedding_today()
     new_date = updates.get("wedding_date")
     if new_date is not None and new_date != wedding.wedding_date and new_date < today:

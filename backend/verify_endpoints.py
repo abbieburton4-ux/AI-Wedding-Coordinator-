@@ -123,6 +123,19 @@ def test_api_suite():
                        headers=setup_headers).status_code == 422, "0 never stands in for blank"
         res = c.get(f"/api/v1/weddings/{setup['id']}/budget/overview", headers=setup_headers)
         assert res.status_code == 200 and res.json()["totals"]["total_cents"] is None
+        # The dashboard's "Adjust my budget" sends the couple's total in cents (B44).
+        for bad in ({"budget_total_cents": 0}, {"budget_total_cents": 10.5},
+                    {"budget_total_cents": None},
+                    {"budget_total_cents": 100, "budget_total": 1.0}):
+            assert c.patch(f"/api/v1/weddings/{setup['id']}", json=bad,
+                           headers=setup_headers).status_code == 422, bad
+        res = c.patch(f"/api/v1/weddings/{setup['id']}", json={"budget_total_cents": 3_000_050},
+                      headers=setup_headers)
+        assert res.status_code == 200, res.text
+        assert (res.json()["budget_total_cents"], res.json()["budget_total"]) == (
+            3_000_050, 30000.5), "the couple's total, and the same figure for older readers"
+        res = c.get(f"/api/v1/weddings/{setup['id']}/budget/overview", headers=setup_headers)
+        assert res.json()["totals"]["total_cents"] == 3_000_050, "the Budget screen shows it"
         # A budget given on the form is the couple's own total, in whole cents.
         res = c.post("/api/v1/weddings/", json=dict(setup_payload, budget_total_cents=4_500_050),
                      headers={"Authorization": "Bearer mock-couple_setup_budget"})
@@ -601,7 +614,8 @@ def test_api_suite():
         assert ov["totals"] == {"total_cents": None, "planned_cents": 1_750_000,
                                 "committed_cents": 1_200_000, "committed_basis": "quote",
                                 "paid_cents": 300_000, "remaining_cents": 900_000,
-                                "overpaid_cents": 0, "contributions_cents": 600_000}
+                                "overpaid_cents": 0, "contributions_cents": 600_000,
+                                "refundable_cents": 0, "refundable_paid_cents": 0}
         assert [d["payment_id"] for d in ov["next_due"]] == [balance_id]
         assert ov["next_due"][0]["overdue"] is False
         assert ov["contributions"][0]["contributor"] == "Groom's parents"
@@ -733,6 +747,194 @@ def test_api_suite():
                         headers=headers).status_code == 204
         print("   * Delete: payments, costs and categories go; contributions are kept untied")
 
+        # 7c2. Expenses and payments that add up (PD-013 step 1, B65; B45 for the date).
+        print("7c2. Verifying expenses: cost basis, statuses, refundable, archive, links...")
+        import datetime as _dt
+        real_budget_today = budget_module._today
+        budget_module._today = lambda: _dt.date(2026, 11, 20)  # pinned Chicago "today"
+        try:
+            exp_cat = c.post(f"{b_url}/categories", json={"name": "Placeholder Venue"},
+                             headers=headers).json()["id"]
+            vendor = c.post(f"/api/v1/weddings/{wedding_id}/vendors", headers=headers, json={
+                "section": "venue", "name": "Sample Loft", "contact_name": "Placeholder Person",
+                "email": "loft@example.test", "phone": "(555) 010-0199"})
+            assert vendor.status_code == 201, vendor.text
+            vendor_id = vendor.json()["id"]
+            res = c.post(f"{b_url}/categories/{exp_cat}/costs", headers=headers, json={
+                "vendor_name": "Sample Loft", "estimated_cents": 1_000_000,
+                "couple_vendor_id": vendor_id, "contract_status": "sent",
+                "payment_method": "  Check ", "notes": "  Placeholder note \n",
+                "link_url": "https://drive.example.test/file/d/abc"})
+            assert res.status_code == 201, res.text
+            loft = res.json()["id"]
+            assert (res.json()["payment_method"], res.json()["notes"]) == (
+                "Check", "Placeholder note"), "text tidied, blank means none"
+            for bad in ("javascript:alert(1)", "data:text/html,x", "ftp://example.test/x",
+                        "https://", "drive.example.test/file", "https://a b.test",
+                        "http://[broken", "https://drive.google.com@other.example.test/x",
+                        "https://example.test/a\x07b"):
+                res = c.patch(f"{b_url}/costs/{loft}", json={"link_url": bad}, headers=headers)
+                assert res.status_code == 422, (bad, res.status_code)
+            assert c.patch(f"{b_url}/costs/{loft}", json={"contract_status": "accepted"},
+                           headers=headers).status_code == 422
+            assert c.patch(f"{b_url}/costs/{loft}", json={"final_cents": -1},
+                           headers=headers).status_code == 422
+            assert c.patch(f"{b_url}/costs/{loft}", json={"couple_vendor_id": "nope"},
+                           headers=headers).status_code == 404
+
+            def expense(cost_id):
+                ov = c.get(f"{b_url}/overview", headers=viewer_headers).json()
+                cat = next(k for k in ov["categories"] if k["id"] == exp_cat)
+                return ov, cat, next(x for x in cat["costs"] if x["id"] == cost_id)
+
+            ov, cat, cost = expense(loft)
+            assert ov["today"] == "2026-11-20", "overdue is measured against Chicago's date"
+            assert cost["vendor"] == {"id": vendor_id, "name": "Sample Loft",
+                                      "section": "venue"}, "name and section, no contacts"
+            assert "loft@example.test" not in str(ov) and "555" not in str(ov)
+            assert (cost["committed_cents"], cost["committed_basis"], cost["status"]) == (
+                1_000_000, "estimate", "unpaid")
+            # The cost is the final cost, else the quote, else the estimate.
+            c.patch(f"{b_url}/costs/{loft}", json={"quoted_cents": 1_100_000}, headers=headers)
+            assert expense(loft)[2]["committed_basis"] == "quote"
+            c.patch(f"{b_url}/costs/{loft}", json={"final_cents": 1_200_000}, headers=headers)
+            ov, cat, cost = expense(loft)
+            assert (cost["committed_cents"], cost["committed_basis"]) == (1_200_000, "final")
+            assert (cat["committed_basis"], ov["totals"]["committed_basis"]) == ("final", "final")
+
+            def pay(body):
+                res = c.post(f"{b_url}/costs/{loft}/payments", json=body, headers=headers)
+                assert res.status_code == 201, res.text
+                return res.json()
+
+            first = pay({"kind": "deposit", "amount_cents": 600_000, "due_on": "2026-11-11",
+                         "method": "Check", "reference": " No. 101 "})
+            second = pay({"amount_cents": 600_000, "due_on": "2027-09-23"})
+            security = pay({"kind": "deposit", "amount_cents": 200_000, "due_on": "2027-09-23",
+                            "refundable": True, "link_url": "http://drive.example.test/x"})
+            assert (first["reference"], first["paid"], first["overdue"]) == ("No. 101", False, True)
+            assert security["refundable"] is True and security["would_overpay_cents"] == 0
+            ov, cat, cost = expense(loft)
+            assert cost["status"] == "overdue", "an unpaid payment due before today"
+            assert (cost["scheduled_cents"], cost["refundable_cents"], cost["paid_cents"],
+                    cost["remaining_cents"], cost["over_scheduled_cents"]) == (
+                1_200_000, 200_000, 0, 1_200_000, 0), cost
+            due = [d for d in ov["next_due"] if d["cost_id"] == loft]
+            assert [(d["amount_cents"], d["overdue"], d["refundable"]) for d in due] == [
+                (600_000, True, False), (600_000, False, False), (200_000, False, True)], due
+
+            # Partly paid: one ticked, with the day it was paid; a future day is refused.
+            first_url = f"{b_url}/payments/{first['id']}/paid"
+            assert c.put(first_url, json={"paid": True, "paid_on": "2026-11-21"},
+                         headers=headers).status_code == 422, "the date paid can't be ahead"
+            assert c.put(first_url, json={"paid": False, "paid_on": "2026-11-10"},
+                         headers=headers).status_code == 422
+            res = c.put(first_url, json={"paid": True, "paid_on": "2026-11-10"}, headers=headers)
+            assert res.status_code == 200 and res.json()["paid_on"] == "2026-11-10", res.text
+            assert res.json()["overdue"] is False
+            ov, cat, cost = expense(loft)
+            assert (cost["status"], cost["paid_cents"], cost["remaining_cents"]) == (
+                "partly_paid", 600_000, 600_000), cost
+            # Refundable money is tracked, never counted as paid toward the cost.
+            c.put(f"{b_url}/payments/{security['id']}/paid", json={"paid": True}, headers=headers)
+            ov, cat, cost = expense(loft)
+            assert (cost["paid_cents"], cost["refundable_paid_cents"]) == (600_000, 200_000)
+            assert (cat["refundable_cents"], cat["refundable_paid_cents"]) == (200_000, 200_000)
+            assert cost["status"] == "partly_paid"
+            # The warning before overpaying: ticking the balance is fine; a further
+            # payment would take paid over the cost, and the overview says by how much.
+            assert next(p for p in cost["payments"] if p["id"] == second["id"])[
+                "would_overpay_cents"] == 0
+            extra = pay({"amount_cents": 50_000})
+            ov, cat, cost = expense(loft)
+            assert cost["over_scheduled_cents"] == 50_000, "payments add up to more than the cost"
+            assert next(p for p in cost["payments"] if p["id"] == extra["id"])[
+                "would_overpay_cents"] == 0, "not while the balance is unticked"
+            c.put(f"{b_url}/payments/{second['id']}/paid", json={"paid": True}, headers=headers)
+            ov, cat, cost = expense(loft)
+            assert cost["status"] == "partly_paid", "an unticked payment is still on it"
+            assert next(p for p in cost["payments"] if p["id"] == extra["id"])[
+                "would_overpay_cents"] == 50_000
+            res = c.put(f"{b_url}/payments/{extra['id']}/paid", json={"paid": True},
+                        headers=headers)
+            assert res.status_code == 200, "a warning, not a block"
+            ov, cat, cost = expense(loft)
+            assert (cost["status"], cost["paid_cents"], cost["overpaid_cents"],
+                    cost["remaining_cents"]) == ("paid", 1_250_000, 50_000, 0), cost
+            # Edit and delete: the figures follow at once.
+            assert c.delete(f"{b_url}/payments/{extra['id']}", headers=headers).status_code == 204
+            ov, cat, cost = expense(loft)
+            assert (cost["status"], cost["paid_cents"], cost["overpaid_cents"]) == (
+                "paid", 1_200_000, 0), cost
+            c.patch(f"{b_url}/payments/{second['id']}", json={"amount_cents": 500_000},
+                    headers=headers)
+            ov, cat, cost = expense(loft)
+            assert (cost["status"], cost["paid_cents"], cost["remaining_cents"]) == (
+                "partly_paid", 1_100_000, 100_000), "paid no longer covers the cost"
+            assert c.patch(f"{b_url}/payments/{second['id']}", json={"paid_on": "2026-11-19"},
+                           headers=headers).json()["paid_on"] == "2026-11-19"
+            res = c.put(f"{b_url}/payments/{second['id']}/paid", json={"paid": False},
+                        headers=headers)
+            assert res.json()["paid_on"] is None, "unticking clears the date paid"
+            assert c.patch(f"{b_url}/payments/{second['id']}", json={"paid_on": "2026-11-19"},
+                           headers=headers).status_code == 422, "no date paid while unpaid"
+            assert c.patch(f"{b_url}/payments/{second['id']}", json={"paid": True},
+                           headers=headers).json()["paid"] is False, "editing never ticks"
+
+            # Archive: kept, still listed, but out of every total and the due list.
+            before = c.get(f"{b_url}/overview", headers=headers).json()["totals"]
+            assert c.patch(f"{b_url}/costs/{loft}", json={"archived": True},
+                           headers=headers).status_code == 200
+            ov, cat, cost = expense(loft)
+            assert cost["archived"] is True and len(cost["payments"]) == 3
+            assert (cat["committed_cents"], cat["paid_cents"], cat["refundable_cents"]) == (0, 0, 0)
+            assert ov["totals"]["committed_cents"] == before["committed_cents"] - 1_200_000
+            assert ov["totals"]["paid_cents"] == before["paid_cents"] - 600_000
+            assert all(d["cost_id"] != loft for d in ov["next_due"])
+            c.patch(f"{b_url}/costs/{loft}", json={"archived": False}, headers=headers)
+            assert c.get(f"{b_url}/overview", headers=headers).json()["totals"] == before
+
+            # Viewers can't change any of the new fields.
+            for method, url, body in (
+                ("patch", f"{b_url}/costs/{loft}", {"archived": True}),
+                ("patch", f"{b_url}/costs/{loft}", {"contract_status": "signed"}),
+                ("patch", f"{b_url}/payments/{first['id']}", {"refundable": True}),
+                ("put", first_url, {"paid": True, "paid_on": "2026-11-01"}),
+            ):
+                assert c.request(method.upper(), url, json=body,
+                                 headers=viewer_headers).status_code == 403, (method, url)
+            # Removing the vendor from the Vendors page keeps the expense, unlinked.
+            assert c.delete(f"/api/v1/weddings/{wedding_id}/vendors/{vendor_id}",
+                            headers=headers).status_code == 204
+            assert expense(loft)[2]["vendor"] is None
+            with Session(sync_engine) as s:
+                from app.db.models import BudgetCost as _BudgetCostRow
+                assert s.get(_BudgetCostRow, loft).couple_vendor_id is None, \
+                    "the link itself is cleared, not just hidden"
+            assert c.delete(f"{b_url}/categories/{exp_cat}", headers=headers).status_code == 204
+
+            # The status describes the cost, so refundable deposits never move it to
+            # paid or partly paid (the badge always agrees with "Paid").
+            from types import SimpleNamespace as _Row
+            from app.utils.budget_math import cost_figures
+
+            def _status(cost, *pays):
+                rows = [_Row(id=str(i), amount_cents=a, paid=p, refundable=r, due_on=None)
+                        for i, (a, p, r) in enumerate(pays)]
+                return cost_figures(_Row(final_cents=None, quoted_cents=cost,
+                                         estimated_cents=None), rows, _dt.date(2026, 11, 20))
+            f = _status(1_200_000, (200_000, True, True))
+            assert (f.status, f.paid_cents) == ("unpaid", 0), "only the deposit ticked"
+            f = _status(1_200_000, (1_200_000, True, False), (200_000, False, True))
+            assert (f.status, f.remaining_cents) == ("paid", 0), "deposit left to pay"
+            assert _status(None, (200_000, True, True)).status == "unpaid", "no cost yet"
+            assert _status(None).status == "unpaid"
+        finally:
+            budget_module._today = real_budget_today
+        print("   * Expenses: final, else quote, else estimate; unpaid, partly paid, paid, "
+              "overdue on Chicago's date; refundable kept out; overpay warned; archive kept "
+              "out of totals; links checked; viewers read only")
+
         # Another wedding's budget rows can't be read, changed or linked through this
         # wedding's URLs, even with real ids. couple_2 owns the seeded second wedding.
         other_headers = {"Authorization": "Bearer mock-couple_2"}
@@ -747,6 +949,10 @@ def test_api_suite():
                        headers=other_headers).json()["id"]
         o_con = c.post(f"{o_url}/contributions", json={"contributor": "Their family",
                        "amount_cents": 100}, headers=other_headers).json()["id"]
+        o_vendor = c.post("/api/v1/weddings/wedding_planning_test/vendors", headers=other_headers,
+                          json={"section": "venue", "name": "Their loft"})
+        assert o_vendor.status_code == 201, o_vendor.text
+        o_vendor = o_vendor.json()["id"]
         mine = c.post(f"{b_url}/categories", json={"name": "Mine"}, headers=headers).json()["id"]
         my_cost = c.post(f"{b_url}/categories/{mine}/costs", json={"vendor_name": "My hall"},
                          headers=headers).json()["id"]
@@ -765,6 +971,9 @@ def test_api_suite():
             ("patch", f"{b_url}/contributions/{o_con}", {"amount_cents": 1}),
             ("delete", f"{b_url}/contributions/{o_con}", None),
             ("patch", f"{b_url}/costs/{my_cost}", {"category_id": o_cat}),
+            ("patch", f"{b_url}/costs/{my_cost}", {"couple_vendor_id": o_vendor}),
+            ("post", f"{b_url}/categories/{mine}/costs",
+             {"vendor_name": "Z", "couple_vendor_id": o_vendor}),
             ("post", f"{b_url}/contributions",
              {"contributor": "Z", "amount_cents": 1, "category_id": o_cat}),
             ("patch", f"{b_url}/contributions/{my_con}", {"category_id": o_cat}),
@@ -982,10 +1191,17 @@ def test_api_suite():
             assert res["wedding_date"] is None and res["date_set_on"] is None and res["overdue"] == 0
             assert res["done"] == 1 and res["total"] == 4, "clearing the date keeps every task"
             c.put(f"{cl_url}/date", json={"wedding_date": "2027-08-21"}, headers=editor_headers)
-            assert c.patch(f"/api/v1/weddings/{wedding_id}", json={"wedding_date": "2027-09-04"},
-                           headers=editor_headers).status_code == 200
+            # "Today" pinned, so a run across midnight in Chicago can't fail falsely (B45).
+            real_wedding_today = rules.wedding_today
+            rules.wedding_today = lambda: D(2026, 11, 6)
+            try:
+                assert c.patch(f"/api/v1/weddings/{wedding_id}",
+                               json={"wedding_date": "2027-09-04"},
+                               headers=editor_headers).status_code == 200
+            finally:
+                rules.wedding_today = real_wedding_today
             with Session(sync_engine) as s:
-                assert s.get(Wedding, wedding_id).wedding_date_set_on == rules.wedding_today()
+                assert s.get(Wedding, wedding_id).wedding_date_set_on == D(2026, 11, 6)
             assert c.patch(f"/api/v1/weddings/{wedding_id}", json={"wedding_date": "2020-01-01"},
                            headers=editor_headers).status_code == 422, "same rule as the checklist"
             with Session(sync_engine) as s:
@@ -1632,11 +1848,18 @@ def test_api_suite():
             couple = firebase_headers("fb_newcouple", "newcouple@example.test", True)
             assert c.post("/api/v1/weddings/", json=dict(wedding_payload, wedding_date="2020-01-01"),
                           headers=couple).status_code == 422, "no past date at intake either"
-            res = c.post("/api/v1/weddings/", json=dict(wedding_payload, wedding_date="2027-08-21"),
-                         headers=couple)
+            # "Today" pinned, so a run across midnight in Chicago can't fail falsely (B45).
+            from app.utils import checklist as rules_now
+            real_wedding_today = rules_now.wedding_today
+            rules_now.wedding_today = lambda: D(2026, 11, 7)
+            try:
+                res = c.post("/api/v1/weddings/",
+                             json=dict(wedding_payload, wedding_date="2027-08-21"),
+                             headers=couple)
+            finally:
+                rules_now.wedding_today = real_wedding_today
             assert res.status_code == 201, res.text
-            from app.utils.checklist import wedding_today
-            assert res.json()["wedding_date_set_on"] == wedding_today().isoformat(), \
+            assert res.json()["wedding_date_set_on"] == "2026-11-07", \
                 "a date given at intake counts as set that day (PD-007)"
             assert c.post("/api/v1/weddings/", json=wedding_payload, headers=couple).status_code == 409
             print("   * Weddings: only the couple's own email can create one, and only one")

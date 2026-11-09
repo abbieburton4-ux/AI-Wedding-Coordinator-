@@ -2,11 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useApi } from "./useApi";
 import { USE_FASTAPI_BACKEND } from "./config";
 
-interface BudgetLine {
-  id: string;
-  category: string;
-  allocated_amount: number;
-  spent_amount: number;
+/** Just what the overview needs from GET /weddings/{id}/budget/overview (PD-004). */
+export interface BudgetSummary {
+  categories: { id: string }[];
 }
 
 /** Just what the overview needs from GET /weddings/{id}/checklist (PD-007). */
@@ -63,7 +61,7 @@ interface WeddingData {
 
 interface WeddingFullState {
   wedding: WeddingData | null;
-  budgetLines: BudgetLine[];
+  budget: BudgetSummary | null;
   checklist: ChecklistSummary | null;
   bookings: Booking[];
 }
@@ -81,7 +79,7 @@ export function useWedding(weddingId: string | null) {
   const { request, loading, error } = useApi();
   const [data, setData] = useState<WeddingFullState>({
     wedding: null,
-    budgetLines: [],
+    budget: null,
     checklist: null,
     bookings: [],
   });
@@ -92,16 +90,16 @@ export function useWedding(weddingId: string | null) {
     try {
       // Sub-resources use .catch so a single failing endpoint can never blank
       // the whole dashboard (the wedding fetch itself must succeed).
-      const [wedding, budgetLines, checklist, bookings] = await Promise.all([
+      const [wedding, budget, checklist, bookings] = await Promise.all([
         request<WeddingData>(`/weddings/${weddingId}`),
-        request<BudgetLine[]>(`/weddings/${weddingId}/budget`).catch(() => [] as BudgetLine[]),
+        request<BudgetSummary>(`/weddings/${weddingId}/budget/overview`).catch(() => null),
         request<ChecklistSummary>(`/weddings/${weddingId}/checklist`).catch(() => null),
         request<Booking[]>(`/weddings/${weddingId}/bookings`).catch(() => [] as Booking[]),
       ]);
 
       setData({
         wedding,
-        budgetLines,
+        budget,
         checklist,
         bookings,
       });

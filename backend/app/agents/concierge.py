@@ -5,8 +5,12 @@ from pydantic import BaseModel, Field
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from google.genai import types
-from app.db.models import Wedding, BudgetLine, ChecklistTask, Booking, Quote, Supplier, Venue
-from app.utils.checklist import STAGE_BY_KEY, STAGE_KEYS, stage_due
+from app.db.models import (
+    Wedding, BudgetCategory, BudgetCost, BudgetPayment, ChecklistTask, Booking, Quote, Supplier,
+    Venue,
+)
+from app.utils.budget_math import add_up, cost_figures, format_cents, is_overdue
+from app.utils.checklist import STAGE_BY_KEY, STAGE_KEYS, stage_due, wedding_today
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
 from app.agents.privacy import send_prompt
@@ -21,14 +25,16 @@ class ConciergeReply(BaseModel):
 
 SYSTEM_INSTRUCTION = (
     "You are Aurelia, an expert Irish wedding coordinator and the couple's personal AI concierge. "
-    "Answer their question using the WEDDING CONTEXT provided (their budget allocations + spend, their "
-    "planning checklist, and their shortlisted vendors) plus general Irish wedding knowledge.\n\n"
+    "Answer their question using the WEDDING CONTEXT provided (their budget: planned, committed and "
+    "paid per category and the payments due; their planning checklist; and their shortlisted vendors) "
+    "plus general Irish wedding knowledge.\n\n"
     "RULES:\n"
     "- Be warm and concise (2–5 sentences). Speak to the couple directly.\n"
-    "- Be SPECIFIC with their real numbers: cite the relevant budget line's allocated vs spent, vendor "
-    "names, quotes, and dates from the context.\n"
-    "- For affordability questions, compare the category's allocated/spent against typical Irish market "
-    "rates and tell them clearly whether it fits.\n"
+    "- Be SPECIFIC with their real numbers: cite the relevant category's planned, committed and paid "
+    "amounts, vendor names, quotes, and dates from the context.\n"
+    "- For affordability questions, compare the category's planned and committed amounts with what the "
+    "context shows and tell them clearly whether it fits. Never say a payment is paid, a booking is "
+    "confirmed or a contract is signed unless the context says so.\n"
     "- NEVER invent vendors, prices, or commitments that aren't in the context. If the info isn't there, "
     "say so plainly and suggest the next step (e.g. 'run the matcher', 'log the quote').\n"
     "- Give amounts in the currency the context shows them in; never convert or relabel them. "
@@ -48,12 +54,71 @@ def _total_budget_text(wedding: Wedding) -> str:
     return "not set yet"
 
 
+async def _budget_context(db: AsyncSession, wedding: Wedding) -> list:
+    """The couple's own budget (PD-004, PD-013) as plain lines: per category what's
+    planned, committed and paid, each expense's cost and status, and the next payments
+    due. Notes, links, payment methods and references stay out of the prompt, and so
+    do vendor contact details (the budget holds none). Archived expenses are left out.
+    """
+    wid = wedding.id
+    today = wedding_today()
+    categories = (await db.exec(
+        select(BudgetCategory).where(BudgetCategory.wedding_id == wid)
+        .order_by(BudgetCategory.created_at, BudgetCategory.id))).all()
+    costs = [c for c in (await db.exec(
+        select(BudgetCost).where(BudgetCost.wedding_id == wid)
+        .order_by(BudgetCost.created_at, BudgetCost.id))).all() if not c.archived]
+    payments = (await db.exec(
+        select(BudgetPayment).where(BudgetPayment.wedding_id == wid)
+        .order_by(BudgetPayment.due_on, BudgetPayment.created_at, BudgetPayment.id))).all()
+    if not categories:
+        return []
+    by_cost: dict = {}
+    for p in payments:
+        by_cost.setdefault(p.cost_id, []).append(p)
+
+    lines = ["Budget, in US dollars (planned / committed / paid; refundable deposits "
+             "are not part of a cost):"]
+    names = {}
+    for cat in categories:
+        figures = []
+        rows = []
+        for cost in (c for c in costs if c.category_id == cat.id):
+            f = cost_figures(cost, by_cost.get(cost.id, []), today)
+            figures.append(f)
+            names[cost.id] = cost.vendor_name
+            rows.append(f"    - {cost.vendor_name}: {format_cents(f.committed_cents)} "
+                        f"({BASIS_TEXT[f.committed_basis]}), {format_cents(f.paid_cents)} paid, "
+                        f"{STATUS_TEXT[f.status]}")
+        sums = add_up(figures)
+        planned = "not set" if cat.planned_cents is None else format_cents(cat.planned_cents)
+        lines.append(f"  - {cat.name}: {planned} planned / "
+                     f"{format_cents(sums['committed_cents'])} committed / "
+                     f"{format_cents(sums['paid_cents'])} paid")
+        lines.extend(rows)
+    due = [p for p in payments if not p.paid and p.cost_id in names]
+    due.sort(key=lambda p: (p.due_on is None, p.due_on or today))
+    if due:
+        lines.append("Next payments due (the couple pay and tick them; the app never does):")
+        for p in due[:3]:
+            when = f"due {p.due_on}" if p.due_on else "no due date"
+            if is_overdue(p, today):
+                when += ", overdue"
+            refundable = ", refundable deposit" if p.refundable else ""
+            lines.append(f"  - {names[p.cost_id]}: {format_cents(p.amount_cents)}, "
+                         f"{when}{refundable}")
+    return lines
+
+
+BASIS_TEXT = {"final": "final cost", "quote": "quoted", "estimate": "estimate",
+              "scheduled": "payments scheduled", "none": "no cost recorded"}
+STATUS_TEXT = {"unpaid": "unpaid", "partly_paid": "partly paid", "paid": "paid",
+               "overdue": "a payment is overdue"}
+
+
 async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
     """Assembles a compact, factual snapshot of the couple's wedding for grounding."""
-    budget = (await db.exec(
-        select(BudgetLine).where(BudgetLine.wedding_id == wedding.id)
-        .order_by(BudgetLine.allocated_amount.desc(), BudgetLine.id)
-    )).all()
+    budget = await _budget_context(db, wedding)
     # Titles only: the couple's notes on a task stay out of the prompt.
     open_tasks = (await db.exec(
         select(ChecklistTask).where(ChecklistTask.wedding_id == wedding.id,
@@ -76,10 +141,7 @@ async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
     )
     lines.append(f"Total budget: {_total_budget_text(wedding)}. Plan status: {wedding.status}.")
 
-    if budget:
-        lines.append("Budget lines (allocated / spent):")
-        for b in budget:
-            lines.append(f"  - {b.category}: €{b.allocated_amount:,.0f} allocated, €{b.spent_amount:,.0f} spent")
+    lines.extend(budget)
 
     if open_tasks:
         lines.append("Next unfinished checklist tasks:")
