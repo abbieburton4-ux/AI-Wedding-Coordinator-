@@ -1286,6 +1286,126 @@ def test_api_suite():
               "saves nothing; the save adds the list, traditions and Wildman BT tasks once; "
               "nothing marked paid")
 
+        print("7f. Verifying the couple's own vendors (PD-012, B62)...")
+        from app.api.v1.endpoints import vendors as vendors_module
+        from app.db.models import CoupleVendor, CoupleVendorQuote
+
+        v_url = f"/api/v1/weddings/{wedding_id}/vendors"
+        res = c.get(v_url, headers=viewer_headers)
+        assert res.status_code == 200, res.text
+        assert res.json()["sections"] == [
+            "venue", "food_drink", "flowers_decoration", "photo_video", "entertainment",
+            "hair_makeup", "transportation"], "the seven sections, in PD-012's order"
+        assert res.json()["vendors"] == []
+        assert c.get(v_url, headers=unauth_headers).status_code == 403
+
+        florist = {"section": "flowers_decoration", "name": "  Placeholder   Florals ",
+                   "website": "https://florist.example.test/", "contact_name": "Test Contact",
+                   "email": "hello@florist.example.test", "phone": "+1 (555) 010-0000 ext 2",
+                   "notes": "Fictional."}
+        assert c.post(v_url, json=florist, headers=viewer_headers).status_code == 403, \
+            "viewers can't add"
+        res = c.post(v_url, json=florist, headers=editor_headers)
+        assert res.status_code == 201, res.text
+        vendor = res.json()
+        assert vendor["name"] == "Placeholder Florals", "spacing is tidied"
+        assert vendor["status"] == "looking", "a new vendor starts as looking"
+        assert vendor["latest_reply"] is None
+        vid = vendor["id"]
+        res = c.post(v_url, json={"section": "venue", "name": "Fictional Hall"}, headers=headers)
+        assert res.status_code == 201 and res.json()["website"] is None, "owners add too"
+        hall_id = res.json()["id"]
+
+        for bad in ({"name": "   "}, {"section": "catering"}, {"status": "paid"},
+                    {"website": "javascript:alert(1)"}, {"website": "ftp://x.example.test"},
+                    {"website": "florist.example.test"}, {"website": "https://"},
+                    {"website": "https://exa mple.test"}, {"email": "not-an-email"},
+                    {"email": "a@b"}, {"email": "a b@example.test"},
+                    {"email": "a@b.example.test?subject=x&body=y"},
+                    {"website": "https://www.example.test@other.example.test/"}, {"phone": "call me"},
+                    {"phone": "12"}, {"name": "x" * 201}, {"notes": "x" * 2001}):
+            res = c.post(v_url, json=dict(florist, **bad), headers=editor_headers)
+            assert res.status_code == 422, (bad, res.status_code)
+        res = c.post(v_url, json={"section": "photo_video", "name": "P", "website": "  ",
+                                  "email": "", "phone": " "}, headers=editor_headers)
+        assert res.status_code == 201 and (res.json()["website"], res.json()["email"],
+                                           res.json()["phone"]) == (None, None, None)
+        blank_id = res.json()["id"]
+        print("   * Add: owners and editors only; name required; http/https sites, emails "
+              "and phones checked; blanks saved as empty; status starts as looking")
+
+        res = c.patch(f"{v_url}/{vid}", json={"status": "booked"}, headers=viewer_headers)
+        assert res.status_code == 403, "viewers can't change the status"
+        res = c.patch(f"{v_url}/{vid}", json={"status": "contacted", "phone": None,
+                                              "notes": "  Called back.  "},
+                      headers=editor_headers)
+        assert res.status_code == 200, res.text
+        assert (res.json()["status"], res.json()["phone"], res.json()["notes"],
+                res.json()["email"]) == ("contacted", None, "Called back.",
+                                         "hello@florist.example.test"), res.json()
+        for bad in ({"name": None}, {"status": None}, {"section": None}, {"status": "paid"},
+                    {"website": "data:text/html,x"}):
+            assert c.patch(f"{v_url}/{vid}", json=bad, headers=editor_headers).status_code \
+                == 422, bad
+        assert c.patch(f"/api/v1/weddings/wedding_planning_test/vendors/{vid}",
+                       json={"name": "X"}, headers={"Authorization": "Bearer mock-couple_2"}
+                       ).status_code == 404, "a vendor is only reachable through its wedding"
+        print("   * Edit: only the fields sent change; status only from the couple's choice")
+
+        # Paste a reply: the cleaned text first, nothing sent; then the approved text goes.
+        reply = {"email_body": "Hi, thanks! Our package is $2,400 total. "
+                               "Test Contact, hello@florist.example.test, 555 010 0000"}
+        queued.clear()
+        real_vendor_enqueue = vendors_module.enqueue_agent_task
+        vendors_module.enqueue_agent_task = _record
+        try:
+            assert c.post(f"{v_url}/{vid}/reply", json=reply,
+                          headers=viewer_headers).status_code == 403
+            res = c.post(f"{v_url}/{vid}/reply", json=reply, headers=editor_headers)
+            body = res.json()
+            assert body["needs_review"] is True and queued == [], res.text
+            assert "$2,400 total" in body["preview"]
+            for detail in ("Test Contact", "hello@florist", "555 010 0000"):
+                assert detail not in body["preview"], f"vendor contact sent to the AI: {detail}"
+            res = c.post(f"{v_url}/{vid}/reply", headers=editor_headers,
+                         json=dict(reply, approved_prompt=body["preview"]))
+            assert res.status_code == 202, res.text
+            assert queued == [("vendor-reply", {
+                "wedding_id": wedding_id, "vendor_id": vid, "email_body": reply["email_body"],
+                "approved_prompt": body["preview"]})], queued
+            assert c.post(f"{v_url}/missing/reply", json=reply,
+                          headers=editor_headers).status_code == 404
+            assert c.post(f"{v_url}/{vid}/reply", json={"email_body": ""},
+                          headers=editor_headers).status_code == 422
+        finally:
+            vendors_module.enqueue_agent_task = real_vendor_enqueue
+        print("   * Paste a reply: editors only; the cleaned text first, without the "
+              "vendor's contact details; sent only with the approved text")
+
+        # The latest AI reading shows on the card; the status stays the couple's.
+        with Session(sync_engine) as s:
+            s.add(CoupleVendorQuote(vendor_id=vid, total_cents=240000, currency="USD",
+                                    is_available=True, summary="Fictional reading.",
+                                    line_items=[{"item": "Package", "amount_cents": 240000}]))
+            s.commit()
+        res = c.get(v_url, headers=viewer_headers)
+        listed = {v["id"]: v for v in res.json()["vendors"]}
+        assert listed[vid]["latest_reply"]["total_cents"] == 240000
+        assert listed[vid]["status"] == "contacted"
+        assert listed[vid]["contact_name"] == "Test Contact", "viewers see the details"
+
+        assert c.delete(f"{v_url}/{vid}", headers=viewer_headers).status_code == 403
+        assert c.delete(f"{v_url}/{vid}", headers=editor_headers).status_code == 204
+        assert c.delete(f"{v_url}/{vid}", headers=editor_headers).status_code == 404
+        for other in (hall_id, blank_id):
+            assert c.delete(f"{v_url}/{other}", headers=headers).status_code == 204
+        with Session(sync_engine) as s:
+            assert s.exec(sync_select(CoupleVendorQuote).where(
+                CoupleVendorQuote.vendor_id == vid)).all() == [], "its readings go with it"
+            assert s.exec(sync_select(CoupleVendor).where(
+                CoupleVendor.wedding_id == wedding_id)).all() == []
+        print("   * Remove: owners and editors only; the vendor's AI readings go with it")
+
         forged = pyjwt.encode({"sub": "forged_admin", "role": "admin"},
                               "dev-jwt-secret-key-change-me-in-production", algorithm="HS256")
         res = c.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {forged}"})
@@ -1481,6 +1601,8 @@ def test_api_suite():
             settings.INTERNAL_TASKS_SECRET = "internal-test-secret"
             assert c.post("/tasks/quote-extractor", json={"booking_id": "x", "email_body": "y"},
                           headers={"X-Internal-Token": "wrong"}).status_code == 403
+            assert c.post("/tasks/vendor-reply", json={
+                "wedding_id": "x", "vendor_id": "x", "email_body": "y"}).status_code == 403
             assert c.post("/api/v1/webhooks/sendgrid/inbound",
                           data={"to": "booking-x@inbox.venueflow.ie", "text": "EUR 1"}).status_code == 403
             print("   * Worker routes and webhooks refuse calls without their secret")

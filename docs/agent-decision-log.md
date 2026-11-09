@@ -32,6 +32,7 @@ Indexes & constraints
 Implementation notes
 - `run_agent` removes guest and party personal data before storing a row (PD-008, `app/agents/privacy.py`): from `input_payload` and `error_message`, known names, emails, phone numbers and dietary notes plus anything shaped like an email or phone number; from `output_payload` and `rationale_summary`, only the known details, so a vendor's own address in a draft inquiry stays. If the check can't load, `input_payload` is `{"input_withheld": ...}`.
 - Previews write no row (PD-008 follow-up 2): the text the person checks before sending is built without calling Gemini or changing anything, so nothing was decided. A run whose cleaned prompt isn't the exact text the person approved is refused before the call and logged with `status='error'`, `error_kind='PromptNotApproved'`. The approved prompt itself isn't stored.
+- A reply read for one of the couple's own vendors (B62) logs `input_payload = {"vendor_id": ...}` only, not the pasted text or the vendor's details. Its guardrail `error_kind`s are `implausible_total` and `nothing_found`.
 - Keep `input_payload` and `output_payload` compact: include the minimal context needed to explain the decision. Example keys: `user_message`, `parsed_slots`, `pricing_factors`, `selected_line_items`, `rationale`.
 - `rationale` should be a short human-readable string in `output_payload.rationale` explaining *why* the agent chose that action.
 - Record all external writes (Stripe charge id, contract url, calendar event id) in `external_api_calls` for verifiability.

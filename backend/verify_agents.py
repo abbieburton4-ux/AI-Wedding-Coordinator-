@@ -26,7 +26,7 @@ from app.db.seed import seed_database
 # Agent Imports
 from app.agents.planner import run_intake_planner
 from app.agents.matcher import run_venue_matcher, run_supplier_matcher
-from app.agents.extractor import run_quote_extractor
+from app.agents.extractor import run_quote_extractor, run_vendor_reply_reader
 
 # Helper classes for Mocking Gemini Response
 class MockUsageMetadata:
@@ -420,6 +420,143 @@ async def run_async_verification():
             print(f"   * Alert message: {alerts[0].rationale_summary}")
             assert "exceeds" in alerts[0].rationale_summary
 
+            # --- TEST 7b: A REPLY TO ONE OF THE COUPLE'S OWN VENDORS (B62) ---
+            print("\nTEST 7b: Reading a reply to the couple's own vendor...")
+            from app.agents.extractor import run_vendor_reply_reader, to_cents
+            from app.db.models import CoupleVendor, CoupleVendorQuote, BudgetCategory
+
+            assert (to_cents(2400), to_cents("19.995"), to_cents(0.1 + 0.2)) == (240000, 2000, 30)
+            assert to_cents("nan") is None and to_cents(True) is None and to_cents("x") is None
+            own = CoupleVendor(id="cv_test", wedding_id="wedding_planning_test",
+                               section="food_drink", name="Fictional Catering",
+                               contact_name="Placeholder Person", email="c@example.test",
+                               phone="(555) 010-0101", status="contacted")
+            db.add(own)
+            await db.commit()
+            budget_before = [(b.id, b.spent_amount) for b in (await db.exec(
+                select(BudgetLine).where(BudgetLine.wedding_id == "wedding_planning_test"))).all()]
+            categories_before = len((await db.exec(select(BudgetCategory))).all())
+
+            vendor_prompts = []
+
+            def vendor_reply(payload, usage=True):
+                async def _gen(*args, **kwargs):
+                    vendor_prompts.append(kwargs)
+                    resp = MockResponse(json.dumps(payload), 30, 40)
+                    if not usage:
+                        resp.usage_metadata = None
+                    return resp
+                return _gen
+
+            async def vendor_logs():
+                return (await db.exec(
+                    select(AgentDecisionLog)
+                    .where(AgentDecisionLog.wedding_id == "wedding_planning_test",
+                           AgentDecisionLog.agent_id == "quote_extractor")
+                    .order_by(AgentDecisionLog.timestamp.desc()))).all()
+
+            async def readings():
+                return (await db.exec(select(CoupleVendorQuote).where(
+                    CoupleVendorQuote.vendor_id == "cv_test"))).all()
+
+            mock_models.generate_content = vendor_reply({
+                "is_available": True, "total_amount": 2400.5, "currency": "usd",
+                "line_items": [{"item": "Dinner", "amount": 2000}, {"item": "Bar"},
+                               {"amount": 5}, "junk"],
+                "summary": "Dinner and bar; 20% deposit.", "confidence_score": 0.8})
+            pasted = ("Hi, dinner for your group is $2,000 and the bar $400.50. "
+                      "Placeholder Person, c@example.test, (555) 010-0101")
+            out = await approved(run_vendor_reply_reader, db, "wedding_planning_test",
+                                 pasted, vendor_id="cv_test")
+            assert out["status"] == "success" and out["total_cents"] == 240050, out
+            sent_text = vendor_prompts[-1]["contents"]
+            for detail in ("Placeholder", "Person", "c@example.test", "010-0101",
+                           "Fictional Catering", "food_drink"):
+                assert detail not in sent_text, f"vendor detail sent to the AI: {detail}"
+            assert "$2,000" in sent_text, "the reply's prices are sent"
+            saved = await readings()
+            assert len(saved) == 1
+            assert (saved[0].total_cents, saved[0].currency, saved[0].is_available) == \
+                (240050, "USD", True)
+            assert saved[0].line_items == [{"item": "Dinner", "amount_cents": 200000},
+                                           {"item": "Bar", "amount_cents": None}]
+            await db.refresh(own)
+            assert own.status == "contacted", "the AI never changes the couple's status"
+            assert [(b.id, b.spent_amount) for b in (await db.exec(
+                select(BudgetLine).where(BudgetLine.wedding_id == "wedding_planning_test"))
+            ).all()] == budget_before, "nor the budget"
+            assert len((await db.exec(select(BudgetCategory))).all()) == categories_before
+            log = (await vendor_logs())[0]
+            assert (log.status, log.decision_type, log.confidence_score) == \
+                ("success", "quote_draft", 0.8)
+            assert (log.tokens_input, log.tokens_output) == (30, 40)
+            assert log.input_payload == {"vendor_id": "cv_test"}, \
+                "the log holds the vendor's id, not the pasted text"
+            stored = json.dumps([log.input_payload, log.output_payload, log.rationale_summary])
+            assert "Placeholder" not in stored and "c@example.test" not in stored
+            print("   * Success: total in cents, currency as read, status and budget untouched, "
+                  "no vendor contact details sent or logged")
+
+            # A role in "Contact person" doesn't block other AI features, and the same
+            # words in ordinary text survive; the exact role as written is still removed.
+            from app.agents import privacy as _privacy
+            from app.agents.planner import SYSTEM_INSTRUCTION as planner_instruction
+            role = CoupleVendor(id="cv_role", wedding_id="wedding_planning_test",
+                                section="venue", name="Fictional Venue",
+                                contact_name="Wedding Coordinator")
+            db.add(role)
+            await db.commit()
+            terms = await _privacy.load_personal_terms(db, "wedding_planning_test")
+            assert _privacy.find_personal(planner_instruction,
+                                          _privacy._whole_names(terms)) == []
+            cleaned = _privacy.redact("Our wedding coordinator packages. Wedding Coordinator",
+                                      terms)
+            assert cleaned == "Our wedding coordinator packages. [name]", cleaned
+            await db.delete(role)
+            await db.commit()
+            print("   * A role in Contact person blocks nothing; only the whole name is removed")
+
+            # Missing optional fields: no currency or confidence invented; booked-out reply.
+            mock_models.generate_content = vendor_reply(
+                {"is_available": False, "summary": "Fully booked that day."}, usage=False)
+            out = await approved(run_vendor_reply_reader, db, "wedding_planning_test",
+                                 "Sorry, we're booked that day.", vendor_id="cv_test")
+            assert out["status"] == "success" and out["total_cents"] is None
+            newest = sorted(await readings(), key=lambda q: q.created_at)[-1]
+            assert (newest.total_cents, newest.currency, newest.is_available) == \
+                (None, None, False)
+            log = (await vendor_logs())[0]
+            assert log.confidence_score is None and log.tokens_input is None, \
+                "metrics not reported stay empty"
+            await db.refresh(own)
+            assert own.status == "contacted"
+            print("   * Missing fields: no currency, confidence or tokens invented")
+
+            # Guardrails: nothing saved when the reading can't be trusted.
+            for payload, kind in (
+                ({"total_amount": -5, "is_available": True, "summary": "?"}, "implausible_total"),
+                ({"total_amount": 5e9, "summary": "?"}, "implausible_total"),
+                ({"total_amount": "lots", "summary": "?"}, "implausible_total"),
+                ({"summary": "Thanks for reaching out!"}, "nothing_found"),
+                ([], "nothing_found"),
+            ):
+                before = len(await readings())
+                mock_models.generate_content = vendor_reply(payload)
+                out = await approved(run_vendor_reply_reader, db, "wedding_planning_test",
+                                     "Some reply.", vendor_id="cv_test")
+                assert (out["status"], out["error_kind"]) == ("blocked", kind), (payload, out)
+                assert len(await readings()) == before, "a blocked reading saves nothing"
+                log = (await vendor_logs())[0]
+                assert (log.status, log.error_kind) == ("blocked_by_guardrail", kind)
+            try:
+                await approved(run_vendor_reply_reader, db, "wedding_intake_test",
+                               "Some reply.", vendor_id="cv_test")
+                raise AssertionError("a vendor from another wedding must be refused")
+            except ValueError:
+                pass
+            print("   * Guardrails: odd totals and replies with nothing in them save nothing; "
+                  "another wedding's vendor is refused")
+
 
             # --- TEST 8: MISSING CONFIDENCE IS LOGGED AS NULL, NOT INVENTED ---
             print("\nTEST 8: Running Venue Matcher (No Confidence Reported)...")
@@ -806,6 +943,8 @@ async def run_async_verification():
                 ("concierge", run_concierge, (), {"message": "Can Ottoline sit with 12 vegetarians?"}),
                 ("quote_extractor", run_quote_extractor,
                  ("booking_photo_test", "Dear Priya, total €3,200 for 12 vegetarian mains."), {}),
+                ("quote_extractor", run_vendor_reply_reader,
+                 ("Dear Priya, total €3,200 for 12 vegetarian mains.",), {"vendor_id": "cv_test"}),
                 ("intake_planner", run_intake_planner, (), {"force": True}),
                 ("venue_matcher", run_venue_matcher, (), {}),
                 ("supplier_matcher", run_supplier_matcher, ("photography",), {}),
@@ -845,7 +984,8 @@ async def run_async_verification():
                 await agent(db, wid, *args, approved_prompt=preview, **kwargs)
                 assert len(sent) == calls_before + 1, f"{name}: the approved text was sent once"
                 assert sent[-1]["contents"] == preview, f"{name}: sent text equals previewed text"
-            print("   * All six agents: no call without the click, none for other text; "
+            print("   * Every agent, and the own-vendor reply reader: no call without the "
+                  "click, none for other text; "
                   "the sent text is the previewed text")
 
             # A first name that's also a word in the app's own instructions ("Mark

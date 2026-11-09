@@ -5,7 +5,7 @@ from app.db.models import Booking
 from app.db.session import async_session_maker
 from app.agents.planner import run_intake_planner
 from app.agents.matcher import run_venue_matcher, run_supplier_matcher
-from app.agents.extractor import run_quote_extractor
+from app.agents.extractor import run_quote_extractor, run_vendor_reply_reader
 
 
 async def execute_agent_task(task_name: str, payload: dict) -> dict:
@@ -37,5 +37,10 @@ async def execute_agent_task(task_name: str, payload: dict) -> dict:
             return await run_quote_extractor(
                 db, str(booking.wedding_id), booking.id, payload["email_body"],
                 trigger="supplier_response", booking_id=booking.id, **approval,
+            )
+        if task_name == "vendor-reply":
+            return await run_vendor_reply_reader(
+                db, payload["wedding_id"], payload["email_body"],
+                vendor_id=payload["vendor_id"], trigger="supplier_response", **approval,
             )
         raise ValueError("Unsupported agent task.")
