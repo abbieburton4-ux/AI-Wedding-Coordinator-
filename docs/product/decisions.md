@@ -242,11 +242,12 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 
 ## PD-011 — Load the owner's checklist from inside the app
 
-**Date:** 2026-11-09 · **Status:** proposed
+**Date:** 2026-11-09 · **Status:** ratified (by the owner, one of the couple, 2026-11-09, answering who can use it: "everyone can see the checklist, doesnt have to be just me and the groom")
 **Context:** Backlog B53. PD-007 loads the owner's list once with `manage_checklist.py`, run by the owner. On Replit the Shell reaches only the development database, but the couple's wedding is on the published app (`abbie-ai-wedding-planner.replit.app`, owner, 2026-11-09), which has its own production database. Reaching it from the Shell means pasting a database secret, which a non-technical owner shouldn't have to handle (B58).
 **Options:**
 - A: an owner-only "Load my checklist" step in the app. The owner picks her file in the browser; the app shows the practice-run counts (97 of her tasks, 18 Jewish-tradition tasks) and saves only when she clicks. It works once, like the script. The file's wording goes only into the app's database, never into git (PD-007 call (e)).
 - B: copy the development database into production when republishing, after running the script there. That could overwrite anything already entered on the published app.
 - C: the team gives Shell steps that use the production database secret.
 **Recommendation:** A. No secrets, no Shell, and the same checks as the script.
-**Couple's call:** who can use it. *Recommended: owners only (you and the groom).*
+**Decision:** A. Everyone with access sees the loaded checklist, as today (PD-007, PD-002). The load step follows the app's normal edit rights: owners and editors can run it (today that is the couple); viewers, including family, can't change anything, as PD-002 already sets. [ASSUMPTION] The owner's answer is read as approving A, with no extra restriction beyond normal edit rights.
+**Technical choices settled by the team:** same checks as the script (refuses a second run, a changed or reordered file, a bad date); the practice run saves nothing; nothing from the file goes into git, logs or the AI; the file is not kept after loading.
