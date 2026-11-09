@@ -89,7 +89,8 @@ async def run_venue_matcher(db: AsyncSession, wedding_id: str):
     preferred_region = wedding.region
     
     # 2. Fetch and pre-filter candidate venues by capacity
-    all_venues_result = await db.exec(select(Venue))
+    # Ordered, so the text the couple check is the text that is sent (PD-008).
+    all_venues_result = await db.exec(select(Venue).order_by(Venue.id))
     all_venues = all_venues_result.all()
     
     venues_by_capacity = [
@@ -234,7 +235,7 @@ async def run_supplier_matcher(db: AsyncSession, wedding_id: str, category: str)
     
     # 2. Fetch candidate suppliers by category
     all_suppliers_result = await db.exec(
-        select(Supplier).where(Supplier.category == category)
+        select(Supplier).where(Supplier.category == category).order_by(Supplier.id)
     )
     all_suppliers = all_suppliers_result.all()
     

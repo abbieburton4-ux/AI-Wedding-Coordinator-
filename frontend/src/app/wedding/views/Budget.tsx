@@ -8,6 +8,7 @@ import {
   AddCategoryForm, CategoryCard, Contributions, MoneyInput, NextDue, linkButton, overpaidNote, primaryButton,
 } from "./budget/parts";
 import type { Overview, Run, SplitSuggestion } from "./budget/types";
+import { useReviewedRequest } from "../../api/review";
 
 // Shown only when the backend is switched off (USE_FASTAPI_BACKEND), and labelled as sample.
 const STATIC_CATEGORIES = [
@@ -269,6 +270,7 @@ function TotalCard({
 function SplitPanel({
   base, request, run, busy,
 }: { base: string; request: ReturnType<typeof useApi>["request"]; run: Run; busy: boolean }) {
+  const sendReviewed = useReviewedRequest();
   const [suggestion, setSuggestion] = useState<SplitSuggestion | null>(null);
   const [amounts, setAmounts] = useState<string[]>([]);
   const [left, setLeft] = useState<boolean[]>([]);
@@ -279,7 +281,9 @@ function SplitPanel({
     setAsking(true);
     setError(null);
     try {
-      const s = await request<SplitSuggestion>(`${base}/suggest-split`, { method: "POST" });
+      // Shows the couple what goes to the AI first; nothing is sent until they click (PD-008).
+      const s = await sendReviewed<SplitSuggestion>(`${base}/suggest-split`);
+      if (s === null) return;
       setSuggestion(s);
       setAmounts(s.lines.map((l) => centsToInput(l.planned_cents)));
       setLeft(s.lines.map(() => false));

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Icon } from "../../shared/Icon";
-import { useApi } from "../../api";
+import { useReviewedRequest } from "../../api/review";
 import { useActiveWedding } from "../WeddingProvider";
 import { VoiceCall } from "../VoiceCall";
 
@@ -18,7 +18,7 @@ const SUGGESTIONS = ["Can we afford a live band?", "Are we on budget?", "What sh
 
 export function Concierge() {
   const navigate = useNavigate();
-  const { request } = useApi();
+  const sendReviewed = useReviewedRequest();
   const { activeWedding } = useActiveWedding();
   const weddingId = activeWedding?.id ?? null;
 
@@ -49,15 +49,26 @@ export function Concierge() {
 
     setSending(true);
     try {
-      const res = await request<{ reply: string }>(`/weddings/${weddingId}/concierge`, {
-        method: "POST",
-        body: JSON.stringify({ message: trimmed }),
+      // Shows the couple the exact text first; nothing is sent until they click (PD-008).
+      const res = await sendReviewed<{ reply: string }>(`/weddings/${weddingId}/concierge`, {
+        message: trimmed,
       });
+      if (res === null) {
+        // They went back: take the question out of the chat and put it back in the box.
+        setMessages((prev) => prev.slice(0, -1));
+        setDraft(trimmed);
+        return;
+      }
       setMessages((prev) => [...prev, { role: "ai", text: res.reply || "…" }]);
-    } catch {
+    } catch (err) {
+      // The server's own words when it gave some (say, a detail it couldn't take out).
+      const said =
+        err instanceof Error && !(err instanceof TypeError) && !err.message.startsWith("Request failed")
+          ? err.message
+          : "";
       setMessages((prev) => [
         ...prev,
-        { role: "ai", text: "I had trouble reaching my tools just now — please try again in a moment." },
+        { role: "ai", text: said || "I had trouble reaching my tools just now — please try again in a moment." },
       ]);
     } finally {
       setSending(false);

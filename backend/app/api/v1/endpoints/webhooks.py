@@ -1,12 +1,10 @@
 import re
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.config import settings
 from app.db.session import get_db
 from app.db.models import Booking
-from app.utils.tasks import enqueue_agent_task
 from app.api.v1.internal import require_inbound_email_token
 
 logger = logging.getLogger(__name__)
@@ -19,15 +17,14 @@ BOOKING_EMAIL_RE = re.compile(r"booking-([a-zA-Z0-9_]+)@inbox\.venueflow\.ie")
 async def sendgrid_inbound_parse(request: Request, db: AsyncSession = Depends(get_db)):
     """Receives SendGrid Inbound Parse email webhooks.
     
-    Parses recipient headers, maps them to a booking ID, and enqueues the quote extractor task.
+    Parses recipient headers and maps them to a booking ID. It never runs the quote
+    extractor: that sends the email to the AI, which needs a person to check the text
+    first (PD-008). Nothing is stored, so the email itself isn't kept.
     """
     form_data = await request.form()
     to_address = form_data.get("to", "")
-    email_body = form_data.get("text", "")
-    subject = form_data.get("subject", "")
-    sender = form_data.get("from", "")
 
-    # Sender and subject can name the couple or guests, so they stay out of the logs.
+    # Sender, subject and body can name the couple or guests, so they stay out of the logs.
     logger.info("SendGrid Inbound Webhook: received an email")
 
     # Match booking ID from 'to' address
@@ -43,25 +40,8 @@ async def sendgrid_inbound_parse(request: Request, db: AsyncSession = Depends(ge
         logger.warning(f"Inbound email referenced booking {booking_id} which does not exist in database.")
         return {"status": "ignored", "reason": "booking_not_found"}
 
-    # Enqueue the quote extractor task with the raw email body and booking id
-    try:
-        await enqueue_agent_task("quote-extractor", {
-            "booking_id": booking.id,
-            "email_body": email_body,
-            "sender": sender,
-            "subject": subject
-        })
-    except HTTPException as exc:
-        if exc.status_code != 422:
-            raise
-        # A guardrail block is final and already in the decision log; an error
-        # status would only make SendGrid redeliver and hit the same block. Other
-        # failures (502: the AI call failed) stay errors so SendGrid retries, which
-        # is safe because a failed run changes nothing.
-        logger.warning(
-            f"SendGrid webhook: quote extraction blocked for booking {booking_id}"
-        )
-        return {"status": "not_processed", "booking_id": booking_id}
-
-    logger.info(f"SendGrid webhook: enqueued quote-extractor for booking {booking_id}")
-    return {"status": "success", "booking_id": booking_id}
+    # Nothing goes to the AI without a person checking the text first (PD-008), and
+    # no one is watching this path, so the email isn't sent to the quote extractor.
+    # The couple paste the vendor's reply on the Vendors screen instead.
+    logger.info(f"SendGrid webhook: email for booking {booking_id} not sent to the AI")
+    return {"status": "not_processed", "booking_id": booking_id, "reason": "needs_review"}

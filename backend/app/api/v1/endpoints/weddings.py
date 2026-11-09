@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Literal, Optional
@@ -27,6 +27,10 @@ from app.api.v1.access import (
 from app.api.v1.endpoints.auth import get_current_user
 from app.utils.tasks import enqueue_agent_task
 from app.agents.concierge import run_concierge
+from app.agents.planner import run_intake_planner
+from app.agents.matcher import run_venue_matcher, run_supplier_matcher
+from app.agents.privacy import PromptNotApproved
+from app.api.v1.review import Approval, needs_review
 
 router = APIRouter()
 
@@ -145,12 +149,15 @@ async def create_wedding(
     await db.commit()
     await db.refresh(wedding)
 
-    # Draft the budget now. Matching waits until the couple ask (PD-003).
+    # Draft the budget now, unless that needs the AI: then it waits until the couple
+    # have checked what would be sent (PD-008), from the dashboard. Matching waits
+    # until the couple ask (PD-003).
     try:
-        await enqueue_agent_task(
-            "intake-planner",
-            {"wedding_id": wedding.id},
-        )
+        if await needs_review(run_intake_planner, db, wedding.id, None) is None:
+            await enqueue_agent_task(
+                "intake-planner",
+                {"wedding_id": wedding.id},
+            )
     except Exception as e:
         # Log error but don't fail the request since DB record is committed
         import logging
@@ -207,15 +214,21 @@ async def update_wedding(
 async def replan_wedding(
     wedding_id: str,
     force: bool = False,
+    approval: Optional[Approval] = Body(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Re-runs the intake planner for an existing wedding.
 
     Used to recover from a failed or guardrail-blocked intake. `force=true`
-    acknowledges the budget guardrail and builds the plan anyway.
+    acknowledges the budget guardrail and builds the plan anyway. If the planner needs
+    the AI, the first call returns the text to check and sends nothing (PD-008).
     """
     wedding = await require_wedding_access(db, wedding_id, current_user, "editor")
+    approved = approval.approved_prompt if approval else None
+    review = await needs_review(run_intake_planner, db, wedding_id, approved, force=force)
+    if review:
+        return review
 
     # Reset to intake so the dashboard shows the "building" state while it reruns.
     wedding.status = "intake"
@@ -223,7 +236,7 @@ async def replan_wedding(
     await db.commit()
 
     enqueued = await enqueue_agent_task(
-        "intake-planner", {"wedding_id": wedding_id, "force": force}
+        "intake-planner", {"wedding_id": wedding_id, "force": force, "approved_prompt": approved}
     )
     if not enqueued:
         raise HTTPException(status_code=500, detail="Failed to enqueue intake planner task")
@@ -435,13 +448,20 @@ async def get_wedding_agent_decisions(
 @router.post("/{wedding_id}/match", status_code=status.HTTP_202_ACCEPTED)
 async def trigger_venue_matching(
     wedding_id: str,
+    approval: Optional[Approval] = Body(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Triggers the venue matching agent in the background."""
-    wedding = await require_wedding_access(db, wedding_id, current_user, "editor")
-        
-    enqueued = await enqueue_agent_task("venue-matcher", {"wedding_id": wedding_id})
+    """Triggers the venue matching agent, once the couple have checked what it sends
+    (PD-008): the first call returns that text and sends nothing."""
+    await require_wedding_access(db, wedding_id, current_user, "editor")
+    approved = approval.approved_prompt if approval else None
+    review = await needs_review(run_venue_matcher, db, wedding_id, approved)
+    if review:
+        return review
+
+    enqueued = await enqueue_agent_task(
+        "venue-matcher", {"wedding_id": wedding_id, "approved_prompt": approved})
     if not enqueued:
         raise HTTPException(status_code=500, detail="Failed to enqueue venue matcher task")
         
@@ -454,6 +474,7 @@ async def trigger_venue_matching(
 
 class SupplierMatchRequest(BaseModel):
     category: str
+    approved_prompt: Optional[str] = None
 
 
 @router.post("/{wedding_id}/suppliers", status_code=status.HTTP_202_ACCEPTED)
@@ -463,10 +484,17 @@ async def trigger_supplier_matching(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Triggers the supplier matching agent in the background for a specific category."""
-    wedding = await require_wedding_access(db, wedding_id, current_user, "editor")
-        
-    enqueued = await enqueue_agent_task("supplier-matcher", {"wedding_id": wedding_id, "category": payload.category})
+    """Triggers the supplier matching agent for a category, once the couple have checked
+    what it sends (PD-008): the first call returns that text and sends nothing."""
+    await require_wedding_access(db, wedding_id, current_user, "editor")
+    approved = payload.approved_prompt
+    review = await needs_review(run_supplier_matcher, db, wedding_id, approved, payload.category)
+    if review:
+        return review
+
+    enqueued = await enqueue_agent_task("supplier-matcher", {
+        "wedding_id": wedding_id, "category": payload.category, "approved_prompt": approved,
+    })
     if not enqueued:
         raise HTTPException(status_code=500, detail="Failed to enqueue supplier matcher task")
         
@@ -479,6 +507,7 @@ async def trigger_supplier_matching(
 
 class ConciergeRequest(BaseModel):
     message: str
+    approved_prompt: Optional[str] = None
 
 
 @router.post("/{wedding_id}/concierge")
@@ -490,17 +519,39 @@ async def ask_concierge(
 ):
     """Answers a couple's question via the concierge agent, grounded in their real
     budget, checklist, and vendors. Runs synchronously (chat needs an immediate reply)
-    and logs an AgentDecisionLog row per question."""
-    wedding = await require_wedding_access(db, wedding_id, current_user, "editor")
+    and logs an AgentDecisionLog row per question.
+
+    The first call returns the text that would go to the AI and sends nothing; the
+    couple send it by repeating the call with that text as ``approved_prompt`` (PD-008)."""
+    await require_wedding_access(db, wedding_id, current_user, "editor")
 
     message = (payload.message or "").strip()
     if not message:
         raise HTTPException(status_code=400, detail="Message is empty")
 
+    unavailable = HTTPException(
+        status_code=502, detail="The concierge is briefly unavailable — please try again.")
     try:
-        out = await run_concierge(db, wedding_id, message=message, trigger="couple_action", user_id=current_user.id)
+        review = await needs_review(run_concierge, db, wedding_id, payload.approved_prompt,
+                                    message=message)
+    except HTTPException:
+        raise
     except Exception:
-        raise HTTPException(status_code=502, detail="The concierge is briefly unavailable — please try again.")
+        raise unavailable
+    if review:
+        return review
+    try:
+        out = await run_concierge(db, wedding_id, message=message, trigger="couple_action",
+                                  user_id=current_user.id, approved_prompt=payload.approved_prompt)
+    except PromptNotApproved:
+        # The plan changed between the check and the click: show the new text.
+        review = await needs_review(run_concierge, db, wedding_id, payload.approved_prompt,
+                                    message=message)
+        if review:
+            return review
+        raise unavailable
+    except Exception:
+        raise unavailable
 
     return {"reply": out.get("reply", "")}
 

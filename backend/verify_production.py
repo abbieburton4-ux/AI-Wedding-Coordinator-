@@ -149,8 +149,10 @@ def check_startup_migrations():
             settings.SYNC_DATABASE_URL, session_module.sync_engine = prev_url, prev_engine
 
 
-def check_webhook_does_not_invite_redelivery():
-    """A blocked extraction isn't redelivered; a failed one is, so no reply is lost."""
+def check_webhook_never_sends_unattended():
+    """The inbound-email webhook has no one to check the text before it goes to the
+    AI, so it never runs the quote extractor (PD-008 follow-up 2). It answers 200 so
+    SendGrid doesn't redeliver an email that would only be skipped again."""
     from types import SimpleNamespace
     from starlette.requests import Request
     from unittest.mock import MagicMock
@@ -179,15 +181,16 @@ def check_webhook_does_not_invite_redelivery():
     try:
         client = TestClient(app)
         url = "/api/v1/webhooks/sendgrid/inbound?token=fictional-inbound-secret"
-        with patch.object(webhooks_module, "enqueue_agent_task",
-                          AsyncMock(side_effect=HTTPException(status_code=422))):
+        never = AsyncMock(side_effect=AssertionError("the webhook must not run an agent"))
+        with patch("app.utils.tasks.enqueue_agent_task", never), \
+                patch("app.utils.direct_tasks.execute_agent_task", never), \
+                patch("app.agents.extractor.run_quote_extractor", never):
             res = client.post(url, data=form)
-            assert res.status_code == 200 and res.json()["status"] == "not_processed"
-        # A failed AI call or missing setup must stay an error so SendGrid retries.
-        for code in (502, 503):
-            with patch.object(webhooks_module, "enqueue_agent_task",
-                              AsyncMock(side_effect=HTTPException(status_code=code))):
-                assert client.post(url, data=form).status_code == code
+        assert res.status_code == 200, res.text
+        assert res.json() == {"status": "not_processed", "booking_id": "bk_fictional",
+                              "reason": "needs_review"}, res.json()
+        assert never.await_count == 0
+        assert not hasattr(webhooks_module, "enqueue_agent_task")
     finally:
         form_patch.stop()
         app.dependency_overrides.pop(get_db, None)
@@ -199,5 +202,5 @@ if __name__ == "__main__":
     asyncio.run(check_execution())
     check_static_and_auth()
     check_startup_migrations()
-    check_webhook_does_not_invite_redelivery()
+    check_webhook_never_sends_unattended()
     print("--- PRODUCTION CONFIGURATION AND EXECUTION VERIFICATION PASSED ---")

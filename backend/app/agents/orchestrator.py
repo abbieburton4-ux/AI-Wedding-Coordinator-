@@ -6,6 +6,7 @@ from functools import wraps
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import AgentDecisionLog
+from app.agents import privacy
 from app.agents.privacy import load_personal_terms, scrub
 from app.config import settings
 
@@ -19,10 +20,23 @@ def run_agent(agent_name: str, decision_type: str):
     2. The agent logic executes within a nested database transaction (savepoint).
     3. If execution fails, DB mutations are rolled back, but the log is updated to 'error' and saved.
     4. Schema validation failures or guardrail blocks update the log status accordingly.
+    5. Nothing reaches Gemini until the person has approved the cleaned prompt
+       (PD-008 follow-up 2). Called with ``preview_only=True``, the agent runs up to its
+       model call and stops: nothing is sent, every change is rolled back and no log row
+       is written, since nothing was decided. It returns ``{"needs_review": True,
+       "preview": <the exact text that would be sent>}``, or ``{"needs_review": False}``
+       when this run makes no model call. A real run takes ``approved_prompt=<that
+       text>``, and its model call is refused unless the cleaned prompt is exactly it.
     """
     def decorator(func):
         @wraps(func)
         async def wrapper(db: AsyncSession, wedding_id: str, *args, **kwargs):
+            approved_prompt = kwargs.pop("approved_prompt", None)
+            if kwargs.pop("preview_only", False):
+                for header in ("parent_decision_id", "booking_id", "user_id", "trigger"):
+                    kwargs.pop(header, None)
+                return await _preview(func, db, wedding_id, *args, **kwargs)
+
             decision_id = str(uuid.uuid4())
             start_time = time.time()
             
@@ -66,8 +80,12 @@ def run_agent(agent_name: str, decision_type: str):
             try:
                 # Execute agent logic in a nested transaction (savepoint)
                 # If an exception occurs, nested transaction rolls back inner changes automatically
-                async with db.begin_nested():
-                    result = await func(db, wedding_id, *args, **kwargs)
+                approval = privacy._approved.set(approved_prompt)
+                try:
+                    async with db.begin_nested():
+                        result = await func(db, wedding_id, *args, **kwargs)
+                finally:
+                    privacy._approved.reset(approval)
                 
                 # Extract structured result components
                 if isinstance(result, tuple) and len(result) >= 2:
@@ -138,3 +156,24 @@ def run_agent(agent_name: str, decision_type: str):
                 
         return wrapper
     return decorator
+
+
+async def _preview(func, db: AsyncSession, wedding_id: str, *args, **kwargs) -> dict:
+    """Runs the agent up to its model call and returns the text it would send. Every
+    change is rolled back; ``send_prompt`` refuses to send while previewing."""
+    previewing = privacy._previewing.set(True)
+    preview = None
+    try:
+        nested = await db.begin_nested()
+        try:
+            await func(db, wedding_id, *args, **kwargs)
+        except privacy.PromptNeedsReview as review:
+            preview = review.preview
+        finally:
+            await nested.rollback()
+    finally:
+        privacy._previewing.reset(previewing)
+    if preview is None:
+        return {"needs_review": False}
+    return {"needs_review": True, "preview": preview}
+

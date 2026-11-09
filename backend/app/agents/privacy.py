@@ -14,12 +14,17 @@ call it removes, from the prompt text:
 - anything shaped like an email address or a phone number.
 
 Only names the app knows can be removed. A name that isn't on the guest list or the
-access list (say, a vendor mentioning someone new) can't be reliably spotted, and
-gets through. ``scrub`` applies the same removal to what the decision log stores.
+access list (say, a vendor mentioning someone new) can't be reliably spotted. So
+(PD-008 follow-up 2) nothing is sent until the person has seen the cleaned text and
+clicked to send it: the first call of an agent is a preview that returns that text
+and sends nothing, and the real call sends only if its cleaned text is exactly the
+text the person approved. ``scrub`` applies the same removal to the decision log.
 """
 import re
 import unicodedata
+from contextvars import ContextVar
 from dataclasses import dataclass, field
+from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -90,18 +95,20 @@ class PersonalTerms:
         """(kind, mark, pattern) in the order they're applied, compiled once."""
         if self._patterns is None:
             out = []
-            for note in sorted(self.dietary_notes, key=len, reverse=True):
+            # Sorted, so the same details always give the same cleaned text: a preview
+            # and the send it approves must match exactly.
+            for note in sorted(self.dietary_notes, key=lambda n: (-len(n), n)):
                 out.append(("dietary note", DIETARY_MARK, _dietary_pattern(note)))
             out.append(("email", EMAIL_MARK, EMAIL_RE))
-            for email in self.emails:
+            for email in sorted(self.emails):
                 out.append(("email", EMAIL_MARK, re.compile(re.escape(email), re.IGNORECASE)))
-            for digits in self.phone_digits:
-                for tail in {digits, digits[-9:]}:
+            for digits in sorted(self.phone_digits):
+                for tail in sorted({digits, digits[-9:]}):
                     out.append(("phone", PHONE_MARK, re.compile(
                         r"(?<!\d)" + r"[\s().-]*".join(tail) + r"(?!\d)")))
             out.append(("phone", PHONE_MARK, PHONE_RE))
             # Longest first, so a full name goes before its parts.
-            for name in sorted(self.names, key=len, reverse=True):
+            for name in sorted(self.names, key=lambda n: (-len(n), n)):
                 out.append(("name", NAME_MARK, _name_pattern(name)))
             self._patterns = out
         return self._patterns
@@ -207,6 +214,25 @@ class PersonalDataInPrompt(RuntimeError):
     """A prompt still held personal data after redaction, so it wasn't sent."""
 
 
+class PromptNeedsReview(Exception):
+    """Raised by ``send_prompt`` during a preview: carries the cleaned text that would
+    be sent. Nothing was sent."""
+
+    def __init__(self, preview: str):
+        super().__init__("Waiting for the person to check the text before it's sent.")
+        self.preview = preview
+
+
+class PromptNotApproved(RuntimeError):
+    """The cleaned prompt wasn't the text the person approved (or none was), so it
+    wasn't sent."""
+
+
+# Set by ``run_agent`` for one agent run: preview mode, or the text the person approved.
+_previewing: ContextVar[bool] = ContextVar("prompt_previewing", default=False)
+_approved: ContextVar[Optional[str]] = ContextVar("prompt_approved", default=None)
+
+
 def scrub(value, terms: PersonalTerms, generic: bool = True):
     """A copy of a decision-log value with personal details removed. ``generic=False``
     removes only the details the app holds, leaving other emails and numbers (a
@@ -221,10 +247,14 @@ def scrub(value, terms: PersonalTerms, generic: bool = True):
 
 
 async def send_prompt(db: AsyncSession, wedding_id: str, client, *, model, contents, config):
-    """Calls Gemini with personal details removed from the prompt.
+    """Calls Gemini with personal details removed from the prompt, once the person has
+    approved that exact cleaned text.
 
     Refuses to send (raises ``PersonalDataInPrompt``, which the orchestrator logs as an
     error) if a known detail, or a \\u escape that could hide one, is still there.
+    In a preview it raises ``PromptNeedsReview`` with the cleaned text instead of
+    sending. Otherwise it sends only if the cleaned text equals the approved text, and
+    raises ``PromptNotApproved`` if it doesn't.
     """
     if not isinstance(contents, str):
         raise PersonalDataInPrompt("Only plain-text prompts can be checked, so none other is sent.")
@@ -234,4 +264,9 @@ async def send_prompt(db: AsyncSession, wedding_id: str, client, *, model, conte
     leftovers = find_personal(clean, terms) + find_personal(instruction, terms)
     if leftovers:
         raise PersonalDataInPrompt(f"Prompt not sent: it still held a {leftovers[0]}.")
-    return await client.aio.models.generate_content(model=model, contents=clean, config=config)
+    if _previewing.get():
+        raise PromptNeedsReview(clean)
+    approved = _approved.get()
+    if approved is None or approved != clean:
+        raise PromptNotApproved("Prompt not sent: it wasn't the text the person checked.")
+    return await client.aio.models.generate_content(model=model, contents=approved, config=config)

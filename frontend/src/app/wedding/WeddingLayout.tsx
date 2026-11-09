@@ -4,6 +4,7 @@ import { cn } from "../design-system/cn";
 import { Icon } from "../shared/Icon";
 import { WorkspaceHeader } from "../shared/WorkspaceHeader";
 import { WeddingProvider, useActiveWedding } from "./WeddingProvider";
+import { PromptReviewProvider } from "./PromptReview";
 
 const NAV_ITEMS = [
   { path: "/wedding", label: "Overview", deskIcon: "dashboard", mobileLabel: "Home", mobileIcon: "home", end: true, mobile: true },
@@ -122,7 +123,9 @@ function WeddingShell() {
 export function WeddingLayout() {
   return (
     <WeddingProvider>
-      <WeddingShell />
+      <PromptReviewProvider>
+        <WeddingShell />
+      </PromptReviewProvider>
     </WeddingProvider>
   );
 }

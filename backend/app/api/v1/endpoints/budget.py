@@ -9,12 +9,14 @@ nothing here contacts anyone (rule 1).
 import datetime
 from typing import List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.agents.budget_split import category_key, run_budget_splitter
+from app.agents.privacy import PromptNotApproved
+from app.api.v1.review import Approval, needs_review
 from app.api.v1.access import require_wedding_access
 from app.api.v1.endpoints.auth import get_current_user
 from app.db.models import (
@@ -607,24 +609,38 @@ async def remove_contribution(
 @router.post("/{wedding_id}/budget/suggest-split")
 async def suggest_split(
     wedding_id: str,
+    approval: Optional[Approval] = Body(default=None),
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
     """Asks the AI for a starting split of the couple's total. Saves nothing: the
-    couple review it and use ``apply-split`` if they want it (PD-004, call b)."""
+    couple review it and use ``apply-split`` if they want it (PD-004, call b).
+
+    The first call returns the text that would go to the AI and sends nothing; the
+    couple send it by repeating the call with that text as ``approved_prompt`` (PD-008)."""
     wedding = await _editor(db, wedding_id, current_user)
     if not wedding.budget_total_cents:
         raise HTTPException(status_code=400, detail="Set your total budget first")
     names = (await db.exec(
         select(BudgetCategory.name).where(BudgetCategory.wedding_id == wedding_id)
-        .order_by(BudgetCategory.created_at)
+        .order_by(BudgetCategory.created_at, BudgetCategory.id)
     )).all()
+    facts = dict(total_cents=wedding.budget_total_cents, category_names=list(names),
+                 guest_count=wedding.guest_count_estimate, ceremony_type=wedding.ceremony_type)
+    approved = approval.approved_prompt if approval else None
+    review = await needs_review(run_budget_splitter, db, wedding_id, approved, **facts)
+    if review:
+        return review
     try:
         out = await run_budget_splitter(
-            db, wedding_id,
-            total_cents=wedding.budget_total_cents, category_names=list(names),
-            guest_count=wedding.guest_count_estimate, ceremony_type=wedding.ceremony_type,
+            db, wedding_id, **facts, approved_prompt=approved,
             trigger="couple_action", user_id=current_user.id,
         )
+    except PromptNotApproved:
+        review = await needs_review(run_budget_splitter, db, wedding_id, approved, **facts)
+        if review:
+            return review
+        raise HTTPException(status_code=502,
+                            detail="The suggestion didn't work this time. Please try again.")
     except Exception:
         raise HTTPException(status_code=502,
                             detail="The suggestion didn't work this time. Please try again.")
