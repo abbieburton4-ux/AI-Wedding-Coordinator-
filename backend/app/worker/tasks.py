@@ -9,7 +9,7 @@ from app.db.session import get_db
 from app.db.models import Booking, Wedding
 from app.agents.planner import run_intake_planner
 from app.agents.matcher import run_venue_matcher, run_supplier_matcher
-from app.agents.extractor import run_quote_extractor
+from app.agents.extractor import run_quote_extractor, run_vendor_reply_reader
 
 logger = logging.getLogger(__name__)
 # Only our own task dispatcher may call these: they run agents and change data.
@@ -36,6 +36,13 @@ class SupplierMatcherTaskSchema(BaseModel):
 
 class QuoteExtractorTaskSchema(BaseModel):
     booking_id: str
+    email_body: str
+    approved_prompt: Optional[str] = None
+
+
+class VendorReplyTaskSchema(BaseModel):
+    wedding_id: str
+    vendor_id: str
     email_body: str
     approved_prompt: Optional[str] = None
 
@@ -130,3 +137,18 @@ async def task_quote_extractor(
     except Exception as e:
         logger.error(f"Worker Task: quote-extractor failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/vendor-reply", status_code=status.HTTP_200_OK)
+async def task_vendor_reply(payload: VendorReplyTaskSchema, db: AsyncSession = Depends(get_db)):
+    """Worker task: reads a reply to one of the couple's own vendors (B62)."""
+    try:
+        result_dict = await run_vendor_reply_reader(
+            db, payload.wedding_id, payload.email_body, vendor_id=payload.vendor_id,
+            trigger="supplier_response", approved_prompt=payload.approved_prompt,
+        )
+        return {"status": "completed", "result": result_dict}
+    except Exception as e:
+        # The decision log holds the detail; don't echo the pasted text or the error here.
+        logger.error("Worker Task: vendor-reply failed: %s", type(e).__name__)
+        raise HTTPException(status_code=500, detail="The vendor reply couldn't be read.")

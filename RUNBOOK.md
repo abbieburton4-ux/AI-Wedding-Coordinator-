@@ -225,10 +225,13 @@ node e2e.mjs        # screenshots are written next to it
 ### Wired vs. still-mock (as of this handoff)
 
 - **Wired to real data:** couple signup → intake → dashboard /
-  budget / checklist. The Vendors screen shows the couple's own sections from a static list in
-  `Vendors.tsx` (PD-012); the AI vendor suggestions, the matcher buttons and the vendor **quote
-  loop** (paste a reply → quote_extractor → budget compare, B42) are off screen until the couple
-  can add vendors. The backend routes and stored suggestions stay. The couple
+  budget / checklist / vendors. The Vendors screen shows the couple's seven sections (PD-012)
+  with the vendors they add, edit and remove (`couple_vendors`, B62; Wildman BT starts in
+  Venue). Each vendor has "Paste a reply": the AI reads the price after the couple check the
+  text, and saves it as its reading (`couple_vendor_quotes`) without changing the status or
+  the budget. The AI vendor suggestions, the matcher buttons and the old catalogue quote loop
+  (`/inquiries/{id}/quote`, B42) stay off screen; the backend routes and stored suggestions
+  stay. The couple
   **AI Concierge** (Aurelia, typed chat and voice) is turned off (PD-010): the backend refuses it
   unless `ASSISTANT_ENABLED=True`, and the screens hide it unless `AURELIA_ENABLED` in
   `frontend/src/app/wedding/features.ts` is true. Past concierge log rows are kept.

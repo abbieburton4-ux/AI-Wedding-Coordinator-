@@ -1,12 +1,17 @@
 import json
 import logging
+import re
 import uuid
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Optional
 from pydantic import BaseModel, Field
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from google.genai import types
-from app.db.models import Booking, Wedding, BudgetLine, Quote, AgentDecisionLog, Supplier, Venue
+from app.db.models import (
+    AgentDecisionLog, Booking, BudgetLine, CoupleVendor, CoupleVendorQuote, Quote, Supplier,
+    Venue,
+)
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
 from app.agents.privacy import send_prompt
@@ -198,7 +203,7 @@ async def run_quote_extractor(db: AsyncSession, wedding_id: str, booking_id: str
         })
 
     # Return structured results.
-    # The orchestrator will fetch the parent_decision_id using the custom kwargs logic 
+    # The orchestrator will fetch the parent_decision_id using the custom kwargs logic
     # and update the parent_decision_id on the committed main log.
     return (
         result_dict,
@@ -208,3 +213,152 @@ async def run_quote_extractor(db: AsyncSession, wedding_id: str, booking_id: str
         api_calls,
         follow_ups
     )
+
+
+# --- A reply to one of the couple's own vendors (PD-012, B62) ---
+
+class VendorReplyLineItem(BaseModel):
+    item: str = Field(description="What is priced (e.g. Venue rental, Dinner per guest).")
+    amount: Optional[float] = Field(
+        default=None, description="Price for this item as written in the reply, or null.")
+
+
+class VendorReplyResult(BaseModel):
+    is_available: Optional[bool] = Field(
+        default=None,
+        description="True if the vendor says they're free on the date, false if they say "
+                    "they're booked or unavailable, null if the reply doesn't say.")
+    line_items: list[VendorReplyLineItem] = Field(
+        default_factory=list, description="Each priced item the reply lists.")
+    total_amount: Optional[float] = Field(
+        default=None, description="The total price the reply offers, or null if it gives none.")
+    currency: Optional[str] = Field(
+        default=None,
+        description="ISO currency code written or shown in the reply (e.g. USD), or null "
+                    "if the reply doesn't make it clear.")
+    summary: str = Field(
+        description="Two or three plain sentences on the price and any terms worth "
+                    "noticing (deposit, minimums, service charges, what's not included).")
+    confidence_score: Optional[float] = Field(
+        default=None, description="Your confidence in this reading, 0.0 to 1.0.")
+
+
+VENDOR_REPLY_INSTRUCTION = (
+    "You read a wedding vendor's email reply that the couple pasted in, and report what "
+    "it says about price and availability. Report only what the reply states: never "
+    "guess a price, a currency or availability, and leave a field null when the reply "
+    "doesn't give it. If the price is per guest and the reply states the guest count, "
+    "give the total and say how you worked it out in the summary; otherwise give no "
+    "total. Return JSON matching the response schema."
+)
+
+# A reply quoting more than this for one vendor is far more likely a misreading.
+MAX_REPLY_CENTS = 100_000_000  # 1,000,000.00
+_CURRENCY = re.compile(r"^[A-Z]{3}$")
+
+
+def to_cents(value) -> Optional[int]:
+    """A model-given amount as whole cents, or None if it isn't a usable number."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    try:
+        amount = Decimal(str(value))
+    except InvalidOperation:
+        return None
+    if not amount.is_finite():
+        return None
+    return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+@run_agent("quote_extractor", "quote_draft")
+async def run_vendor_reply_reader(db: AsyncSession, wedding_id: str, email_body: str,
+                                  vendor_id: str):
+    """Reads the price and availability from a reply to one of the couple's vendors.
+
+    Only the pasted text goes to the AI: none of the vendor's saved details do, and
+    their contact person, email and phone are removed from the text along with the
+    party's (``privacy.load_personal_terms``). The result is saved as the AI's reading.
+    It never changes the vendor's status or the budget; the couple do that (rule 4).
+    """
+    model = model_for("quote_extractor")
+    prompt_version = get_prompt_version(VENDOR_REPLY_INSTRUCTION)
+
+    vendor = (await db.exec(select(CoupleVendor).where(
+        CoupleVendor.id == vendor_id, CoupleVendor.wedding_id == wedding_id))).first()
+    if not vendor:
+        raise ValueError("That vendor isn't on this wedding's list.")
+
+    response = await send_prompt(
+        db, wedding_id, get_client(),
+        model=model,
+        contents=email_body,
+        config=types.GenerateContentConfig(
+            system_instruction=VENDOR_REPLY_INSTRUCTION,
+            response_mime_type="application/json",
+            response_schema=VendorReplyResult,
+            temperature=0.1,
+        ),
+    )
+    reply = json.loads(response.text)
+    if not isinstance(reply, dict):
+        reply = {}
+    usage = response.usage_metadata
+    tokens = ((usage.prompt_token_count, usage.candidates_token_count) if usage
+              else (None, None))
+    api_calls = [{"provider": "google", "model": model,
+                  "tokens": {"input": tokens[0], "output": tokens[1]}}]
+    confidence = reply.get("confidence_score")
+    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+        confidence = None
+
+    def blocked(kind: str, warning: str):
+        out = {"status": "blocked", "error_kind": kind, "warning": warning,
+               "vendor_id": vendor_id}
+        return out, confidence, model, prompt_version, api_calls, [], tokens
+
+    raw_total = reply.get("total_amount")
+    total_cents = to_cents(raw_total) if raw_total is not None else None
+    if raw_total is not None and (total_cents is None or total_cents < 0
+                                  or total_cents > MAX_REPLY_CENTS):
+        return blocked("implausible_total",
+                       "The price the AI read doesn't look right, so nothing was saved. "
+                       "Check the reply yourself.")
+    available = reply.get("is_available")
+    if not isinstance(available, bool):
+        available = None
+    if total_cents is None and available is None:
+        return blocked("nothing_found",
+                       "The AI found no price or availability in that reply, so nothing "
+                       "was saved.")
+
+    currency = reply.get("currency")
+    currency = currency.strip().upper() if isinstance(currency, str) else None
+    if not currency or not _CURRENCY.match(currency):
+        currency = None
+    items = []
+    for li in reply.get("line_items") or []:
+        if not isinstance(li, dict) or not isinstance(li.get("item"), str):
+            continue
+        cents = to_cents(li.get("amount")) if li.get("amount") is not None else None
+        if cents is not None and not 0 <= cents <= MAX_REPLY_CENTS:
+            cents = None
+        items.append({"item": li["item"].strip()[:200], "amount_cents": cents})
+    summary = reply.get("summary") if isinstance(reply.get("summary"), str) else None
+
+    db.add(CoupleVendorQuote(
+        vendor_id=vendor.id, total_cents=total_cents, currency=currency,
+        is_available=available, line_items=items[:50],
+        summary=summary.strip()[:2000] if summary else None,
+    ))
+    result = {
+        "status": "success",
+        "vendor_id": vendor_id,
+        "total_cents": total_cents,
+        "currency": currency,
+        "is_available": available,
+        "line_items": items[:50],
+        "rationale_summary": "Read a vendor's reply: "
+        + ("a total" if total_cents is not None else "no total")
+        + ("; availability stated" if available is not None else ""),
+    }
+    return result, confidence, model, prompt_version, api_calls, [], tokens

@@ -319,7 +319,11 @@ def check_publish_safety(real_head: str, new_revisions: list) -> None:
     assert current_revision(prod) == real_head
     with create_engine(prod).connect() as conn:
         diff = compare_metadata(MigrationContext.configure(conn), SQLModel.metadata)
+        # 0007's data step runs after Publish made the table, exactly once.
+        venue_rows = conn.execute(text(
+            "SELECT wedding_id, name FROM couple_vendors WHERE section = 'venue'")).fetchall()
     assert not diff, diff
+    assert [tuple(r) for r in venue_rows] == [("w1", "Wildman BT")], venue_rows
 
     fixture_dir = os.path.join(work, "fixture_versions")
     os.makedirs(fixture_dir)
@@ -520,13 +524,22 @@ def main() -> None:
     assert [(r[0], bool(r[1])) for r in confirmed] == [("w1", False)], confirmed
     assert bool(new_row) is False, "a row added outside the app still starts unconfirmed"
 
+    print("3f. Checking that 0007 puts Wildman BT in the Venue section, not booked (B62)...")
+    command.downgrade(cfg, "0006")
+    command.upgrade(cfg, "head")
+    with engine.connect() as conn:
+        vendors = conn.execute(text(
+            "SELECT wedding_id, section, name, website, status FROM couple_vendors")).fetchall()
+    assert [tuple(r) for r in vendors] == [
+        ("w1", "venue", "Wildman BT", "https://www.wildmanbt.com/", "contacted")], vendors
+
     print("4. Downgrading to the start and back up again...")
     command.downgrade(cfg, "base")
     command.upgrade(cfg, "head")
 
     scripts = ScriptDirectory.from_config(cfg)
     real_head = scripts.get_current_head()
-    new_revisions = [r for r in scripts.walk_revisions(real_head, LAST_UNGUARDED)
+    new_revisions = [r for r in scripts.walk_revisions(LAST_UNGUARDED, real_head)
                      if r.revision != LAST_UNGUARDED]
     check_publish_safety(real_head, new_revisions)
 

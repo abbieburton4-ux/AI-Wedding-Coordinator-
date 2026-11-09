@@ -6,8 +6,9 @@ dietary notes; counts and categories ("12 vegetarian") are fine.
 
 ``send_prompt`` is the only place in the app that calls the model. Before every
 call it removes, from the prompt text:
-- the names, emails and phone numbers of the wedding's guests and of everyone on
-  its access list (the couple and their party), with or without accents and in any
+- the names, emails and phone numbers of the wedding's guests, of everyone on
+  its access list (the couple and their party) and of the contact people the couple
+  saved for their vendors, with or without accents and in any
   case (name parts that are also everyday words, like "Will", only as written);
 - guests' dietary notes, word for word (punctuation aside), unless the note is one
   of the plain categories in ``DIETARY_CATEGORIES`` ("vegan", "gluten free");
@@ -29,7 +30,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.db.models import Guest, User, Wedding, WeddingMember
+from app.db.models import CoupleVendor, Guest, User, Wedding, WeddingMember
 
 NAME_MARK = "[name]"
 EMAIL_MARK = "[email]"
@@ -89,6 +90,9 @@ class PersonalTerms:
     emails: set = field(default_factory=set)
     phone_digits: set = field(default_factory=set)
     dietary_notes: set = field(default_factory=set)
+    # Vendors' contact people (B62): matched only as the whole name, as written, since
+    # the field may hold a role ("Wedding Coordinator") made of everyday words.
+    contact_names: set = field(default_factory=set)
     _patterns: list = field(default=None, repr=False)
 
     def patterns(self) -> list:
@@ -110,6 +114,9 @@ class PersonalTerms:
             # Longest first, so a full name goes before its parts.
             for name in sorted(self.names, key=lambda n: (-len(n), n)):
                 out.append(("name", NAME_MARK, _name_pattern(name)))
+            for name in sorted(self.contact_names, key=lambda n: (-len(n), n)):
+                words = r"\s+".join(re.escape(w) for w in name.split())
+                out.append(("name", NAME_MARK, re.compile(r"(?<!\w)" + words + r"(?!\w)")))
             self._patterns = out
         return self._patterns
 
@@ -163,6 +170,19 @@ async def load_personal_terms(db: AsyncSession, wedding_id: str) -> PersonalTerm
     if user_ids:
         for u in (await db.exec(select(User).where(User.id.in_(user_ids)))).all():
             add_person(u.name, u.email, u.phone)
+
+    # The couple's vendors' contact people (B62): business details, but still kept out
+    # of prompts and logs, for every agent. Only the whole contact name, as written, is
+    # removed, and it isn't checked against the app's own instructions (``_whole_names``
+    # leaves it out), so a role such as "Wedding Coordinator" never blocks an AI feature.
+    vendors = (await db.exec(
+        select(CoupleVendor).where(CoupleVendor.wedding_id == wedding_id)
+    )).all()
+    for v in vendors:
+        add_person(None, v.email, v.phone)
+        contact = " ".join(normalise(v.contact_name or "").split())
+        if len(contact) >= 2:
+            terms.contact_names |= {contact, _unaccented(contact)}
     return terms
 
 

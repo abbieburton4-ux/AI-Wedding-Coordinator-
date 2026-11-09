@@ -110,7 +110,18 @@ and won't be listed again, so every change Publish shows must appear somewhere
 below. If one doesn't, stop and tell the team. Until a line appears here, a
 publish should list **no** database changes.
 
-- (none yet)
+- `0007` (B62, the couple add their own vendors): two new tables and nothing else.
+  `CREATE TABLE couple_vendors` and `CREATE TABLE couple_vendor_quotes`, plus
+  `CREATE INDEX ix_couple_vendors_wedding_id` and
+  `CREATE INDEX ix_couple_vendor_quotes_vendor_id`. The primary keys
+  (`pk_couple_vendors`, `pk_couple_vendor_quotes`), foreign keys
+  (`fk_couple_vendors_wedding_id_weddings`,
+  `fk_couple_vendor_quotes_vendor_id_couple_vendors`) and checks
+  (`ck_couple_vendor_section`, `ck_couple_vendor_status`,
+  `ck_couple_vendor_quote_total`) may appear inside the CREATE TABLE lines or as
+  separate `ADD CONSTRAINT` lines; either is fine. No existing table changes, so
+  there should be no `ADD COLUMN`, `ALTER COLUMN` or `DROP`. Wildman BT is added to
+  the Venue section when the published app starts, not by Publish.
 
 **When you publish** (plain steps for the owner):
 1. In the workspace, **Pull** the latest code.

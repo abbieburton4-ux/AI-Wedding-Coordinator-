@@ -556,3 +556,70 @@ class ChecklistTask(SQLModel, table=True):
     source_ref: Optional[str] = None
     created_at: datetime.datetime = Field(default_factory=utcnow)
     updated_at: datetime.datetime = Field(default_factory=utcnow)
+
+
+# --- The couple's own vendors (PD-012, B62). ---
+
+# The Vendors screen's sections, in the order it shows them.
+VENDOR_SECTIONS = (
+    "venue", "food_drink", "flowers_decoration", "photo_video", "entertainment",
+    "hair_makeup", "transportation",
+)
+# Set only by the couple; no agent ever changes it (rule 4).
+VENDOR_STATUSES = ("looking", "contacted", "booked")
+
+
+class CoupleVendor(SQLModel, table=True):
+    """A vendor the couple added to one of their Vendors sections.
+
+    Contact fields are the vendor's business details. They're shown to the wedding
+    party but never sent to the AI or written to the decision log.
+    """
+    __tablename__ = "couple_vendors"
+    __table_args__ = (
+        CheckConstraint(
+            "section IN ('venue', 'food_drink', 'flowers_decoration', 'photo_video', "
+            "'entertainment', 'hair_makeup', 'transportation')",
+            name="ck_couple_vendor_section",
+        ),
+        CheckConstraint(
+            "status IN ('looking', 'contacted', 'booked')", name="ck_couple_vendor_status"
+        ),
+    )
+
+    id: str = Field(default_factory=generate_uuid_str, primary_key=True)
+    wedding_id: str = Field(foreign_key="weddings.id", index=True, ondelete="CASCADE")
+    section: str
+    name: str
+    website: Optional[str] = None
+    contact_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    status: str = Field(default="looking")
+    notes: Optional[str] = Field(default=None, sa_column=Column(Text))
+    created_at: datetime.datetime = Field(default_factory=utcnow)
+    updated_at: datetime.datetime = Field(default_factory=utcnow)
+
+
+class CoupleVendorQuote(SQLModel, table=True):
+    """What the AI read from a vendor's reply the couple pasted in.
+
+    Amounts are integer cents in the reply's own currency, which may be unknown. It's
+    the AI's reading, not a confirmed quote: it never changes the vendor's status or
+    the budget.
+    """
+    __tablename__ = "couple_vendor_quotes"
+    __table_args__ = (
+        CheckConstraint(
+            "total_cents IS NULL OR total_cents >= 0", name="ck_couple_vendor_quote_total"
+        ),
+    )
+
+    id: str = Field(default_factory=generate_uuid_str, primary_key=True)
+    vendor_id: str = Field(foreign_key="couple_vendors.id", index=True, ondelete="CASCADE")
+    total_cents: Optional[int] = None
+    currency: Optional[str] = None
+    is_available: Optional[bool] = None
+    line_items: List[Dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    summary: Optional[str] = Field(default=None, sa_column=Column(Text))
+    created_at: datetime.datetime = Field(default_factory=utcnow)
