@@ -11,9 +11,9 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-09 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. `needs-owner: send the venue the questions, or sign as is`
-2. **B53** — the live checklist is empty until the one-time import of the owner's list runs. `needs-owner: run the import on Replit (the team gives step-by-step instructions)`
-3. **B57** — voice calls with Aurelia send what is said to ElevenLabs without a preview (found in #44, B49). `needs-owner: (1) same check-first rule, (2) keep as is, (3) switch voice off until the guest list exists (recommended)`
+1. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
+2. **B53** — the live checklist is empty until the one-time import of the owner's list runs. `in progress`: the owner asked to load it (2026-11-09, "lets load the checklist"); the team is writing step-by-step Replit instructions; the owner runs them
+3. **B57** — voice calls with Aurelia send what is said to ElevenLabs without a preview (found in #44, B49). Owner, 2026-11-09: "turn off Aurelia". `needs-owner: voice only, or the typed chat with Aurelia too?`
 4. **B56** — put the venue's payment dates into the app: tasks V1–V3 on the checklist and the Wildman BT payments on the budget (owner, 2026-11-09). `ready`
 5. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
 6. **B44** — move the other parts that still read the old euro budget lines to the new budget. `ready`
