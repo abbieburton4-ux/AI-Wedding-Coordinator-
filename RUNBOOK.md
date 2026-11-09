@@ -20,7 +20,9 @@ can't (rule 6). Pulling new code doesn't restart a running app, so stop and Run
 again before publishing: Publish makes production's schema match the development
 database, and a development database left behind offers to undo a migration
 (B59). `python db_status.py check` (from `backend/`) says whether it's up to date.
-Never approve a DROP on the publish screen. Full configuration, publishing steps
+Never approve a DROP on the publish screen. Replit offers no way to skip its own
+schema step, so additions listed in replit.md for the release may be approved;
+migrations after `0006` cope with that (B60). Full configuration, publishing steps
 and verification are in [replit.md](replit.md).
 
 The following demo command is retained for disposable data only, without Firebase:
@@ -119,6 +121,7 @@ Outside dev mode, the app applies Alembic migrations on startup. On Postgres, an
   3. Run the same command again with `--apply`. Before deleting any timeline row it reads the checklist back and checks every row is on it; if not, it refuses and saves nothing.
   4. If something looks wrong afterwards, restore the backup (`pg_restore --clean -d "${SYNC_DATABASE_URL/+psycopg2/}" checklist-before-import.dump`, or `"$DATABASE_URL"` on Replit's Shell, or copy the SQLite file back with the app stopped).
 - **Never run `alembic downgrade` against a database holding real data.** The downgrades drop tables, including the access list.
+- **Writing a migration that survives Replit's Publish (B60):** Publish may add a migration's tables and columns to production before the app starts, without moving production's `alembic_version` on. So every migration after `0006` makes its schema changes through `migrations/safe_ops.py` (`safe.add_column`, `safe.create_table` and so on, the same arguments as `op.*`), which skip what's already there and stop on a mismatch; rewrite autogenerate's `op.*` and `batch_op.*` calls to them. Data steps stay in `op.execute` and run only through Alembic, after the schema change, so they must work on the new schema. No renames; give a new required column a server default; move data in one migration and drop the old column or table in a later one. Add a line for the revision to replit.md, "What Publish should show". A drop or `alter_column` shows on the publish screen as DROP or ALTER COLUMN, which the owner is told to stop on, so someone from the team reads that release's SQL with her; prefer additions. `verify_migrations.py` enforces the `safe_ops` rule and the replit.md line, and runs a fixture migration on both the normal and the "Publish got there first" path.
 - **Writing a migration:** autogenerate renders `op.batch_alter_table` blocks (`render_as_batch`), so altering or dropping a column or constraint also works on SQLite. Keys and unique constraints get names from the convention on `SQLModel.metadata` (`fk_<table>_<column>_<referred table>`, `pk_<table>`, `uq_<table>_<columns>`); give every `CheckConstraint` an explicit name, which `verify_migrations.py` checks. Never change the convention once a real database exists: migrations `0001` and `0002` take their names from it at run time. Databases built before this convention have unnamed (SQLite) or Postgres-default (`<table>_<column>_fkey`, `<table>_pkey`) key names, so a migration that drops an existing foreign or primary key must look its name up rather than assume the convention. `verify_migrations.py` runs on SQLite only, which doesn't compare check constraints or server defaults; review those by hand until it also runs against Postgres.
 
 ## What happens on intake (the agent flow)

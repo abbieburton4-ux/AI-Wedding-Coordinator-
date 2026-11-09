@@ -65,8 +65,9 @@ upgrade is one transaction and is serialised across instances, so a failed or
 concurrent start can't half-apply it.
 
 The app refuses to start, rather than guess, if the database has app tables but no
-Alembic record, if a migration fails (usually because something else already
-changed the schema), or if `SYNC_DATABASE_URL` points at a different database from
+Alembic record, if a migration fails (for example because a table Publish added
+doesn't match what the migration expects, or an old-style migration finds its
+change already made), or if `SYNC_DATABASE_URL` points at a different database from
 `DATABASE_URL` (don't set `SYNC_DATABASE_URL` or keep a `backend/.env` on Replit;
 the app derives it). Don't fix any of these by editing the database by hand; ask
 the team.
@@ -83,6 +84,33 @@ workspace's migrations to a local SQLite file; the run script now refuses that.
 **A publish that brings a new migration will list additions.** Run puts the
 development database at the new migration while production is still one behind,
 so Publish offers to add the new table or column to production itself (step 4).
+Replit's documentation describes no way to skip or turn off that step for a
+Replit-managed database: Publish compares the two databases, generates SQL, checks
+it on a copy of production, and runs it once you approve. The only other choices
+it offers are cancelling or overwriting production
+([How Publish updates your production database](https://docs.replit.com/features/data-and-storage/publish-database-changes),
+checked 2026-11-09). Publish leaves alone only an external database, such as one
+set up on Neon or Supabase directly.
+
+So migrations are written to cope (B60). Publish copies the schema, not the data,
+so production's Alembic record stays one behind after Publish has added the
+change. When the published app starts, the migration runs anyway: each of its
+schema steps (`backend/migrations/safe_ops.py`) looks first and skips anything
+Publish already added, then its data steps run as usual. Only Alembic runs data
+steps, on both paths. `verify_migrations.py` refuses a migration after `0006` that
+changes the schema any other way, and tests both paths. If something Publish added
+doesn't match what the migration expects, the app stops and says so rather than
+guess.
+
+### What Publish should show
+
+Each migration after `0006` adds a line here, with its backlog item, saying what
+Publish will list for it. Changes from earlier publishes are already in production
+and won't be listed again, so every change Publish shows must appear somewhere
+below. If one doesn't, stop and tell the team. Until a line appears here, a
+publish should list **no** database changes.
+
+- (none yet)
 
 **When you publish** (plain steps for the owner):
 1. In the workspace, **Pull** the latest code.
@@ -94,20 +122,26 @@ so Publish offers to add the new table or column to production itself (step 4).
    `cd backend && python db_status.py check`. It must say
    `Database is up to date`.
 4. Press **Publish**. Replit compares the development database with production and
-   may list changes it will make to production.
-   - If any line says **DROP** (for example `DROP COLUMN` or `DROP TABLE`), **don't
-     approve it**. Close the publish screen. In the Shell, type
-     `cd backend && alembic current` to see where the development database is,
-     then `python db_status.py upgrade` (the same as `alembic upgrade head`, with
-     the run script's safety checks), and run the check in step 3 again. Then try
-     Publish again. If DROP is still offered, stop and tell the team.
-   - If it lists only additions (`CREATE TABLE`, `ADD COLUMN`) and lets you skip
-     them, skip them: the published app applies its own changes when it starts.
-   - If it lists additions and won't let you skip, stop and tell the team before
-     publishing. [ASSUMPTION] Approving them would add the change to production
-     outside Alembic, and the published app would then refuse to start on that
-     migration until the team marks it as applied there. Nobody has seen this
-     screen with additions yet.
+   may list changes it will make to production. Read every line of the SQL it
+   shows, even if the pane isn't orange.
+   - **You may approve** when every change is an addition (`CREATE TABLE`,
+     `ADD COLUMN`, `CREATE INDEX`, `ADD CONSTRAINT`) and each one appears under
+     "What Publish should show" above. The pane may turn orange for a new
+     required column, index or constraint; that's expected when the list says so.
+     Choose **Approve and publish**. The published app then finishes the job when
+     it starts.
+   - If any line says **DROP**, first close the publish screen: the development
+     database may be behind. In the Shell, type `cd backend && alembic current`
+     to see where it is, then `python db_status.py upgrade` (the same as
+     `alembic upgrade head`, with the run script's safety checks), and run the
+     check in step 3 again. Then press Publish again.
+   - **Stop and tell the team** if anything else appears, or still appears: any
+     line with **DROP** or **RENAME**, any `ALTER COLUMN`, a question asking
+     whether something was renamed, a question about a unique constraint offering
+     to remove rows, a change that isn't on the list, or **Migrations failed
+     validation**. Choose **Cancel**. Never choose **Copy your development
+     database schema & data to production**, and don't ask Replit's Agent to fix
+     it.
 5. Once published, open the app. If it shows an error page instead of sign-in,
    tell the team. The app stops before changing anything itself, but anything
    Replit applied in step 4 has already happened.
