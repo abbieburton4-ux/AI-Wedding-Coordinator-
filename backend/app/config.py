@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     INTERNAL_TASKS_SECRET: Optional[str] = None   # dispatcher -> /tasks worker routes
     INBOUND_EMAIL_SECRET: Optional[str] = None    # ?token= on the inbound-email webhook
 
+    # Aurelia, the in-app assistant (typed chat and voice), is off (PD-010): while
+    # False, the concierge and voice routes refuse every call, so nothing reaches
+    # Gemini or ElevenLabs through the assistant. Set True to bring it back; the
+    # frontend has its own switch, AURELIA_ENABLED in src/app/wedding/features.ts.
+    ASSISTANT_ENABLED: bool = False
+
     # ElevenLabs Conversational AI (the "Aurelia" voice agent). The key is a
     # server-side secret and must never reach the browser; the frontend instead
     # fetches a short-lived WebRTC conversation token from /api/v1/voice/token.

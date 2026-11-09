@@ -14,6 +14,7 @@ import { Checklist } from "./wedding/views/Checklist";
 import { SeatingPlan } from "./wedding/views/SeatingPlan";
 import { Concierge } from "./wedding/views/Concierge";
 import { Access } from "./wedding/views/Access";
+import { AURELIA_ENABLED } from "./wedding/features";
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
 
@@ -40,7 +41,11 @@ export default function App() {
               <Route path="checklist" element={<Checklist />} />
               {/* The checklist replaced the AI timeline (PD-007); old links still land there. */}
               <Route path="timeline" element={<Navigate to="/wedding/checklist" replace />} />
-              <Route path="concierge" element={<Concierge />} />
+              {/* Aurelia is off (PD-010): an old link lands on the overview. */}
+              <Route
+                path="concierge"
+                element={AURELIA_ENABLED ? <Concierge /> : <Navigate to="/wedding" replace />}
+              />
               <Route path="access" element={<Access />} />
               <Route path="*" element={<Dashboard />} />
             </Route>

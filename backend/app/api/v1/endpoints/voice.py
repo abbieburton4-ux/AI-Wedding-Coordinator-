@@ -15,6 +15,7 @@ from app.config import settings
 from app.db.models import User
 from app.api.v1.endpoints.auth import get_current_user
 from app.api.v1.access import has_level_anywhere
+from app.api.v1.assistant import require_assistant_enabled
 from app.db.session import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +39,7 @@ async def get_conversation_token(
     # The voice agent is an agent run, so view-only members can't start it (PD-002).
     if not await has_level_anywhere(db, current_user, "editor"):
         raise HTTPException(status_code=403, detail="Your access is view only")
+    require_assistant_enabled()  # PD-010: no call goes to ElevenLabs while it's off
     if not settings.ELEVENLABS_API_KEY:
         # Misconfiguration, not a client error — surface a 503 so the UI can hide
         # the voice option rather than showing a generic failure.

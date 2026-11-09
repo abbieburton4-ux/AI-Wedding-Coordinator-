@@ -24,6 +24,7 @@ from app.utils import checklist as checklist_rules
 from app.api.v1.access import (
     UNSAFE_EMAIL, bootstrap_emails, require_wedding_access, weddings_for_member,
 )
+from app.api.v1.assistant import require_assistant_enabled
 from app.api.v1.endpoints.auth import get_current_user
 from app.utils.tasks import enqueue_agent_task
 from app.agents.concierge import run_concierge
@@ -524,6 +525,7 @@ async def ask_concierge(
     The first call returns the text that would go to the AI and sends nothing; the
     couple send it by repeating the call with that text as ``approved_prompt`` (PD-008)."""
     await require_wedding_access(db, wedding_id, current_user, "editor")
+    require_assistant_enabled()  # PD-010: nothing reaches Gemini while it's off
 
     message = (payload.message or "").strip()
     if not message:

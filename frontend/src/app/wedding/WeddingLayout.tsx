@@ -5,6 +5,7 @@ import { Icon } from "../shared/Icon";
 import { WorkspaceHeader } from "../shared/WorkspaceHeader";
 import { WeddingProvider, useActiveWedding } from "./WeddingProvider";
 import { PromptReviewProvider } from "./PromptReview";
+import { AURELIA_ENABLED } from "./features";
 
 const NAV_ITEMS = [
   { path: "/wedding", label: "Overview", deskIcon: "dashboard", mobileLabel: "Home", mobileIcon: "home", end: true, mobile: true },
@@ -105,7 +106,7 @@ function WeddingShell() {
     <div className="wedding min-h-screen flex flex-col md:flex-row bg-background text-on-background font-body-md antialiased selection:bg-primary-container selection:text-on-primary-container">
       {showShell && (
         <WorkspaceHeader
-          profileTo="/wedding/concierge"
+          profileTo={AURELIA_ENABLED ? "/wedding/concierge" : undefined}
           accessTo={canManageAccess ? ACCESS_PATH : undefined}
           searchPlaceholder="Search vendors, guests…"
         />
@@ -115,7 +116,7 @@ function WeddingShell() {
         <Outlet />
       </div>
       {showShell && <WeddingBottomNav />}
-      {showShell && <ConciergeFab />}
+      {showShell && AURELIA_ENABLED && <ConciergeFab />}
     </div>
   );
 }

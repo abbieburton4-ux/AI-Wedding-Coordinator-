@@ -42,7 +42,10 @@ The run script forces `DEVELOPMENT_MODE=False`, `ALLOW_MOCK_AUTH=False`,
 `REPLIT_MANAGED_DATABASE=True`, and `DIRECT_AGENT_EXECUTION=True`.
 Mock tokens are refused. Missing bootstrap emails leave new sign-ins locked out.
 
-Voice is optional and needs `ELEVENLABS_API_KEY` plus an accessible
+Aurelia, the assistant (typed chat and voice), is off (PD-010): the backend
+refuses it unless `ASSISTANT_ENABLED=True`, and the screens hide it unless
+`AURELIA_ENABLED` in `frontend/src/app/wedding/features.ts` is true. If it's
+turned back on, voice needs `ELEVENLABS_API_KEY` plus an accessible
 `ELEVENLABS_AGENT_ID`. `INBOUND_EMAIL_SECRET` is needed only if inbound email
 is enabled. Worker HTTP routes stay locked unless `INTERNAL_TASKS_SECRET` is
 configured; direct execution doesn't call those routes or require that secret.
