@@ -1,9 +1,10 @@
 """Load the owner's planning checklist into a wedding, once (PD-007).
 
 The owner's list comes from their own file, which stays outside git (its wording is
-from a wedding website). The import also adds the approved Jewish traditions and
-merges the AI planner's old timeline into the checklist, then removes the timeline.
-Run it against the database the app uses (SYNC_DATABASE_URL), only when the owner
+from a wedding website). The import also adds the approved Jewish traditions and the
+Wildman BT payment tasks (PD-011), and merges the AI planner's old timeline into the
+checklist, then removes the timeline. Owners and editors can do the same from the
+Checklist screen ("Load my checklist", PD-011), which needs no database access. Run it against the database the app uses (SYNC_DATABASE_URL), only when the owner
 has asked, after taking a backup (RUNBOOK, "Loading the owner's checklist"). Without
 --apply it's a dry run: it does the whole import on that database, prints what would
 change, and then rolls it back. It isn't a copy, which is why the backup comes first.
@@ -57,6 +58,7 @@ def main() -> None:
             print(f"Wedding date: {report.wedding_date} ({state})")
         print(f"Owner's list tasks added: {report.owner_tasks}")
         print(f"Jewish tradition tasks added: {report.tradition_tasks}")
+        print(f"Wildman BT payment tasks added: {report.venue_tasks}")
         print(f"AI timeline tasks added: {len(report.ai_added)}")
         for line in report.ai_added:
             print(f"  + {line}")

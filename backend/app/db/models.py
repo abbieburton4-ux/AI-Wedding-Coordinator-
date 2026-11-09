@@ -528,8 +528,8 @@ class ChecklistTask(SQLModel, table=True):
 
     ``stage`` is a key from ``app.utils.checklist.STAGES``; due dates aren't stored,
     they're worked out from the wedding date. ``source_ref`` identifies where an
-    imported task came from (an item id in the owner's list, a tradition id, or the
-    old timeline row), so an import can't add the same task twice. Ticking a task
+    imported task came from (an item id in the owner's list, a tradition id, a
+    Wildman BT payment task V1-V3, or the old timeline row), so an import can't add the same task twice. Ticking a task
     never touches a payment or booking (rule 4).
     """
     __tablename__ = "checklist_tasks"

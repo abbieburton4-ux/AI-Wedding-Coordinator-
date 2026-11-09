@@ -5,6 +5,7 @@ import { useApi, USE_FASTAPI_BACKEND } from "../../api";
 import { useActiveWedding } from "../WeddingProvider";
 import { formatDay, formatInstantDay } from "./budget/money";
 import type { Checklist as ChecklistData, ChecklistGroup, ChecklistTask, Filter } from "./checklist/types";
+import { LoadChecklist } from "./checklist/LoadChecklist";
 
 type Req = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
 type Run = (fn: () => Promise<unknown>) => Promise<boolean>;
@@ -54,6 +55,7 @@ export function Checklist() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loadedMessage, setLoadedMessage] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   // Groups the couple opened or closed themselves; the rest follow "current".
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
@@ -141,6 +143,19 @@ export function Checklist() {
     <>
       <DateCard base={base} data={data} canEdit={canEdit} run={run} request={request} busy={busy}
         onConfirmedSaved={refetchWeddings} />
+
+      {canEdit && !data.imported && (
+        <LoadChecklist
+          base={base}
+          request={request}
+          onLoaded={async (added) => {
+            setLoadedMessage(`Your checklist is loaded: ${added} ${added === 1 ? "task" : "tasks"} added.`);
+            await load();
+          }}
+          onStale={load}
+        />
+      )}
+      {loadedMessage && <p role="status" className="mb-6 text-sm text-on-surface">{loadedMessage}</p>}
 
       {error && <p role="alert" className="mb-6 text-sm text-error">{error}</p>}
 

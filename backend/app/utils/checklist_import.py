@@ -3,7 +3,8 @@
 In one transaction it:
 1. optionally sets the wedding date (the owner's choice, never a default);
 2. loads the owner's list from their own file, kept outside git (call (e));
-3. adds the approved Jewish traditions, J2 taking the place of item 11m-3;
+3. adds the approved Jewish traditions, J2 taking the place of item 11m-3, and the
+   Wildman BT contract's payment tasks V1-V3 (PD-011), whose dates are in their wording;
 4. merges the AI planner's old timeline rows: each goes into the stage nearest its
    due date, unless its title matches a task already on the list, in which case its
    tick and notes move onto that task;
@@ -11,11 +12,14 @@ In one transaction it:
 
 The caller commits only if nothing raised. A dry run does the same work on the live
 database and rolls it back; it isn't a copy, so take a backup before ``--apply``
-(RUNBOOK, "Loading the owner's checklist").
+(RUNBOOK, "Loading the owner's checklist"). The app's "Load my checklist" step
+(PD-011) runs the same code from the Checklist screen.
+
+The file's wording goes only into the checklist rows: never into logs, the decision log
+or the AI. Refusal messages name stages and positions, never a task's text.
 """
 import datetime
 import json
-import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -25,6 +29,8 @@ from app.db.models import ChecklistTask, TimelineItem, Wedding, utcnow
 from app.utils import checklist as rules
 
 TITLE_MAX = 300
+# The owner's file is about 10 kB; anything far bigger isn't her checklist.
+FILE_MAX_CHARS = 200_000
 
 
 class ImportRefused(Exception):
@@ -35,6 +41,7 @@ class ImportRefused(Exception):
 class ImportReport:
     owner_tasks: int = 0
     tradition_tasks: int = 0
+    venue_tasks: int = 0
     ai_added: List[str] = field(default_factory=list)
     ai_skipped: List[str] = field(default_factory=list)
     timeline_rows_removed: int = 0
@@ -42,29 +49,43 @@ class ImportReport:
 
 
 def read_owner_list(path: str) -> list:
+    """The stages from the owner's file on disk; see ``parse_owner_list``."""
+    with open(path, encoding="utf-8") as f:
+        return parse_owner_list(f.read())
+
+
+def parse_owner_list(text: str) -> list:
     """The stages from the owner's file: a JSON list, or the first ```json block of a
     Markdown file. Checks each stage matches the app's stages, in the same order."""
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
-    block = re.search(r"```json\s*\n(.*?)```", text, re.S)
+    if len(text) > FILE_MAX_CHARS:
+        raise ImportRefused("The file is too long to be the checklist")
     try:
-        data = json.loads(block.group(1) if block else text)
+        data = json.loads(_json_block(text))
     except json.JSONDecodeError as e:
         raise ImportRefused(f"The file's checklist isn't valid JSON: {e}")
+    except RecursionError:
+        raise ImportRefused("The file's checklist is nested too deeply to be the checklist")
     if not isinstance(data, list):
         raise ImportRefused("The file's checklist should be a list of stages")
 
     keys = [s.get("id") if isinstance(s, dict) else None for s in data]
     if keys != list(rules.STAGE_KEYS):
+        # Names the first stage that differs by position, never what the file says.
+        n = next((i for i, (a, b) in enumerate(zip(keys, rules.STAGE_KEYS)) if a != b),
+                 min(len(keys), len(rules.STAGE_KEYS)))
+        expected = rules.STAGES[n].label if n < len(rules.STAGES) else "the end of the list"
         raise ImportRefused(
-            f"The file's stages {keys} don't match the app's {list(rules.STAGE_KEYS)}")
+            f"The file has {len(keys)} stages and the app has {len(rules.STAGE_KEYS)}; "
+            f"they differ from stage {n + 1}, which should be {expected}")
     for stage, raw in zip(rules.STAGES, data):
         offset = raw.get("offset") or {}
+        if not isinstance(offset, dict):
+            raise ImportRefused(f"Stage {stage.key}'s offset should be months, weeks or days")
         expected = {k: v for k, v in (("months", stage.months), ("weeks", stage.weeks),
                                       ("days", stage.days)) if v}
         got = {k: v for k, v in offset.items() if v}
         if got != expected:
-            raise ImportRefused(f"Stage {stage.key}'s offset {offset} isn't {expected or 0}")
+            raise ImportRefused(f"Stage {stage.key}'s offset isn't {expected or 0}")
         items = raw.get("items")
         if not isinstance(items, list) or not all(isinstance(i, str) and i.strip()
                                                   for i in items):
@@ -73,6 +94,19 @@ def read_owner_list(path: str) -> list:
             if len(" ".join(item.split())) > TITLE_MAX:
                 raise ImportRefused(f"A task in stage {stage.key} is over {TITLE_MAX} characters")
     return data
+
+
+def _json_block(text: str) -> str:
+    """The first ```json block of a Markdown file, or the whole text. Found with plain
+    string search: a regex here backtracked for minutes on a fence with no end."""
+    start = text.find("```json")
+    if start < 0:
+        return text
+    body_start = text.find("\n", start)
+    end = text.find("```", body_start + 1) if body_start >= 0 else -1
+    if end < 0:
+        return text
+    return text[body_start + 1:end]
 
 
 def _clean(title: str) -> str:
@@ -134,6 +168,9 @@ def import_checklist(
     traditions = {}
     for ref, stage, title in rules.TRADITIONS:
         traditions.setdefault(stage, []).append((ref, title))
+    venue = {}
+    for ref, stage, title in rules.VENUE_TASKS:
+        venue.setdefault(stage, []).append((ref, title))
 
     for stage, raw in zip(rules.STAGES, owner_list):
         stage_traditions = list(traditions.get(stage.key, []))
@@ -151,6 +188,9 @@ def import_checklist(
             report.owner_tasks += add(stage.key, title, "owner_list", ref)
         for ref, title in stage_traditions:
             report.tradition_tasks += add(stage.key, title, "tradition", ref)
+        # The owner asked for these (PD-011), so they count as hers, not as traditions.
+        for ref, title in venue.get(stage.key, []):
+            report.venue_tasks += add(stage.key, title, "owner_list", ref)
 
     timeline = session.exec(
         select(TimelineItem).where(TimelineItem.wedding_id == wedding.id)
@@ -159,7 +199,7 @@ def import_checklist(
     if timeline and wedding.wedding_date is None:
         raise ImportRefused(
             "The wedding has AI timeline tasks to merge, which need a wedding date to "
-            "place them; pass --wedding-date")
+            "place them; set the wedding date first")
 
     for item in timeline:
         if f"ti:{item.id}" in refs:

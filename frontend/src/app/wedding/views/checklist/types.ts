@@ -36,7 +36,21 @@ export interface Checklist {
   done: number;
   total: number;
   overdue: number;
+  /** Whether "Load my checklist" has run (PD-011); it runs once. */
+  imported: boolean;
   groups: ChecklistGroup[];
+}
+
+/** What POST /weddings/{id}/checklist/import added, or would add on a practice run. */
+export interface ImportResult {
+  saved: boolean;
+  wedding_date: string | null;
+  owner_tasks: number;
+  tradition_tasks: number;
+  venue_tasks: number;
+  ai_added: number;
+  ai_skipped: number;
+  timeline_rows_removed: number;
 }
 
 export type Filter = "all" | "not_done" | "overdue";

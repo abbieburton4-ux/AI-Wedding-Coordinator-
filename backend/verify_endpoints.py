@@ -803,7 +803,10 @@ def test_api_suite():
         from app.api.v1.endpoints import checklist as checklist_module
         from app.db.models import BudgetPayment, ChecklistTask, TimelineItem, User, Wedding
         from app.utils import checklist as rules
-        from app.utils.checklist_import import ImportRefused, import_checklist, read_owner_list
+        from app.api.v1.endpoints.checklist import IMPORT_BODY_MAX_BYTES
+        from app.utils.checklist_import import (
+            FILE_MAX_CHARS, ImportRefused, import_checklist, read_owner_list,
+        )
 
         D = dt.date
         # Calendar months keep the day, or use the month's last day.
@@ -1041,7 +1044,8 @@ def test_api_suite():
             report = import_checklist(s, s.get(Wedding, "w_import"), owner_list, D(2027, 8, 21),
                                       today=D(2026, 11, 5))
             s.commit()
-        assert (report.owner_tasks, report.tradition_tasks) == (19 * 3 - 1, 18), report
+        assert (report.owner_tasks, report.tradition_tasks, report.venue_tasks) == (
+            19 * 3 - 1, 18, 3), report
         assert report.ai_added == ["Fictional AI task -> 6 Months Before",
                                    "Fictional rehearsal -> 2–3 Days Before"], report.ai_added
         assert report.ai_skipped == [
@@ -1055,7 +1059,15 @@ def test_api_suite():
                 TimelineItem.wedding_id == "w_import")).all() == []
             tasks = s.exec(sync_select(ChecklistTask).where(
                 ChecklistTask.wedding_id == "w_import")).all()
-            assert len(tasks) == 56 + 18 + 2
+            # 56 placeholder tasks, 18 traditions, the 3 Wildman BT tasks, 2 AI tasks.
+            assert len(tasks) == 56 + 18 + 3 + 2
+            venue = {t.source_ref: t for t in tasks if t.source_ref in ("V1", "V2", "V3")}
+            assert {r: (t.stage, t.source, t.done) for r, t in venue.items()} == {
+                "V1": ("12m", "owner_list", False), "V2": ("1m", "owner_list", False),
+                "V3": ("post", "owner_list", False)}, "in their stages, none ticked"
+            assert "Due Wed 11 Nov 2026" in venue["V1"].title
+            assert "Due Thu 23 Sep 2027" in venue["V2"].title
+            assert "22 Nov 2027" in venue["V3"].title
             eleven = sorted((t for t in tasks if t.stage == "11m"), key=lambda t: t.position)
             assert [t.source_ref for t in eleven] == ["11m-1", "11m-2", "J2"]
             assert "officiat" not in " ".join(t.title for t in eleven).lower()
@@ -1119,6 +1131,110 @@ def test_api_suite():
         print("   * Import: owner's list (11m-3 replaced by J2), 18 traditions, AI timeline merged "
               "by nearest stage with duplicates skipped, timeline removed; runs once; refusals "
               "and dry runs write nothing")
+
+        # "Load my checklist" from the Checklist screen (PD-011): same import, same refusals.
+        imp_url = f"{cl_url}/import"
+        with open(owner_file) as f:
+            owner_text = f.read()
+        load = lambda body, who=editor_headers: c.post(imp_url, json=body, headers=who)
+        with Session(sync_engine) as s:
+            paid_before = [(p.id, p.paid) for p in s.exec(sync_select(BudgetPayment)).all()]
+            tasks_before = len(s.exec(sync_select(ChecklistTask).where(
+                ChecklistTask.wedding_id == wedding_id)).all())
+        # Two fictional AI timeline rows: one matching the couple's own task, one new.
+        with Session(sync_engine) as s:
+            later_task = s.exec(sync_select(ChecklistTask).where(
+                ChecklistTask.wedding_id == wedding_id,
+                ChecklistTask.title == "Placeholder later task")).one()
+            later_id = later_task.id
+            assert (later_task.done, later_task.notes) == (False, None)
+            s.add(TimelineItem(id="ti_load_dup", wedding_id=wedding_id, kind="planning",
+                               title="placeholder LATER task", due_at=D(2027, 7, 1),
+                               description="Fictional load note", status="done"))
+            s.add(TimelineItem(id="ti_load_new", wedding_id=wedding_id, kind="planning",
+                               title="Fictional load AI task", due_at=D(2027, 3, 1)))
+            s.commit()
+        checklist_module._today = lambda: D(2026, 11, 5)
+        try:
+            assert c.get(cl_url, headers=viewer_headers).json()["imported"] is False
+            ok_body = {"text": owner_text, "apply": True}
+            assert load(ok_body, viewer_headers).status_code == 403, "viewers can't load"
+            assert load(ok_body, unauth_headers).status_code == 403
+            assert c.post(imp_url, content=b"not json", headers=editor_headers).status_code == 422
+            assert load({"text": owner_text}).status_code == 422, "save flag required"
+            assert load({"text": 5, "apply": False}).status_code == 422
+            assert load({"text": "x" * (FILE_MAX_CHARS + 1), "apply": True}).status_code == 422
+            assert c.post(imp_url, content=b"x" * (IMPORT_BODY_MAX_BYTES + 1),
+                          headers=editor_headers).status_code == 413
+            assert load({"text": _json.dumps(stages[1:]), "apply": True}).status_code == 422
+            swapped = [stages[1], stages[0]] + stages[2:]
+            assert load({"text": _json.dumps(swapped), "apply": True}).status_code == 422
+            marker = "Placeholder unique marker " + "z" * 300
+            too_long = [dict(stages[0], items=[marker])] + stages[1:]
+            res = load({"text": _json.dumps(too_long), "apply": True})
+            assert res.status_code == 422 and "unique marker" not in res.text, res.text
+            assert "over 300 characters" in res.json()["detail"]
+            named = [dict(stages[0], id="Fictional Guest Name")] + stages[1:]
+            res = load({"text": _json.dumps(named), "apply": False})
+            assert res.status_code == 422 and "Fictional Guest" not in res.text, res.text
+            res = load({"text": "```json\n" + "\n" * 150_000, "apply": False})
+            assert res.status_code == 422, "an unclosed fence is refused quickly"
+            assert load({"text": "[" * 100_000, "apply": False}).status_code == 422
+            assert c.post(imp_url, content=b"[" * 100_000,
+                          headers=editor_headers).status_code == 422
+            # The AI timeline needs a date to place its rows: refused without one.
+            c.put(f"{cl_url}/date", json={"wedding_date": None}, headers=editor_headers)
+            res = load({"text": owner_text, "apply": False})
+            assert res.status_code == 422 and "wedding date" in res.json()["detail"], res.text
+            c.put(f"{cl_url}/date", json={"wedding_date": "2027-08-21"}, headers=editor_headers)
+
+            # The practice run saves nothing; owners can run it as well as editors.
+            res = load({"text": owner_text, "apply": False}, headers)
+            assert res.status_code == 200, res.text
+            practice = res.json()
+            assert practice["saved"] is False
+            assert (practice["owner_tasks"], practice["tradition_tasks"],
+                    practice["venue_tasks"]) == (56, 18, 3), practice
+            assert practice["wedding_date"] == "2027-08-21"
+            assert (practice["ai_added"], practice["ai_skipped"],
+                    practice["timeline_rows_removed"]) == (1, 1, 2), practice
+            assert "Placeholder" not in res.text, "counts only, never the file's wording"
+            body = c.get(cl_url, headers=viewer_headers).json()
+            assert body["imported"] is False and body["total"] == tasks_before
+            with Session(sync_engine) as s:
+                assert s.get(TimelineItem, "ti_load_dup") is not None
+                assert s.get(TimelineItem, "ti_load_new") is not None
+                unchanged = s.get(ChecklistTask, later_id)
+                assert (unchanged.done, unchanged.notes) == (False, None), "no merge saved"
+
+            res = load({"text": owner_text, "apply": True})
+            assert res.status_code == 200, res.text
+            saved = res.json()
+            assert saved["saved"] is True and {k: v for k, v in saved.items() if k != "saved"} \
+                == {k: v for k, v in practice.items() if k != "saved"}, "same as the practice"
+            body = c.get(cl_url, headers=viewer_headers).json()
+            assert body["imported"] is True
+            assert body["total"] == tasks_before + 56 + 18 + 3 + saved["ai_added"]
+            again = load({"text": owner_text, "apply": False})
+            assert again.status_code == 409, "runs once, even as a practice run"
+            with Session(sync_engine) as s:
+                assert s.get(TimelineItem, "ti_load_dup") is None
+                assert s.get(TimelineItem, "ti_load_new") is None
+                merged = s.get(ChecklistTask, later_id)
+                assert (merged.done, merged.notes) == (True, "Fictional load note")
+        finally:
+            checklist_module._today = real_today
+        with Session(sync_engine) as s:
+            assert [(p.id, p.paid) for p in s.exec(sync_select(BudgetPayment)).all()] == paid_before
+            rows = s.exec(sync_select(ChecklistTask).where(
+                ChecklistTask.wedding_id == wedding_id,
+                ChecklistTask.source_ref.in_(["V1", "V2", "V3"]))).all()
+            assert sorted((t.source_ref, t.stage, t.done) for t in rows) == [
+                ("V1", "12m", False), ("V2", "1m", False), ("V3", "post", False)]
+        print("   * Load my checklist: owners and editors only; refuses wrong, reordered or "
+              "over-long files and oversized uploads without echoing them; the practice run "
+              "saves nothing; the save adds the list, traditions and Wildman BT tasks once; "
+              "nothing marked paid")
 
         forged = pyjwt.encode({"sub": "forged_admin", "role": "admin"},
                               "dev-jwt-secret-key-change-me-in-production", algorithm="HS256")
