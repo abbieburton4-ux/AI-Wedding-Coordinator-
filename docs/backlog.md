@@ -12,7 +12,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B65–B69** — the full budget tracker, five steps (PD-013). `needs-owner: approve PD-013 and calls (a)–(d)`
-2. **B64** — "Not selected" vendor status (PD-012 follow-up 2). `ready` (owner, 2026-11-09: "yes, that sounds good")
+2. **B64** — "Not selected" vendor status (PD-012 follow-up 2). `in review` (#69). Publish shows one addition: `ALTER TABLE couple_vendors ADD COLUMN not_selected BOOLEAN DEFAULT false NOT NULL`
 3. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
 4. **B56** — the Wildman BT payments on the Budget screen (the checklist tasks V1–V3 came in with the load, #56). `ready`
 5. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
