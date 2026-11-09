@@ -67,6 +67,8 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B57 — Voice calls skip the privacy check.** Found in #44 (B49): talking to Aurelia sends what is said to ElevenLabs, a different AI company, without showing it first, so PD-008 follow-up 2 (check before sending) doesn't cover it. *Fix (PD-010, ratified 2026-11-09):* turn off all of Aurelia, typed chat and voice, so it can come back later; the backend refuses assistant calls too; keep past records. *Depends on:* nothing.
 
+- **B58 — The RUNBOOK backup step doesn't work on Replit.** Found while writing the B53 steps (2026-11-09): the RUNBOOK's checklist-import backup uses `SYNC_DATABASE_URL`, which Replit's Shell doesn't set; there `DATABASE_URL` works, and the Shell always reaches the development database, not the published app's production one. *Fix:* update RUNBOOK for Replit. *Also for B14:* when the app is published, Replit offers to copy development data into production; that is when the imported checklist would carry over, and the publishing plan should cover it. If the wedding is already in production, the Shell can't reach it without pasting a secret, so a safe import route is needed first. *Depends on:* nothing.
+
 ### Housekeeping
 
 - **B13 — Stale material from the XPRIZE.** The prototype and both sales lists are gone (B6, PR #15; B37, PR #20). Left: the `.xlsx` trackers and the XPRIZE framing in `README.md`, `docs/runway.md`, `docs/strategic-memo.md` and `docs/reviews/`. *Fix:* archive or delete them (owner's call). See B40 for the prospects' first names.
