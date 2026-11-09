@@ -532,6 +532,23 @@ async def run_async_verification():
             assert own.status == "contacted"
             print("   * Missing fields: no currency, confidence or tokens invented")
 
+            # A vendor the couple ruled out stays ruled out after the AI reads a reply.
+            own.not_selected = True
+            db.add(own)
+            await db.commit()
+            mock_models.generate_content = vendor_reply(
+                {"is_available": True, "total_amount": 900, "summary": "Still free."})
+            out = await approved(run_vendor_reply_reader, db, "wedding_planning_test",
+                                 "We're still free, $900.", vendor_id="cv_test")
+            assert out["status"] == "success", out
+            await db.refresh(own)
+            assert (own.status, own.not_selected) == ("contacted", True), \
+                "the AI never changes Not selected either"
+            own.not_selected = False
+            db.add(own)
+            await db.commit()
+            print("   * Not selected: an AI reading leaves it as the couple set it")
+
             # Guardrails: nothing saved when the reading can't be trusted.
             for payload, kind in (
                 ({"total_amount": -5, "is_available": True, "summary": "?"}, "implausible_total"),
