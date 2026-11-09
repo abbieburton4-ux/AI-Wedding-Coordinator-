@@ -9,6 +9,7 @@ from app.db.models import Wedding, BudgetLine, ChecklistTask, Booking, Quote, Su
 from app.utils.checklist import STAGE_BY_KEY, STAGE_KEYS, stage_due
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
+from app.agents.privacy import send_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,8 @@ def _total_budget_text(wedding: Wedding) -> str:
 async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
     """Assembles a compact, factual snapshot of the couple's wedding for grounding."""
     budget = (await db.exec(
-        select(BudgetLine).where(BudgetLine.wedding_id == wedding.id).order_by(BudgetLine.allocated_amount.desc())
+        select(BudgetLine).where(BudgetLine.wedding_id == wedding.id)
+        .order_by(BudgetLine.allocated_amount.desc(), BudgetLine.id)
     )).all()
     # Titles only: the couple's notes on a task stay out of the prompt.
     open_tasks = (await db.exec(
@@ -58,8 +60,10 @@ async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
                                     ChecklistTask.done == False)  # noqa: E712
     )).all()
     open_tasks = sorted(open_tasks, key=lambda t: (
-        STAGE_KEYS.index(t.stage) if t.stage in STAGE_BY_KEY else 0, t.position))
-    bookings = (await db.exec(select(Booking).where(Booking.wedding_id == wedding.id))).all()
+        STAGE_KEYS.index(t.stage) if t.stage in STAGE_BY_KEY else 0, t.position, t.id))
+    # Ordered, so the text the couple check is the text that is sent (PD-008).
+    bookings = (await db.exec(select(Booking).where(Booking.wedding_id == wedding.id)
+                              .order_by(Booking.created_at, Booking.id))).all()
 
     lines: list[str] = []
     # The couple's names stay out of the prompt (PD-009, rule 3).
@@ -90,7 +94,7 @@ async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
         venues = {v.id: v for v in (await db.exec(select(Venue))).all()}
         suppliers = {s.id: s for s in (await db.exec(select(Supplier))).all()}
         quotes = (await db.exec(
-            select(Quote).where(Quote.booking_id.in_([b.id for b in bookings])).order_by(Quote.created_at.desc())
+            select(Quote).where(Quote.booking_id.in_([b.id for b in bookings])).order_by(Quote.created_at.desc(), Quote.id)
         )).all()
         latest_q: dict[str, Quote] = {}
         for q in quotes:
@@ -131,7 +135,8 @@ async def run_concierge(db: AsyncSession, wedding_id: str, message: str):
     response = None
     for attempt in range(3):
         try:
-            response = await client.aio.models.generate_content(
+            response = await send_prompt(
+                db, wedding_id, client,
                 model=model,
                 contents=prompt,
                 config=types.GenerateContentConfig(

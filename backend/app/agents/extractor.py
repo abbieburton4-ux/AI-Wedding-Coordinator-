@@ -9,6 +9,7 @@ from google.genai import types
 from app.db.models import Booking, Wedding, BudgetLine, Quote, AgentDecisionLog, Supplier, Venue
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
+from app.agents.privacy import send_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +109,8 @@ async def run_quote_extractor(db: AsyncSession, wedding_id: str, booking_id: str
     # 3. Call Gemini
     client = get_client()
     logger.info(f"Invoking {model} for quote extraction...")
-    response = await client.aio.models.generate_content(
+    response = await send_prompt(
+        db, wedding_id, client,
         model=model,
         contents=email_body,
         config=types.GenerateContentConfig(

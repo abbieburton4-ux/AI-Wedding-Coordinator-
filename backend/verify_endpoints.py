@@ -139,14 +139,38 @@ def test_api_suite():
         
         # 5. Matching endpoints
         print("5. Verifying matching triggers (P0 background tasks enqueuing)...")
+        # Each AI action first returns the text it would send and sends nothing; the
+        # couple's click repeats it with that text (PD-008 follow-up 2).
+        queued.clear()
+        weddings_module.enqueue_agent_task = _record
+        try:
+            res = c.post(f"/api/v1/weddings/{wedding_id}/match", headers=headers)
+            assert res.status_code == 202 and res.json()["needs_review"] is True, res.text
+            assert "Modern minimalist" in res.json()["preview"] and queued == []
+            venue_text = res.json()["preview"]
+            res = c.post(f"/api/v1/weddings/{wedding_id}/match", headers=headers,
+                         json={"approved_prompt": venue_text + " edited"})
+            assert res.json()["needs_review"] is True and res.json()["changed"] is True
+            assert queued == [], "a text the couple didn't see is never queued"
+            res = c.post(f"/api/v1/weddings/{wedding_id}/suppliers",
+                         json={"category": "photography"}, headers=headers)
+            assert res.json()["needs_review"] is True and queued == []
+            supplier_text = res.json()["preview"]
+        finally:
+            weddings_module.enqueue_agent_task = real_enqueue
+        print("   * Matching: the first call shows the text and queues nothing")
+
         # Venue Matching
-        res = c.post(f"/api/v1/weddings/{wedding_id}/match", headers=headers)
+        res = c.post(f"/api/v1/weddings/{wedding_id}/match", headers=headers,
+                     json={"approved_prompt": venue_text})
         assert res.status_code == 202
         assert res.json()["status"] == "pending"
         print("   * Enqueue: Venue Matcher enqueued successfully")
-        
+
         # Supplier Matching
-        res = c.post(f"/api/v1/weddings/{wedding_id}/suppliers", json={"category": "photography"}, headers=headers)
+        res = c.post(f"/api/v1/weddings/{wedding_id}/suppliers",
+                     json={"category": "photography", "approved_prompt": supplier_text},
+                     headers=headers)
         assert res.status_code == 202
         assert res.json()["status"] == "pending"
         print("   * Enqueue: Supplier Matcher (photography) enqueued successfully")
@@ -161,12 +185,39 @@ def test_api_suite():
             "/api/v1/inquiries/booking_photo_test/quote", json=quote_payload,
             headers={"Authorization": "Bearer mock-couple_2"},
         )
+        assert res.json()["needs_review"] is True, res.text
+        assert "Total price is EUR 4,500.00." in res.json()["preview"]
+        res = c.post(
+            "/api/v1/inquiries/booking_photo_test/quote",
+            json=dict(quote_payload, approved_prompt=res.json()["preview"]),
+            headers={"Authorization": "Bearer mock-couple_2"},
+        )
         assert res.status_code == 202
         assert res.json()["status"] == "pending"
         print("   * Enqueue: Quote Extractor enqueued successfully")
         res = c.post("/api/v1/inquiries/booking_photo_test/quote", json=quote_payload, headers=headers)
         assert res.status_code == 403
         print("   * Access Control: blocked quote extraction on another wedding's booking")
+
+        # A euro budget check uses the AI, so /replan shows the text first and changes
+        # nothing until the click; a dollar wedding's check needs no AI, so no review.
+        couple_2 = {"Authorization": "Bearer mock-couple_2"}
+        queued.clear()
+        weddings_module.enqueue_agent_task = _record
+        try:
+            res = c.post("/api/v1/weddings/wedding_planning_test/replan", headers=couple_2)
+            assert res.json()["needs_review"] is True and queued == [], res.text
+            assert "Create a wedding plan" in res.json()["preview"]
+            res = c.post("/api/v1/weddings/wedding_planning_test/replan", headers=couple_2,
+                         json={"approved_prompt": res.json()["preview"]})
+            assert res.json()["status"] == "pending", res.text
+            assert queued[-1][1]["approved_prompt"], "the approved text goes to the worker"
+            queued.clear()
+            res = c.post(f"/api/v1/weddings/{wedding_id}/replan", headers=headers)
+            assert "needs_review" not in res.json() and len(queued) == 1, res.text
+        finally:
+            weddings_module.enqueue_agent_task = real_enqueue
+        print("   * Replan: the AI budget check waits for the click; a check without AI doesn't")
         
         # 7. Decision Logs & Masked CSV exports
         print("7. Verifying decision logs and PII-redacted CSV exports...")
@@ -216,6 +267,50 @@ def test_api_suite():
         assert c.post(f"/api/v1/weddings/{wedding_id}/concierge", json={"message": "hi"},
                       headers=viewer_headers).status_code == 403
         print("   * Viewer: can read, blocked from edits and agent runs")
+
+        # The concierge shows the couple the exact text first, and sends only on their
+        # click, only that text (PD-008 follow-up 2). Gemini is mocked.
+        import json as _json
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock, patch
+        concierge_url = f"/api/v1/weddings/{wedding_id}/concierge"
+        question = {"message": "Can we afford a harpist?"}
+        sent_prompts = []
+
+        async def _reply(**kwargs):
+            sent_prompts.append(kwargs["contents"])
+            return SimpleNamespace(usage_metadata=None, text=_json.dumps(
+                {"reply": "Yes, it fits.", "confidence_score": 0.7}))
+
+        fake_client = MagicMock()
+        fake_client.aio.models.generate_content = _reply
+        with patch("app.agents.concierge.get_client", return_value=fake_client):
+            res = c.post(concierge_url, json=question, headers=editor_headers)
+            check = res.json()
+            assert check["needs_review"] is True and check["changed"] is False, res.text
+            assert "Can we afford a harpist?" in check["preview"] and sent_prompts == []
+            res = c.post(concierge_url, headers=editor_headers,
+                         json=dict(question, approved_prompt=check["preview"] + " Also Ann."))
+            assert res.json()["needs_review"] is True and res.json()["changed"] is True
+            assert sent_prompts == [], "a text other than the one shown is never sent"
+            assert c.post(concierge_url, headers=viewer_headers,
+                          json=dict(question, approved_prompt=check["preview"])
+                          ).status_code == 403, "a viewer can't send either"
+            res = c.post(concierge_url, headers=editor_headers,
+                         json=dict(question, approved_prompt=check["preview"]))
+            assert res.json() == {"reply": "Yes, it fits."}, res.text
+            assert sent_prompts == [check["preview"]], "the text sent is the text shown"
+        print("   * Concierge: shows the text first; the click sends exactly that text")
+
+        # The inbound-email webhook has no one to check the text, so it never sends it.
+        # (It can't parse a form here: python-multipart isn't installed, B50.)
+        import inspect
+        from app.api.v1.endpoints import webhooks as webhooks_module
+        webhook_source = inspect.getsource(webhooks_module)
+        assert not hasattr(webhooks_module, "enqueue_agent_task")
+        assert "quote-extractor" not in webhook_source and "run_quote" not in webhook_source
+        assert '"reason": "needs_review"' in webhook_source
+        print("   * Inbound email: not sent to the AI unattended")
         assert c.patch(f"/api/v1/weddings/{wedding_id}", json={"guest_count_estimate": 110},
                        headers=editor_headers).status_code == 200
         print("   * Editor: can edit")
@@ -503,6 +598,8 @@ def test_api_suite():
         calls = []
 
         async def _fake_split(db, wid, **kwargs):
+            if kwargs.get("preview_only"):
+                return {"needs_review": True, "preview": "Suggest a starting split"}
             calls.append(kwargs)
             return {"suggestion": True, "total_cents": kwargs["total_cents"],
                     "lines": [{"name": "Venue", "planned_cents": 3_000_000, "existing": True,
@@ -512,16 +609,25 @@ def test_api_suite():
                     "rationale_summary": "s"}
 
         async def _blocked_split(db, wid, **kwargs):
+            if kwargs.get("preview_only"):
+                return {"needs_review": True, "preview": "Suggest a starting split"}
             return {"status": "blocked", "error_kind": "category_whitelist"}
 
+        approve = {"approved_prompt": "Suggest a starting split"}
         budget_module.run_budget_splitter = _fake_split
         try:
             res = c.post(f"{b_url}/suggest-split", headers=headers)
+            assert res.json() == {"needs_review": True, "preview": "Suggest a starting split",
+                                  "changed": False}, res.text
+            assert calls == [], "nothing is asked of the AI before the couple's click"
+            res = c.post(f"{b_url}/suggest-split", headers=headers, json=approve)
             assert res.status_code == 200 and len(res.json()["lines"]) == 2, res.text
             assert calls[0]["total_cents"] == 4_000_000
+            assert calls[0]["approved_prompt"] == approve["approved_prompt"]
             assert sorted(calls[0]["category_names"]) == ["Florals", "Venue"]
             budget_module.run_budget_splitter = _blocked_split
-            assert c.post(f"{b_url}/suggest-split", headers=headers).status_code == 422
+            assert c.post(f"{b_url}/suggest-split", headers=headers,
+                          json=approve).status_code == 422
         finally:
             budget_module.run_budget_splitter = real_splitter
         ov = c.get(f"{b_url}/overview", headers=headers).json()

@@ -4,6 +4,7 @@ import { Icon } from "../../shared/Icon";
 import { useWedding, useAgentMatcher, useApi } from "../../api";
 import { POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from "../../api/config";
 import { useActiveWedding } from "../WeddingProvider";
+import { useReviewedRequest } from "../../api/review";
 import { formatCents } from "./budget/money";
 
 interface IntakeLog {
@@ -21,12 +22,15 @@ function formatDay(iso: string): string {
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const { activeWedding, refetch: refetchWeddings } = useActiveWedding();
+  const { activeWedding, refetch: refetchWeddings, myLevel } = useActiveWedding();
+  // Only decides what's offered; the API refuses viewers on its own (PD-002).
+  const canEdit = myLevel === "owner" || myLevel === "editor";
   const weddingId = activeWedding?.id ?? null;
 
   const { data, loading, refetch } = useWedding(weddingId);
   const { triggerVenueMatch, status: matchStatus, rationale } = useAgentMatcher(weddingId ?? "");
   const { request } = useApi();
+  const sendReviewed = useReviewedRequest();
 
   const wedding = data.wedding ?? activeWedding;
   const building = !!wedding && wedding.status === "intake";
@@ -49,6 +53,7 @@ export function Dashboard() {
   // watch the latest intake_planner decision log and turn the dead-end spinner
   // into an actionable state (guardrail warning, retry).
   const [intakeLog, setIntakeLog] = useState<IntakeLog | null>(null);
+  const [intakeLogLoaded, setIntakeLogLoaded] = useState(false);
   const [replanning, setReplanning] = useState(false);
   const replanBaselineId = useRef<string | undefined>(undefined);
   const [editingBudget, setEditingBudget] = useState(false);
@@ -60,6 +65,7 @@ export function Dashboard() {
       const logs = await request<IntakeLog[]>(`/weddings/${weddingId}/decisions`);
       const latest = logs.find((l) => l.agent_id === "intake_planner") ?? null;
       setIntakeLog(latest);
+      setIntakeLogLoaded(true);
       // Release the local replan lock once a *fresh* run has landed (new log id,
       // no longer pending), so we don't flash the old guardrail card.
       setReplanning((r) =>
@@ -98,48 +104,84 @@ export function Dashboard() {
   }, [poll, refetch, fetchIntakeLog]);
 
   // ---- Recovery actions ----
-  const replan = useCallback(
+  const [replanError, setReplanError] = useState<string | null>(null);
+  // They went back from the check: the last result is out of date, nothing is running.
+  const [heldBack, setHeldBack] = useState(false);
+
+  /** Asks for the plan update, showing the text first if it needs the AI (PD-008). */
+  const sendReplan = useCallback(
     async (force: boolean) => {
       if (!weddingId) return;
       replanBaselineId.current = intakeLog?.id;
+      setReplanError(null);
       setReplanning(true);
-      setEditingBudget(false);
       setWaited(0);
       sawBuilding.current = true;
       try {
-        await request(`/weddings/${weddingId}/replan?force=${force}`, { method: "POST" });
-        await refetchWeddings();
-      } catch {
+        const sent = await sendReviewed(`/weddings/${weddingId}/replan?force=${force}`, {}, {
+          // No "building" screen while they read; only once they click send.
+          onReview: () => setReplanning(false),
+          onSend: () => setReplanning(true),
+        });
+        if (sent === null) {
+          setReplanning(false);
+          setHeldBack(true);
+          return;
+        }
+        setHeldBack(false);
+      } catch (err) {
         setReplanning(false);
+        setReplanError(
+          err instanceof Error && !(err instanceof TypeError) && !err.message.startsWith("Request failed")
+            ? err.message
+            : "That didn't work just now, so nothing was sent. Please try again.",
+        );
       }
+      await refetchWeddings();
     },
-    [weddingId, request, intakeLog, refetchWeddings],
+    [weddingId, sendReviewed, intakeLog, refetchWeddings],
+  );
+
+  const replan = useCallback(
+    async (force: boolean) => {
+      setEditingBudget(false);
+      await sendReplan(force);
+    },
+    [sendReplan],
   );
 
   const saveBudgetAndReplan = useCallback(async () => {
     if (!weddingId) return;
-    replanBaselineId.current = intakeLog?.id;
-    setReplanning(true);
     setEditingBudget(false);
-    setWaited(0);
-    sawBuilding.current = true;
+    setReplanError(null);
     try {
       await request(`/weddings/${weddingId}`, {
         method: "PATCH",
         body: JSON.stringify({ budget_total: newBudget }),
       });
-      await request(`/weddings/${weddingId}/replan?force=false`, { method: "POST" });
-      await refetchWeddings();
-      await refetch();
-    } catch {
-      setReplanning(false);
+    } catch (err) {
+      setReplanError(err instanceof Error ? err.message : "Your new budget wasn't saved. Please try again.");
+      return;
     }
-  }, [weddingId, request, intakeLog, newBudget, refetchWeddings, refetch]);
+    await sendReplan(false);
+    await refetch();
+  }, [weddingId, request, sendReplan, newBudget, refetch]);
 
-  const intakeBlocked = building && !replanning && intakeLog?.status === "blocked_by_guardrail";
-  const intakeFailed = building && !replanning && intakeLog?.status === "error";
+  const intakeBlocked =
+    building && !replanning && !heldBack && intakeLog?.status === "blocked_by_guardrail";
+  const intakeFailed = building && !replanning && !heldBack && intakeLog?.status === "error";
   const slow = waited >= POLL_TIMEOUT_MS;
   const intakeStalled = building && !replanning && !intakeBlocked && !intakeFailed && slow;
+  // Nothing is running: a budget check that needs the AI waits for the couple to see
+  // what it would send and click to send it (PD-008), so offer that, not a spinner.
+  const intakeWaiting =
+    building && !replanning && !intakeBlocked && !intakeFailed && intakeLogLoaded &&
+    (heldBack || intakeLog?.status !== "pending");
+  const errorLine = replanError && (
+    <p role="alert" className="text-sm text-error max-w-md mx-auto mb-4">
+      {replanError}
+    </p>
+  );
 
   const shell = (children: ReactNode) => (
     <main className="pt-24 pb-32 px-margin-mobile md:pl-[calc(18rem+24px)] md:pr-margin-desktop max-w-[1120px] mx-auto">
@@ -166,6 +208,7 @@ export function Dashboard() {
           {intakeLog?.error_message ||
             "The budget looks low for this guest count and region against typical Irish market rates."}
         </p>
+        {errorLine}
 
         {editingBudget ? (
           <div className="flex flex-wrap items-end gap-3 mb-2">
@@ -233,6 +276,7 @@ export function Dashboard() {
         <p className="text-body-md text-on-surface-variant max-w-md mx-auto mb-6">
           The AI coordinator hit a temporary problem. Your details are saved — you can try again now.
         </p>
+        {errorLine}
         <button
           type="button"
           onClick={() => replan(false)}
@@ -240,6 +284,34 @@ export function Dashboard() {
         >
           Try again
         </button>
+      </div>,
+    );
+  }
+
+  // ---- The budget check is ready, waiting for the couple's click ----
+  if (intakeWaiting) {
+    return shell(
+      <div className="bg-wedding-white custom-shadow rounded-[3rem] p-10 border border-outline-variant/10 max-w-2xl mx-auto mt-8 text-center">
+        <Icon name="savings" size={32} className="text-primary mb-4 mx-auto" />
+        <h1 className="font-headline-sm text-headline-sm text-on-surface mb-2">
+          Ready to update your plan
+        </h1>
+        <p className="text-body-md text-on-surface-variant max-w-md mx-auto mb-6">
+          Your wedding details are saved. If updating the plan needs the AI, you'll first see
+          exactly what would be sent, and nothing goes until you say so.
+        </p>
+        {errorLine}
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={() => replan(false)}
+            className="bg-primary text-on-primary px-8 py-4 rounded-full font-button-text tracking-widest uppercase hover:opacity-90 transition-opacity"
+          >
+            Update my plan
+          </button>
+        ) : (
+          <p className="text-sm text-on-surface-variant">One of the couple can update it.</p>
+        )}
       </div>,
     );
   }

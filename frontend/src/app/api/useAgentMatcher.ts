@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { useApi } from "./useApi";
+import { useReviewedRequest } from "./review";
 import { POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from "./config";
 
 export type AgentStatus =
@@ -30,6 +31,7 @@ interface DecisionLog {
  */
 export function useAgentMatcher(weddingId: string) {
   const { request } = useApi();
+  const sendReviewed = useReviewedRequest();
   const [status, setStatus] = useState<AgentStatus>("idle");
   const [rationale, setRationale] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -53,7 +55,16 @@ export function useAgentMatcher(weddingId: string) {
     startTimeRef.current = Date.now();
 
     try {
-      await request(`/weddings/${weddingId}/match`, { method: "POST" });
+      // Shows the couple what goes to the AI first; nothing is sent until they click (PD-008).
+      const sent = await sendReviewed(`/weddings/${weddingId}/match`, {}, {
+        onReview: () => setStatus("idle"),
+        onSend: () => setStatus("running"),
+      });
+      if (sent === null) {
+        setStatus("idle");
+        setRationale("");
+        return;
+      }
       // On Replit the agent runs inside that request, so the time limit only
       // starts once it has returned.
       startTimeRef.current = Date.now();
@@ -108,7 +119,7 @@ export function useAgentMatcher(weddingId: string) {
       setStatus("error");
       setErrorMsg(err.message);
     }
-  }, [weddingId, request, cleanup]);
+  }, [weddingId, request, sendReviewed, cleanup]);
 
   const triggerSupplierMatch = useCallback(
     async (category: string) => {
@@ -120,10 +131,15 @@ export function useAgentMatcher(weddingId: string) {
       startTimeRef.current = Date.now();
 
       try {
-        await request(`/weddings/${weddingId}/suppliers`, {
-          method: "POST",
-          body: JSON.stringify({ category }),
+        const sent = await sendReviewed(`/weddings/${weddingId}/suppliers`, { category }, {
+          onReview: () => setStatus("idle"),
+          onSend: () => setStatus("running"),
         });
+        if (sent === null) {
+          setStatus("idle");
+          setRationale("");
+          return;
+        }
         startTimeRef.current = Date.now();
 
         pollRef.current = setInterval(async () => {
@@ -180,7 +196,7 @@ export function useAgentMatcher(weddingId: string) {
         setErrorMsg(err.message);
       }
     },
-    [weddingId, request, cleanup]
+    [weddingId, request, sendReviewed, cleanup]
   );
 
   const reset = useCallback(() => {
