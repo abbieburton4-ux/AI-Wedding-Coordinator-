@@ -16,7 +16,7 @@ Item ids are `<stage id>-<position>` (for example `12m-1`), and the order is the
 
 | # | Stage | Task | Note |
 | :- | :- | :- | :- |
-| J1 | 12 Months Before | Check your date with your rabbi or officiant against Shabbat and the Jewish holidays | The provisional date, 21 Aug 2027, is a Saturday (see `wedding.md`) |
+| J1 | 12 Months Before | Check your date with your rabbi or officiant against Shabbat and the Jewish holidays | The date, 23 Oct 2027, is a Saturday and falls on Shemini Atzeret / Simchat Torah (see `wedding.md`) |
 | J2 | 11 Months Before | Find your rabbi or officiant, and ask what they need from you (for example a meeting before the wedding, or rules about who can be a witness) | Combined with the owner's list's "find the right person to officiate" task |
 | J3 | 10 Months Before | Decide which ceremony traditions you're including (circling, the seven blessings, breaking the glass) | Owner, 2026-11-05: "you can remove bedeken and yichud as examples" |
 | J4 | 8 Months Before | Choose and order your ketubah (marriage contract): text, artist and wording | Custom ketubahs can take months |

@@ -63,6 +63,8 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B48 — The checklist always says "Dates are provisional".** Found in PR #32 (B24). PD-007 doesn't say whether the note goes once the date is final. *Fix (decided, owner, 2026-11-05: "yes to the provisional dates note"):* a "This date is confirmed" switch for owners and editors; the note goes when it's on, and comes back if it's switched off.
 
+- **B54 — The setup form still suggests 21 August 2027.** The owner changed the date to 23 October 2027 (2026-11-09, `wedding.md`), but the setup form's pre-filled date (`Intake.tsx`, PD-009) is still the old one. *Why it matters:* a wedding created from the form would start on the wrong date, and every checklist due date counts back from it. *Fix:* pre-fill 23 October 2027; if the wedding already exists, the couple change the date in the app (PD-007), and agents don't write to the live database. *Depends on:* the owner confirming the year (typed "10/23/17", read as 2027).
+
 ### Housekeeping
 
 - **B13 — Stale material from the XPRIZE.** The prototype and both sales lists are gone (B6, PR #15; B37, PR #20). Left: the `.xlsx` trackers and the XPRIZE framing in `README.md`, `docs/runway.md`, `docs/strategic-memo.md` and `docs/reviews/`. *Fix:* archive or delete them (owner's call). See B40 for the prospects' first names.
