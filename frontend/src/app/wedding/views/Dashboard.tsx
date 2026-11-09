@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { Icon } from "../../shared/Icon";
-import { useWedding, useAgentMatcher, useApi } from "../../api";
+import { useWedding, useApi } from "../../api";
 import { POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from "../../api/config";
 import { useActiveWedding } from "../WeddingProvider";
 import { useReviewedRequest } from "../../api/review";
@@ -28,16 +28,11 @@ export function Dashboard() {
   const weddingId = activeWedding?.id ?? null;
 
   const { data, loading, refetch } = useWedding(weddingId);
-  const { triggerVenueMatch, status: matchStatus, rationale } = useAgentMatcher(weddingId ?? "");
   const { request } = useApi();
   const sendReviewed = useReviewedRequest();
 
   const wedding = data.wedding ?? activeWedding;
   const building = !!wedding && wedding.status === "intake";
-  const isRunningMatch = matchStatus === "running";
-
-  const venues = data.bookings.filter((b) => b.venue_id);
-  const suppliers = data.bookings.filter((b) => b.supplier_id);
 
   // The "what do I do next?" answer: the first unfinished checklist tasks, from the
   // groups open by default ("Catch up" and the current stage), else from the top.
@@ -80,8 +75,8 @@ export function Dashboard() {
   const [waited, setWaited] = useState(0);
   const sawBuilding = useRef(false);
   if (building) sawBuilding.current = true;
-  // Vendor matching no longer runs on its own at setup (PD-003, B11), so there's no
-  // shortlist to wait for here.
+  // Vendor matching never runs at setup (PD-003, PD-012), so there are no vendors
+  // to wait for here.
   const poll =
     !!weddingId &&
     (building || replanning || (sawBuilding.current && waited < POLL_TIMEOUT_MS * 2));
@@ -346,7 +341,7 @@ export function Dashboard() {
     );
   }
 
-  // ---- The live, agent-built plan ----
+  // ---- The live plan ----
   const summary = [
     { label: "Budget lines", value: data.budgetLines.length, icon: "payments", to: "/wedding/budget" },
     {
@@ -355,8 +350,6 @@ export function Dashboard() {
       icon: "checklist",
       to: "/wedding/checklist",
     },
-    { label: "Venues shortlisted", value: venues.length, icon: "storefront", to: "/wedding/vendors" },
-    { label: "Suppliers shortlisted", value: suppliers.length, icon: "favorite", to: "/wedding/vendors" },
   ];
 
   return (
@@ -379,18 +372,6 @@ export function Dashboard() {
             <span className="px-3 py-1.5 bg-primary/10 text-primary rounded-full text-xs font-bold uppercase tracking-wider">
               {wedding.status}
             </span>
-          </div>
-        </section>
-      )}
-
-      {isRunningMatch && (
-        <section className="mb-6">
-          <div className="bg-primary-container/20 border border-primary-container/40 rounded-[2rem] p-5 flex items-start gap-3">
-            <Icon name="psychology" size={22} className="text-primary animate-pulse mt-0.5" />
-            <div className="flex-1">
-              <p className="font-button-text text-primary text-sm mb-1">AI agent working</p>
-              <p className="font-body-md text-on-surface-variant text-sm">{rationale}</p>
-            </div>
           </div>
         </section>
       )}
@@ -434,8 +415,8 @@ export function Dashboard() {
         </section>
       )}
 
-      {/* What the agents produced — live counts */}
-      <section className="mb-10 grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Live counts */}
+      <section className="mb-10 grid grid-cols-2 gap-4">
         {summary.map((s) => (
           <button
             key={s.label}
@@ -450,39 +431,6 @@ export function Dashboard() {
             <p className="text-sm text-on-surface-variant mt-1">{s.label}</p>
           </button>
         ))}
-      </section>
-
-      <section className="mb-12">
-        <header className="flex items-center justify-between mb-6">
-          <h2 className="font-headline-sm text-headline-sm text-on-surface">Venue shortlist</h2>
-          <span className="bg-soft-clay/10 text-soft-clay font-label-caps text-[10px] px-2 py-1 rounded-full uppercase tracking-tighter">
-            AI curated
-          </span>
-        </header>
-        <div className="bg-wedding-white custom-shadow rounded-[3rem] p-6 border border-outline-variant/10">
-          <p className="font-body-md text-on-surface-variant mb-6">
-            {venues.length > 0
-              ? `Your coordinator shortlisted ${venues.length} ${venues.length === 1 ? "venue" : "venues"} that fit your region, guest count, and budget.`
-              : "No venues shortlisted yet — run the matcher to curate options that fit your brief."}
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => navigate("/wedding/vendors")}
-              className="flex-1 min-w-[160px] bg-primary text-on-primary py-4 rounded-full font-button-text tracking-widest uppercase hover:opacity-90 transition-opacity"
-            >
-              Review all
-            </button>
-            <button
-              type="button"
-              disabled={isRunningMatch}
-              onClick={() => triggerVenueMatch()}
-              className="px-6 bg-primary/10 text-primary py-4 rounded-full font-button-text tracking-widest uppercase hover:bg-primary/20 transition-colors disabled:opacity-50"
-            >
-              {isRunningMatch ? "Matching…" : venues.length > 0 ? "Re-match" : "Match venues"}
-            </button>
-          </div>
-        </div>
       </section>
     </main>
   );
