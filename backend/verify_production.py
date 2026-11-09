@@ -149,6 +149,58 @@ def check_startup_migrations():
             settings.SYNC_DATABASE_URL, session_module.sync_engine = prev_url, prev_engine
 
 
+def check_db_status():
+    """The Replit run script's pre-serve step reports a database behind head (B59),
+    brings it to head, and refuses migrations aimed at a different database."""
+    import app.db.session as session_module
+    import db_status
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import create_engine
+
+    here = Path(__file__).resolve().parent
+    cfg = Config(str(here / "alembic.ini"))
+    cfg.set_main_option("script_location", str(here / "migrations"))
+    with tempfile.TemporaryDirectory() as tmp:
+        prev = (settings.DATABASE_URL, settings.SYNC_DATABASE_URL, session_module.sync_engine)
+        try:
+            settings.DATABASE_URL = f"sqlite+aiosqlite:///{tmp}/dev.db"
+            settings.SYNC_DATABASE_URL = f"sqlite:///{tmp}/dev.db"
+            session_module.sync_engine = create_engine(settings.SYNC_DATABASE_URL)
+
+            code, message = db_status.database_status()
+            assert code == db_status.OTHER and "no migration record" in message, message
+
+            # A database one migration behind, as the workspace was before B59's fix.
+            command.upgrade(cfg, "0005")
+            code, message = db_status.database_status()
+            assert code == db_status.BEHIND and "0005" in message, message
+
+            code, message = db_status.upgrade()
+            assert code == db_status.AT_HEAD, message
+            code, _ = db_status.database_status()
+            assert code == db_status.AT_HEAD
+
+            # A revision the code doesn't know (the code is older than the database).
+            with session_module.sync_engine.begin() as conn:
+                conn.exec_driver_sql("UPDATE alembic_version SET version_num = 'ffff'")
+            code, message = db_status.database_status()
+            assert code == db_status.OTHER and "doesn't know" in message, message
+
+            # The same Postgres database written two ways is still the same one.
+            settings.DATABASE_URL = "postgresql+asyncpg://u@db.example:5432/app"
+            settings.SYNC_DATABASE_URL = "postgres://u@db.example/app"
+            assert db_status.same_database()
+            settings.DATABASE_URL = f"sqlite+aiosqlite:///{tmp}/dev.db"
+
+            # Migrations aimed at another database than the one the app serves.
+            settings.SYNC_DATABASE_URL = f"sqlite:///{tmp}/other.db"
+            for result in (db_status.database_status(), db_status.upgrade()):
+                assert result[0] == db_status.OTHER and "different database" in result[1]
+        finally:
+            settings.DATABASE_URL, settings.SYNC_DATABASE_URL, session_module.sync_engine = prev
+
+
 def check_webhook_never_sends_unattended():
     """The inbound-email webhook has no one to check the text before it goes to the
     AI, so it never runs the quote extractor (PD-008 follow-up 2). It answers 200 so
@@ -202,5 +254,6 @@ if __name__ == "__main__":
     asyncio.run(check_execution())
     check_static_and_auth()
     check_startup_migrations()
+    check_db_status()
     check_webhook_never_sends_unattended()
     print("--- PRODUCTION CONFIGURATION AND EXECUTION VERIFICATION PASSED ---")

@@ -29,4 +29,9 @@ if not os.environ.get("ACCESS_BOOTSTRAP_EMAILS"):
 PY
 
 cd backend
+# Bring this environment's own database to the latest migration before serving,
+# and stop if it isn't there. In the workspace this keeps the development database
+# level with the code, so Publish never proposes undoing a migration (B59). The
+# app's startup runs the same upgrade again; on an up-to-date database it's a no-op.
+python db_status.py upgrade
 exec python -m uvicorn app.production:app --host 0.0.0.0 --port "${PORT:-5000}"
