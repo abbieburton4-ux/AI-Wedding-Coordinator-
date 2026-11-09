@@ -30,6 +30,8 @@ export interface ChecklistGroup {
 export interface Checklist {
   wedding_date: string | null;
   date_set_on: string | null;
+  /** The couple's "This date is confirmed" switch (B48); false means provisional. */
+  date_confirmed: boolean;
   today: string;
   done: number;
   total: number;

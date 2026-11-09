@@ -63,9 +63,12 @@ async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
 
     lines: list[str] = []
     # The couple's names stay out of the prompt (PD-009, rule 3).
+    # Only the couple's own switch makes the date final (B48); until then it's provisional.
+    provisional = "" if wedding.wedding_date_confirmed else " (provisional)"
+    date_text = f"{wedding.wedding_date}{provisional}" if wedding.wedding_date else "TBD"
     lines.append(
         f"Wedding: {wedding.guest_count_estimate} guests · {wedding.ceremony_type} · {wedding.region} · "
-        f"date {wedding.wedding_date or 'TBD'}."
+        f"date {date_text}."
     )
     lines.append(f"Total budget: {_total_budget_text(wedding)}. Plan status: {wedding.status}.")
 
@@ -80,7 +83,7 @@ async def _build_context(db: AsyncSession, wedding: Wedding) -> str:
             stage = STAGE_BY_KEY.get(t.stage)
             when = stage.label if stage else "no stage"
             if stage and wedding.wedding_date:
-                when += f", due {stage_due(wedding.wedding_date, stage)} (provisional)"
+                when += f", due {stage_due(wedding.wedding_date, stage)}{provisional}"
             lines.append(f"  - {t.title} ({when})")
 
     if bookings:

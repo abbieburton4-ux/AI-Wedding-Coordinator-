@@ -30,7 +30,7 @@ def main() -> None:
     parser.add_argument("--wedding", required=True)
     parser.add_argument("--file", required=True, help="the owner's checklist file")
     parser.add_argument("--wedding-date", type=datetime.date.fromisoformat,
-                        help="set the (provisional) wedding date the due dates count from")
+                        help="set the wedding date the due dates count from")
     parser.add_argument("--apply", action="store_true", help="save the import")
     args = parser.parse_args()
 
@@ -49,7 +49,12 @@ def main() -> None:
             session.rollback()
             raise SystemExit(f"Refused: {e}")
 
-        print(f"Wedding date: {report.wedding_date or 'not set'}")
+        if report.wedding_date is None:
+            print("Wedding date: not set")
+        else:
+            # Follows the couple's "This date is confirmed" switch (B48).
+            state = "confirmed" if wedding.wedding_date_confirmed else "provisional"
+            print(f"Wedding date: {report.wedding_date} ({state})")
         print(f"Owner's list tasks added: {report.owner_tasks}")
         print(f"Jewish tradition tasks added: {report.tradition_tasks}")
         print(f"AI timeline tasks added: {len(report.ai_added)}")

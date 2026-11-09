@@ -31,7 +31,9 @@ const optional = <span className="text-on-surface-variant/60">(optional)</span>;
 
 export function Intake() {
   const { request, loading, error } = useApi();
-  const { refetch, setActiveWedding } = useActiveWedding();
+  // The date hint follows the couple's "This date is confirmed" switch (B48). The form
+  // normally runs before any wedding exists, so in practice it says "provisional".
+  const { activeWedding, refetch, setActiveWedding } = useActiveWedding();
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -150,7 +152,9 @@ export function Intake() {
             <input id="intake-date" className={inputClass} type="date" aria-describedby="intake-date-hint"
               value={form.wedding_date} onChange={(e) => set("wedding_date", e.target.value)} />
             <p id="intake-date-hint" className={hintClass}>
-              Provisional, you can change this any time.
+              {activeWedding?.wedding_date_confirmed
+                ? "You can change this any time."
+                : "Provisional, you can change this any time."}
             </p>
           </div>
 

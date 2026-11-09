@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
 import { Icon } from "../../shared/Icon";
+import { Switch } from "../../components/ui/switch";
 import { useApi, USE_FASTAPI_BACKEND } from "../../api";
 import { useActiveWedding } from "../WeddingProvider";
 import { formatDay, formatInstantDay } from "./budget/money";
@@ -43,7 +44,7 @@ function visibleTasks(group: ChecklistGroup, filter: Filter): ChecklistTask[] {
  * editors get controls, and the API refuses changes from anyone else.
  */
 export function Checklist() {
-  const { activeWedding, myLevel } = useActiveWedding();
+  const { activeWedding, myLevel, refetch: refetchWeddings } = useActiveWedding();
   const weddingId = activeWedding?.id ?? null;
   const { request } = useApi();
   const base = `/weddings/${weddingId}/checklist`;
@@ -138,7 +139,8 @@ export function Checklist() {
 
   return shell(
     <>
-      <DateCard base={base} data={data} canEdit={canEdit} run={run} request={request} busy={busy} />
+      <DateCard base={base} data={data} canEdit={canEdit} run={run} request={request} busy={busy}
+        onConfirmedSaved={refetchWeddings} />
 
       {error && <p role="alert" className="mb-6 text-sm text-error">{error}</p>}
 
@@ -223,11 +225,15 @@ export function Checklist() {
 // ---- The wedding date ------------------------------------------------------------------
 
 function DateCard({
-  base, data, canEdit, run, request, busy,
-}: { base: string; data: ChecklistData; canEdit: boolean; run: Run; request: Req; busy: boolean }) {
+  base, data, canEdit, run, request, busy, onConfirmedSaved,
+}: {
+  base: string; data: ChecklistData; canEdit: boolean; run: Run; request: Req; busy: boolean;
+  onConfirmedSaved: () => Promise<void>;
+}) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(data.wedding_date ?? "");
   const id = useId();
+  const confirmedId = useId();
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -243,9 +249,36 @@ function DateCard({
           <p className="text-xs text-on-surface-variant">Wedding date</p>
           <p className="font-headline-sm text-headline-sm text-on-surface">{formatDay(data.wedding_date)}</p>
           <p className="text-sm text-on-surface-variant mt-1 flex items-center gap-1">
-            <Icon name="info" size={16} />
-            Dates are provisional. Every due date moves if you change the wedding date.
+            <Icon name={data.date_confirmed ? "event_available" : "info"} size={16} />
+            {data.date_confirmed
+              ? "Your date is confirmed. If it ever changes, every due date moves with it."
+              : "Dates are provisional. Every due date moves if you change the wedding date."}
           </p>
+          <div className="mt-3 flex items-center gap-3">
+            <Switch
+              id={confirmedId}
+              checked={data.date_confirmed}
+              // Viewers see the state; only owners and editors can change it (the API
+              // checks too). Not disabled while saving, so keyboard focus stays put.
+              disabled={!canEdit}
+              aria-busy={busy}
+              onCheckedChange={(confirmed) => {
+                if (busy) return;
+                run(async () => {
+                  await request(`${base}/date-confirmed`, json("PUT", { confirmed }));
+                  // The setup form's date hint reads the switch from the wedding itself.
+                  await onConfirmedSaved();
+                });
+              }}
+              className={focusRing}
+            />
+            <label
+              htmlFor={confirmedId}
+              className={`text-sm text-on-surface ${canEdit ? "cursor-pointer" : ""}`}
+            >
+              This date is confirmed
+            </label>
+          </div>
         </>
       ) : (
         <p className="text-on-surface">

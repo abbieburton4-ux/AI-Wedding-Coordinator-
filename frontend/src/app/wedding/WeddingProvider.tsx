@@ -20,6 +20,8 @@ export interface WeddingSummary {
   budget_total_cents?: number | null;
   guest_count_estimate: number;
   wedding_date?: string;
+  /** The couple's "This date is confirmed" switch (B48); false means provisional. */
+  wedding_date_confirmed?: boolean;
 }
 
 interface WeddingContextValue {
