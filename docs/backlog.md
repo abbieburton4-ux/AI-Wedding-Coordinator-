@@ -13,23 +13,22 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
 2. **B53** — the live checklist is empty until the one-time import of the owner's list runs. The wedding is on the published app (production database), which the Shell can\'t reach safely. `ready` (PD-011, ratified 2026-11-09): a one-time "Load my checklist" step in the app, for owners and editors, which also adds the Wildman BT tasks V1–V3 (B56)
-3. **B57** — voice calls with Aurelia send what is said to ElevenLabs without a preview (found in #44, B49). Owner, 2026-11-09: "you can turn off all of aurelia" (PD-010, ratified): turn off the typed chat and voice. `in review` (#54)
-4. **B56** — put the venue's payment dates into the app: tasks V1–V3 on the checklist and the Wildman BT payments on the budget (owner, 2026-11-09). `ready`
-5. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
-6. **B44** — move the other parts that still read the old euro budget lines to the new budget. `ready`
-7. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
-8. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-9. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-10. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
-11. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
-12. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
-13. **B34** — database-level guard against the same email being added twice. `ready`
-14. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
-15. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
-16. **B8** — record missing token counts as empty, not 0. `ready`
-17. **B17** — stop tracking the test database files. `ready`
-18. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch and the B49 check-before-sending rule (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
-19. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
+3. **B56** — put the venue's payment dates into the app: tasks V1–V3 on the checklist and the Wildman BT payments on the budget (owner, 2026-11-09). `ready`
+4. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
+5. **B44** — move the other parts that still read the old euro budget lines to the new budget. `ready`
+6. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
+7. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+8. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
+9. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
+10. **B19** — guest planning: list, food, seating. `needs-owner: guest-planning scope PD, to be proposed`
+11. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+12. **B34** — database-level guard against the same email being added twice. `ready`
+13. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+14. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
+15. **B8** — record missing token counts as empty, not 0. `ready`
+16. **B17** — stop tracking the test database files. `ready`
+17. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch and the B49 check-before-sending rule (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
+18. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
 
 ## Open
 
@@ -64,8 +63,6 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B11 — Ireland-only catalogue, but the wedding is in the US.** The regions (`utils/constants.py`), EUR and the vendor catalogue (`seed_data_real.py`) are all Irish. `wedding.md` now puts the wedding in Chicago, IL, United States (owner, 2026-11-04), so none of the 25 venues or 26 suppliers, and none of the regions, apply. The intake planner's budget logic assumes Irish pricing. *Why it matters:* venue and supplier matching can't recommend anything usable for this wedding. If it ran as it is, it would suggest Irish vendors. *Fix:* engineering change to raise, approach not yet decided. Covers regions, catalogue (cited Chicago-area vendors via `add-vendors`), and currency. The app currently assumes EUR everywhere, but the couple want amounts in US dollars (`wedding.md`, owner, 2026-11-04). Any new money fields use integer cents or `Decimal` (AGENTS.md rule 4). The couple prefer Chicago vendors, and don't want euro quotes converted (owner, 2026-11-05: "no need for the conversion as chicago vendors would be preferred"). *Depends on:* a product decision on how to handle the catalogue, to be proposed. The venue status (shortlist being visited, not booked) suggests Chicago suppliers matter more than venues. *Ranking:* the currency part ranks with B23 (budgeting is must-have 1). The catalogue part ranks below the must-haves. *Follow-up from #39 (B51):* the AI budget check is built on Irish euro prices, so it's switched off for this wedding until it has US price rules.
 
-
-- **B57 — Voice calls skip the privacy check.** Found in #44 (B49): talking to Aurelia sends what is said to ElevenLabs, a different AI company, without showing it first, so PD-008 follow-up 2 (check before sending) doesn't cover it. *Fix (PD-010, ratified 2026-11-09):* turn off all of Aurelia, typed chat and voice, so it can come back later; the backend refuses assistant calls too; keep past records. *Depends on:* nothing.
 
 - **B58 — The RUNBOOK backup step doesn't work on Replit.** Found while writing the B53 steps (2026-11-09): the RUNBOOK's checklist-import backup uses `SYNC_DATABASE_URL`, which Replit's Shell doesn't set; there `DATABASE_URL` works, and the Shell always reaches the development database, not the published app's production one. *Fix:* update RUNBOOK for Replit. *Also for B14:* when the app is published, Replit offers to copy development data into production; that is when the imported checklist would carry over, and the publishing plan should cover it. If the wedding is already in production, the Shell can't reach it without pasting a secret, so a safe import route is needed first. *Depends on:* nothing.
 
@@ -108,6 +105,7 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-09 | **B57** — Aurelia (typed chat and voice) turned off per PD-010; the app refuses assistant calls; nothing deleted, can come back. The ElevenLabs voice agent can also be turned off in the owner's ElevenLabs account | #54 |
 | 2026-11-09 | **B49** — every AI feature shows the cleaned text and sends only on a click; known names removed automatically; app-inbox emails no longer go to the AI | #44 |
 | 2026-11-09 | **B48** — "This date is confirmed" switch on the Checklist; when on, "provisional" goes from all four places. Starts off; the couple turn it on. #48 was a duplicate, closed | #49 |
 | 2026-11-09 | **B54** — the setup form pre-fills the final date, 23 October 2027; the couple change an existing wedding's date on the Checklist screen | #46 |
