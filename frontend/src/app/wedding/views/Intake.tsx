@@ -10,7 +10,7 @@ const DEFAULTS = {
   place: "Chicago, IL, United States",
   ceremony_type: "Jewish",
   guest_count_estimate: 225,
-  wedding_date: "2027-08-21",
+  wedding_date: "2027-10-23",
 };
 
 const CEREMONY_TYPES = [
