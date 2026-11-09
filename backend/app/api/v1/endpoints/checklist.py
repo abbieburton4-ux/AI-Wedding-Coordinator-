@@ -6,13 +6,20 @@ change the wedding date or mark it confirmed. Ticking a task changes nothing els
 payment is marked paid and no booking confirmed (rule 4), and nothing here contacts
 anyone (rule 1).
 Due dates, "catch up" and "overdue" come from ``app.utils.checklist``.
+
+"Load my checklist" (PD-011) runs the one-off import from ``app.utils.checklist_import``
+on the owner's file, picked in the browser: a practice run first that saves nothing, and
+the real run only on a second click. The file's text is used only to build the rows. It
+isn't kept, logged or sent to the AI.
 """
 import datetime
+import json
 from typing import List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -21,6 +28,9 @@ from app.api.v1.endpoints.auth import get_current_user
 from app.db.models import ChecklistTask, User, utcnow
 from app.db.session import get_db
 from app.utils import checklist as rules
+from app.utils.checklist_import import (
+    FILE_MAX_CHARS, ImportRefused, import_checklist, parse_owner_list,
+)
 
 router = APIRouter()
 
@@ -91,7 +101,22 @@ class ChecklistOut(BaseModel):
     done: int
     total: int
     overdue: int
+    # Whether the one-off "Load my checklist" import has run (PD-011).
+    imported: bool
     groups: List[GroupOut]
+
+
+class ImportOut(BaseModel):
+    """What the import added, or would add on a practice run. Counts only: no task text
+    from the file comes back."""
+    saved: bool
+    wedding_date: Optional[datetime.date]
+    owner_tasks: int
+    tradition_tasks: int
+    venue_tasks: int
+    ai_added: int
+    ai_skipped: int
+    timeline_rows_removed: int
 
 
 # --- Helpers --------------------------------------------------------------------------
@@ -177,6 +202,7 @@ async def _checklist(db: AsyncSession, wedding) -> ChecklistOut:
         date_confirmed=wedding.wedding_date_confirmed, today=today,
         done=sum(g.done for g in groups), total=sum(g.total for g in groups),
         overdue=sum(1 for g in groups for t in g.tasks if t.label == "overdue"),
+        imported=wedding.checklist_imported_at is not None,
         groups=groups,
     )
 
@@ -192,6 +218,40 @@ async def _one(db: AsyncSession, wedding, row: ChecklistTask) -> TaskOut:
 
 async def _editor(db: AsyncSession, wedding_id: str, user: User):
     return await require_wedding_access(db, wedding_id, user, "editor")
+
+
+def _raise_if_loaded_twice(error: IntegrityError) -> None:
+    """Another load got there first: the unique source_ref per wedding stops a double
+    load. Any other integrity error is a bug, so it isn't dressed up as this one."""
+    if "source_ref" in str(error.orig):
+        raise HTTPException(status_code=409, detail="Your checklist is already loaded")
+
+
+# The JSON around the file's text, with room for escaping; the text itself is checked
+# against FILE_MAX_CHARS.
+IMPORT_BODY_MAX_BYTES = 4 * FILE_MAX_CHARS + 1024
+
+
+async def _import_body(request: Request) -> tuple:
+    """The file's text and the "save" flag, read without holding more than the limit.
+
+    Read by hand rather than through a Pydantic model so that a refusal never echoes
+    the file back in a validation error.
+    """
+    chunks, size = [], 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > IMPORT_BODY_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="The file is too big to be the checklist")
+        chunks.append(chunk)
+    try:
+        body = json.loads(b"".join(chunks).decode("utf-8"))
+    except (UnicodeDecodeError, ValueError, RecursionError):
+        raise HTTPException(status_code=422, detail="The file couldn't be read as text")
+    if not isinstance(body, dict) or not isinstance(body.get("text"), str) \
+            or not isinstance(body.get("apply"), bool):
+        raise HTTPException(status_code=422, detail="Send the file's text and whether to save")
+    return body["text"], body["apply"]
 
 
 # --- Routes ---------------------------------------------------------------------------
@@ -326,3 +386,48 @@ async def remove_task(
     await db.delete(row)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{wedding_id}/checklist/import", response_model=ImportOut)
+async def import_owner_checklist(
+    wedding_id: str, request: Request,
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Loads the owner's checklist file once (PD-011), with the same checks as
+    ``manage_checklist.py``: the stages must match, in order; it runs only once; the
+    AI timeline needs a wedding date. ``apply: false`` is the practice run: the whole
+    import runs and is then rolled back. ``apply: true`` saves it.
+
+    Counts only come back. The file's text isn't stored anywhere but the new tasks.
+    """
+    wedding = await _editor(db, wedding_id, current_user)
+    text, apply = await _import_body(request)
+    if wedding.checklist_imported_at is not None:
+        raise HTTPException(status_code=409, detail="Your checklist is already loaded")
+    today = _today()
+    try:
+        owner_list = parse_owner_list(text)
+        report = await db.run_sync(
+            lambda session: import_checklist(session, wedding, owner_list, None, today=today))
+    except ImportRefused as e:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    except IntegrityError as e:
+        await db.rollback()
+        _raise_if_loaded_twice(e)
+        raise
+    if apply:
+        try:
+            await db.commit()
+        except IntegrityError as e:
+            await db.rollback()
+            _raise_if_loaded_twice(e)
+            raise
+    else:
+        await db.rollback()
+    return ImportOut(
+        saved=apply, wedding_date=report.wedding_date, owner_tasks=report.owner_tasks,
+        tradition_tasks=report.tradition_tasks, venue_tasks=report.venue_tasks,
+        ai_added=len(report.ai_added), ai_skipped=len(report.ai_skipped),
+        timeline_rows_removed=report.timeline_rows_removed,
+    )

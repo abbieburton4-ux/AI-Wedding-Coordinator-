@@ -99,6 +99,19 @@ TRADITIONS = (
 # The owner's-list item that J2 takes the place of.
 REPLACED_BY_J2 = "11m-3"
 
+# The Wildman BT contract's payment dates (docs/product/checklist-list.md, part 3;
+# PD-011), added by the same import. The fixed dates are in the wording because the
+# contract's deadlines don't follow the stages' dates: V1 is due before the day the
+# "Catch up" group shows. Ticking one never marks a payment paid (rule 4).
+VENUE_TASKS = (
+    ("V1", "12m", "Sign the Wildman BT contract and pay the $6,000 deposit (non-refundable). "
+                  "Due Wed 11 Nov 2026"),
+    ("V2", "1m", "Pay Wildman BT the remaining $6,000 and the $2,000 refundable security "
+                 "deposit. Due Thu 23 Sep 2027"),
+    ("V3", "post", "Check that Wildman BT has returned the $2,000 security deposit, minus any "
+                   "itemised deductions. Expected by about 22 Nov 2027"),
+)
+
 CATCH_UP_KEY = "catch_up"
 
 
