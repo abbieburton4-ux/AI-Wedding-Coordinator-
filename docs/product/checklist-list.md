@@ -41,3 +41,13 @@ Item ids are `<stage id>-<position>` (for example `12m-1`), and the order is the
 | J23 | Your Wedding Day! | Sign the ketubah with your rabbi and witnesses before the ceremony | |
 | J24 | Post-Wedding | Frame the ketubah, and turn the broken glass into a keepsake if you want one | |
 | J25 | Post-Wedding | ~~Plan sheva brachot meals in the week after, if you want them~~ | *cut* |
+
+## Part 3: venue contract dates (owner, 2026-11-09)
+
+**Status: approved.** Owner (one of the couple), 2026-11-09: "record the payment dates and the extra $2,000 security deposit in the wedding facts and budget and checklist". The dates come from the Wildman BT draft contract (see `wedding.md`, Venue status). These tasks have fixed dates, not dates counted back from the wedding, so each task's wording carries its date. They go into the stage nearest their date. The couple tick each one; ticking never marks a payment paid in the budget (rule 4).
+
+| # | Stage | Task | Note |
+| :- | :- | :- | :- |
+| V1 | Catch up | Sign the Wildman BT contract and pay the $6,000 deposit (non-refundable). Due Wed 11 Nov 2026 | The "Catch up" group shows 23 Nov 2026, later than this deadline, so the date is in the task's wording |
+| V2 | 1 Month Before | Pay Wildman BT the remaining $6,000 and the $2,000 refundable security deposit. Due Thu 23 Sep 2027 | Pay by check to avoid the 3% card fee |
+| V3 | Post-Wedding | Check that Wildman BT has returned the $2,000 security deposit, minus any itemised deductions. Expected by about 22 Nov 2027 | The contract allows 30 days after the event |
