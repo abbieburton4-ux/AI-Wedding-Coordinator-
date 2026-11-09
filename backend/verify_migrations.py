@@ -140,6 +140,23 @@ def main() -> None:
         conn.execute(text("DELETE FROM weddings WHERE id = 'w3'"))
     assert still_there == 2, "a refused downgrade leaves every row in place"
 
+    print("3e. Checking that 0006 leaves every existing wedding's date unconfirmed (B48)...")
+    command.downgrade(cfg, "0005")
+    command.upgrade(cfg, "head")
+    with engine.begin() as conn:
+        confirmed = conn.execute(text(
+            "SELECT id, wedding_date_confirmed FROM weddings ORDER BY id")).fetchall()
+        conn.execute(text(
+            "INSERT INTO weddings (id, couple_user_id, region, ceremony_type, "
+            "guest_count_estimate, currency, status, created_at) "
+            "VALUES ('w4', 'u1', 'Placeholder', 'Jewish', 10, 'USD', 'intake', '2026-01-01')"
+        ))
+        new_row = conn.execute(text(
+            "SELECT wedding_date_confirmed FROM weddings WHERE id = 'w4'")).scalar()
+        conn.execute(text("DELETE FROM weddings WHERE id = 'w4'"))
+    assert [(r[0], bool(r[1])) for r in confirmed] == [("w1", False)], confirmed
+    assert bool(new_row) is False, "a row added outside the app still starts unconfirmed"
+
     print("4. Downgrading to the start and back up again...")
     command.downgrade(cfg, "base")
     command.upgrade(cfg, "head")

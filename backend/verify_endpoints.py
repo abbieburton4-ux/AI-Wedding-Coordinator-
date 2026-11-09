@@ -833,6 +833,34 @@ def test_api_suite():
                 assert s.get(Wedding, wedding_id).wedding_date == D(2027, 9, 4)
             c.put(f"{cl_url}/date", json={"wedding_date": "2027-08-21"}, headers=editor_headers)
             print("   * Date changes: groups and labels recompute; clearing the date keeps tasks")
+
+            # B48: "This date is confirmed" is off until the couple switch it on.
+            conf_url = f"{cl_url}/date-confirmed"
+            assert c.get(cl_url, headers=viewer_headers).json()["date_confirmed"] is False
+            assert c.put(conf_url, json={"confirmed": True},
+                         headers=viewer_headers).status_code == 403, "viewers can't switch it"
+            assert c.put(conf_url, json={"confirmed": True},
+                         headers=unauth_headers).status_code == 403
+            assert c.put(conf_url, json={}, headers=editor_headers).status_code == 422
+            res = c.put(conf_url, json={"confirmed": True}, headers=editor_headers)
+            assert res.status_code == 200 and res.json()["date_confirmed"] is True, res.text
+            assert c.get(cl_url, headers=viewer_headers).json()["date_confirmed"] is True
+            # Changing the date, either way, leaves the switch as the couple set it.
+            assert c.put(f"{cl_url}/date", json={"wedding_date": "2027-09-11"},
+                         headers=editor_headers).json()["date_confirmed"] is True
+            assert c.patch(f"/api/v1/weddings/{wedding_id}", json={"wedding_date": "2027-08-21"},
+                           headers=editor_headers).json()["wedding_date_confirmed"] is True
+            assert c.patch(f"/api/v1/weddings/{wedding_id}",
+                           json={"wedding_date_confirmed": False},
+                           headers=editor_headers).json()["wedding_date_confirmed"] is True, \
+                "only the switch's own route changes it"
+            res = c.put(conf_url, json={"confirmed": False}, headers=headers)
+            assert res.status_code == 200 and res.json()["date_confirmed"] is False, res.text
+            c.put(f"{cl_url}/date", json={"wedding_date": None}, headers=editor_headers)
+            assert c.put(conf_url, json={"confirmed": True},
+                         headers=editor_headers).status_code == 422, "no date, nothing to confirm"
+            c.put(f"{cl_url}/date", json={"wedding_date": "2027-08-21"}, headers=editor_headers)
+            print("   * Confirmed switch: owners and editors only; date changes leave it alone")
         finally:
             checklist_module._today = real_today
 
