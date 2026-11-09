@@ -282,6 +282,6 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - A: set the published app to Public on Replit. Anyone with the link sees only the sign-in page. Only the couple and people on the wedding's access list get past it (PD-002).
 - B: keep it private on Replit and also invite each person inside Replit. Each person needs a Replit account, the couple keep two lists in step, and Replit may charge for it [GAP: not checked].
 **Recommendation:** A. The access list was built for this. One list to manage, and nothing past sign-in is visible without being on it.
-**Decision:** A. The owner switched the app to Public and republished it on 2026-11-09 (Publish listed no database changes). Who sees what stays as PD-002 and `wedding.md` set it.
-**Reversible:** yes, in Replit's publishing settings, followed by a republish.
+**Decision:** A. The owner switched the app to Public on 2026-11-09. Republishing alone kept it private, because Replit only changes access after the app is unpublished ([Replit: private deployments](https://docs.replit.com/features/publishing/private-deployments)). So the owner unpublished it, chose Public and published it again. Checked the same day: the address now opens the app, not Replit's sign-in. Who sees what stays as PD-002 and `wedding.md` set it.
+**Reversible:** yes: unpublish, change Replit's Sharing setting, publish again. Production data has Replit's 7-day rewind ([Replit: data recovery](https://docs.replit.com/features/data-and-storage/data-recovery)).
 
