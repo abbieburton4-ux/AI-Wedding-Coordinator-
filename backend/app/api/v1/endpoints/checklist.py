@@ -1,16 +1,17 @@
 """The wedding's shared planning checklist (PD-007).
 
 One list per wedding: when either partner ticks a task, everyone sees it. Anyone on
-the access list can read it; only owners and editors can tick, add, rename, delete or
-change the wedding date. Ticking a task changes nothing else: no payment is marked
-paid and no booking confirmed (rule 4), and nothing here contacts anyone (rule 1).
+the access list can read it; only owners and editors can tick, add, rename, delete,
+change the wedding date or mark it confirmed. Ticking a task changes nothing else: no
+payment is marked paid and no booking confirmed (rule 4), and nothing here contacts
+anyone (rule 1).
 Due dates, "catch up" and "overdue" come from ``app.utils.checklist``.
 """
 import datetime
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -31,6 +32,11 @@ NOTES_MAX = 2000
 
 class DateIn(BaseModel):
     wedding_date: Optional[datetime.date] = None
+
+
+class ConfirmedIn(BaseModel):
+    # Strict, so "yes" or 1 can't switch it on by accident.
+    confirmed: StrictBool
 
 
 class TaskIn(BaseModel):
@@ -80,6 +86,8 @@ class GroupOut(BaseModel):
 class ChecklistOut(BaseModel):
     wedding_date: Optional[datetime.date]
     date_set_on: Optional[datetime.date]
+    # The couple's "This date is confirmed" switch (B48); off means provisional.
+    date_confirmed: bool
     today: datetime.date
     done: int
     total: int
@@ -167,7 +175,8 @@ async def _checklist(db: AsyncSession, wedding) -> ChecklistOut:
         ))
     return ChecklistOut(
         wedding_date=wedding.wedding_date, date_set_on=wedding.wedding_date_set_on,
-        today=today, done=sum(g.done for g in groups), total=sum(g.total for g in groups),
+        date_confirmed=wedding.wedding_date_confirmed, today=today,
+        done=sum(g.done for g in groups), total=sum(g.total for g in groups),
         overdue=sum(1 for g in groups for t in g.tasks if t.label == "overdue"),
         groups=groups,
     )
@@ -207,6 +216,7 @@ async def set_wedding_date(
 
     Records today as the day it was set, so stages already past move into "Catch up".
     Unlike PATCH /weddings/{id}, this doesn't send the plan back to the intake stage.
+    The "date is confirmed" switch stays as it is; the couple change it themselves.
     """
     wedding = await _editor(db, wedding_id, current_user)
     today = _today()
@@ -215,6 +225,24 @@ async def set_wedding_date(
     if payload.wedding_date != wedding.wedding_date:
         wedding.wedding_date = payload.wedding_date
         wedding.wedding_date_set_on = today if payload.wedding_date else None
+        db.add(wedding)
+        await db.commit()
+        await db.refresh(wedding)
+    return await _checklist(db, wedding)
+
+
+@router.put("/{wedding_id}/checklist/date-confirmed", response_model=ChecklistOut)
+async def set_date_confirmed(
+    wedding_id: str, payload: ConfirmedIn,
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Switches "This date is confirmed" on or off (B48). Off brings back the
+    "provisional" wording everywhere the date is shown."""
+    wedding = await _editor(db, wedding_id, current_user)
+    if payload.confirmed and wedding.wedding_date is None:
+        raise HTTPException(status_code=422, detail="Set the wedding date first")
+    if payload.confirmed != wedding.wedding_date_confirmed:
+        wedding.wedding_date_confirmed = payload.confirmed
         db.add(wedding)
         await db.commit()
         await db.refresh(wedding)

@@ -1,5 +1,7 @@
 from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy import Column, JSON, Text, Date, Time, CheckConstraint, UniqueConstraint
+from sqlalchemy import (
+    Boolean, Column, JSON, Text, Date, Time, CheckConstraint, UniqueConstraint, false,
+)
 from typing import Optional, List, Dict, Any
 import datetime
 import uuid
@@ -72,6 +74,13 @@ class Wedding(SQLModel, table=True):
     # The day wedding_date was last set or changed. Checklist stages already past on
     # that day form the "Catch up" group; stages that pass later show as overdue (PD-007).
     wedding_date_set_on: Optional[datetime.date] = Field(default=None, sa_column=Column(Date))
+    # The couple's own "This date is confirmed" switch (B48). Only they turn it on; while
+    # it's off the app calls the date and its due dates provisional. Changing the date
+    # leaves it as it is.
+    wedding_date_confirmed: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=false()),
+    )
     # When the owner's checklist was imported (manage_checklist.py), so it runs once.
     checklist_imported_at: Optional[datetime.datetime] = Field(default=None)
     currency: str = Field(default="EUR")

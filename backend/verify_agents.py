@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import asyncio
+import datetime
 import uuid
 from unittest.mock import patch, MagicMock
 
@@ -566,6 +567,26 @@ async def run_async_verification():
             print("   * Unfinished tasks in stage order; done tasks and notes left out")
             assert "Clara" not in context, "the couple's names stay out of the prompt (PD-009)"
             assert "Total budget: €30,000" in context
+
+            # B48: due dates read "provisional" until the couple confirm the date.
+            w_ctx.wedding_date = datetime.date(2027, 10, 23)
+            db.add(w_ctx)
+            await db.commit()
+            context = await _build_context(db, w_ctx)
+            assert w_ctx.wedding_date_confirmed is False, "new weddings start unconfirmed"
+            assert "date 2027-10-23 (provisional)." in context, context
+            assert "Placeholder sooner task (9 Months Before, due " in context
+            assert context.count("(provisional)") == 3, context
+            w_ctx.wedding_date_confirmed = True
+            db.add(w_ctx)
+            await db.commit()
+            context = await _build_context(db, w_ctx)
+            assert "provisional" not in context, context
+            assert "date 2027-10-23." in context and ", due 2027-01-23)" in context, context
+            w_ctx.wedding_date, w_ctx.wedding_date_confirmed = None, False
+            db.add(w_ctx)
+            await db.commit()
+            print("   * Due dates say 'provisional' until the couple confirm the date (B48)")
 
             print("\nTEST 12b: A setup-form wedding: blank budget, US dollars (PD-009)...")
             model_calls = []
