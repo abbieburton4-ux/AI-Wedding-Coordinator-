@@ -239,3 +239,14 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 **Technical choices settled by the team:** turned off so it can come back with a small change (a setting, not deleting the code); the screens don't show a dead button or link; the backend refuses assistant calls too, not only the screens; past assistant records are kept, not deleted.
 **Reversible:** yes. The couple can ask for it back later, for example once the guest list exists (B19).
 **Rejected because:** A leaves a feature the owner doesn't want; C sends speech to a second AI company with no check.
+
+## PD-011 — Load the owner's checklist from inside the app
+
+**Date:** 2026-11-09 · **Status:** proposed
+**Context:** Backlog B53. PD-007 loads the owner's list once with `manage_checklist.py`, run by the owner. On Replit the Shell reaches only the development database, but the couple's wedding is on the published app (`abbie-ai-wedding-planner.replit.app`, owner, 2026-11-09), which has its own production database. Reaching it from the Shell means pasting a database secret, which a non-technical owner shouldn't have to handle (B58).
+**Options:**
+- A: an owner-only "Load my checklist" step in the app. The owner picks her file in the browser; the app shows the practice-run counts (97 of her tasks, 18 Jewish-tradition tasks) and saves only when she clicks. It works once, like the script. The file's wording goes only into the app's database, never into git (PD-007 call (e)).
+- B: copy the development database into production when republishing, after running the script there. That could overwrite anything already entered on the published app.
+- C: the team gives Shell steps that use the production database secret.
+**Recommendation:** A. No secrets, no Shell, and the same checks as the script.
+**Couple's call:** who can use it. *Recommended: owners only (you and the groom).*
