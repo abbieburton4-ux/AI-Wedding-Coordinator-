@@ -68,7 +68,7 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B62 — The couple add their own vendors.** PD-012 call (a), ratified 2026-11-09: in each Vendors section, owners and editors add, edit and remove a vendor (name, website, contact person, email or phone, status looking / contacted / booked set only by the couple, notes); viewers see them. Pasting a vendor's emailed reply returns on each vendor, with the check-before-sending rule. Vendor contact details are business details, but keep them out of git, logs and AI prompts beyond what a decision needs. *Depends on:* B61; and, if it needs a database change, B60 first, so publishing it is safe.
 
-- **B63 — Vendor tiles with coloured statuses, and a status summary per category.** PD-012 follow-up, ratified 2026-11-09. Each vendor its own tile, status in its own colour plus the word; a summary at the top with each category's status (furthest vendor status; "Still to do" when empty). *Depends on:* B62 (in progress when asked); build on its branch or right after it.
+- **B63 — Vendor tiles with coloured statuses, and a status summary per category.** PD-012 follow-up, ratified 2026-11-09. Each vendor its own tile, status in its own colour plus the word (looking grey, contacted blue, booked green); a summary at the top with each category's status (furthest vendor status; "Still to do" when empty). *Depends on:* B62 (in progress when asked); build on its branch or right after it.
 
 ### Housekeeping
 
