@@ -1394,6 +1394,50 @@ def test_api_suite():
         assert listed[vid]["status"] == "contacted"
         assert listed[vid]["contact_name"] == "Test Contact", "viewers see the details"
 
+        # Not selected (PD-012 follow-up 2): set only by owners and editors, and ignored
+        # by the section's status, so a section of ruled-out vendors is still to do.
+        assert res.json()["section_status"] == {
+            "venue": "looking", "food_drink": "todo", "flowers_decoration": "contacted",
+            "photo_video": "looking", "entertainment": "todo", "hair_makeup": "todo",
+            "transportation": "todo"}, res.json()["section_status"]
+        assert c.patch(f"{v_url}/{hall_id}", json={"status": "not_selected"},
+                       headers=viewer_headers).status_code == 403, "viewers can't rule one out"
+        assert c.patch(f"{v_url}/{hall_id}", json={"status": "contacted"},
+                       headers=editor_headers).status_code == 200
+        res = c.patch(f"{v_url}/{hall_id}", json={"status": "not_selected"},
+                      headers=editor_headers)
+        assert res.status_code == 200 and res.json()["status"] == "not_selected", res.text
+        with Session(sync_engine) as s:
+            hall_row = s.get(CoupleVendor, hall_id)
+            assert (hall_row.status, hall_row.not_selected) == ("contacted", True)
+        res = c.post(v_url, json={"section": "venue", "name": "Fictional Barn",
+                                  "status": "not_selected"}, headers=viewer_headers)
+        assert res.status_code == 403, "viewers can't add one ruled out either"
+        res = c.post(v_url, json={"section": "venue", "name": "Fictional Barn",
+                                  "status": "not_selected"}, headers=headers)
+        assert res.status_code == 201 and res.json()["status"] == "not_selected", res.text
+        barn_id = res.json()["id"]
+        body = c.get(v_url, headers=viewer_headers).json()
+        assert body["section_status"]["venue"] == "todo", "all ruled out: still to do"
+        assert {v["id"]: v["status"] for v in body["vendors"]}[hall_id] == "not_selected"
+        res = c.post(v_url, json={"section": "venue", "name": "Fictional Manor",
+                                  "status": "booked"}, headers=editor_headers)
+        manor_id = res.json()["id"]
+        assert c.get(v_url, headers=viewer_headers).json()["section_status"]["venue"] \
+            == "booked", "a vendor still in play sets the section's status"
+        assert c.delete(f"{v_url}/{manor_id}", headers=editor_headers).status_code == 204
+        res = c.patch(f"{v_url}/{hall_id}", json={"status": "looking"}, headers=editor_headers)
+        assert res.json()["status"] == "looking", "choosing another status brings it back"
+        with Session(sync_engine) as s:
+            assert s.get(CoupleVendor, hall_id).not_selected is False
+        assert c.get(v_url, headers=viewer_headers).json()["section_status"]["venue"] \
+            == "looking"
+        assert (vendors_module.section_status([]), vendors_module.section_status(
+            ["not_selected", "looking", "not_selected"])) == ("todo", "looking")
+        assert c.delete(f"{v_url}/{barn_id}", headers=editor_headers).status_code == 204
+        print("   * Not selected: owners and editors only; ignored by the section's status, "
+              "so a section of ruled-out vendors shows still to do")
+
         assert c.delete(f"{v_url}/{vid}", headers=viewer_headers).status_code == 403
         assert c.delete(f"{v_url}/{vid}", headers=editor_headers).status_code == 204
         assert c.delete(f"{v_url}/{vid}", headers=editor_headers).status_code == 404

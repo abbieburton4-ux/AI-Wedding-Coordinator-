@@ -40,14 +40,17 @@
   --font-weight-normal: 400;
   --ring: #B49870;
 
-  /* Vendor statuses (PD-012): looking grey, contacted blue, booked green, and a
-     stronger "still to do" for a category with no vendors. Each pair is >= 6:1. */
+  /* Vendor statuses (PD-012): looking grey, contacted blue, booked green, not
+     selected a muted red, and a stronger "still to do" for a category with no
+     vendors. Each pair is >= 6:1. */
   --status-looking: #ECEAE7;
   --status-looking-foreground: #4A4744;
   --status-contacted: #E1EBF7;
   --status-contacted-foreground: #1D4E89;
   --status-booked: #DFF0E4;
   --status-booked-foreground: #1D6337;
+  --status-not-selected: #F6E6E4;
+  --status-not-selected-foreground: #8A2E2A;
   --status-todo: #9A3412;
   --status-todo-foreground: #FFFFFF;
 
@@ -89,6 +92,8 @@
   --status-contacted-foreground: #C3D9F5;
   --status-booked: #1B3F29;
   --status-booked-foreground: #BDE5C9;
+  --status-not-selected: #4A2523;
+  --status-not-selected-foreground: #F2C4BF;
   --status-todo: #F5A97A;
   --status-todo-foreground: #2A1408;
 }
@@ -134,6 +139,8 @@
   --color-status-contacted-foreground: var(--status-contacted-foreground);
   --color-status-booked: var(--status-booked);
   --color-status-booked-foreground: var(--status-booked-foreground);
+  --color-status-not-selected: var(--status-not-selected);
+  --color-status-not-selected-foreground: var(--status-not-selected-foreground);
   --color-status-todo: var(--status-todo);
   --color-status-todo-foreground: var(--status-todo-foreground);
 
