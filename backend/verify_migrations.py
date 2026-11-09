@@ -198,7 +198,8 @@ def publish_like_replit(dev_url: str, prod_url: str) -> list:
                     with ops.batch_alter_table(table.name) as b:
                         b.create_foreign_key(c.name, c.referred_table.name,
                                              [x.parent.name for x in c.elements],
-                                             [x.column.name for x in c.elements])
+                                             [x.column.name for x in c.elements],
+                                             ondelete=c.ondelete)
                     added.append(f"ADD CONSTRAINT {c.name}")
                 elif isinstance(c, sa.UniqueConstraint) and c.name not in have_uq:
                     with ops.batch_alter_table(table.name) as b:
@@ -322,8 +323,17 @@ def check_publish_safety(real_head: str, new_revisions: list) -> None:
         # 0007's data step runs after Publish made the table, exactly once.
         venue_rows = conn.execute(text(
             "SELECT wedding_id, name FROM couple_vendors WHERE section = 'venue'")).fetchall()
+        # 0009's data step too: the expense, linked to that vendor row, payments unpaid.
+        expense = conn.execute(text(
+            "SELECT k.name, c.quoted_cents, c.couple_vendor_id FROM budget_costs c "
+            "JOIN budget_categories k ON k.id = c.category_id")).fetchall()
+        unpaid = conn.execute(text(
+            "SELECT COUNT(*) FROM budget_payments WHERE paid = 0")).scalar()
     assert not diff, diff
     assert [tuple(r) for r in venue_rows] == [("w1", "Wildman BT")], venue_rows
+    assert [tuple(r) for r in expense] == [
+        ("Venue & Catering", 1_200_000, "wildman-bt-w1")], expense
+    assert unpaid == 3, unpaid
 
     print("6a. Real migrations: 0007 already published, then 0008 on its own (B64)...")
     # Development pinned at 0008, so later migrations don't change what this checks.
@@ -343,6 +353,30 @@ def check_publish_safety(real_head: str, new_revisions: list) -> None:
     assert not diff, diff
     assert [(r[0], r[1], bool(r[2])) for r in flags] == [
         ("Wildman BT", "contacted", False)], flags
+
+    print("6a2. Real migrations: 0008 already published, then 0009 on its own (B65)...")
+    dev9, prod8 = url("dev9"), url("prod8")
+    command.upgrade(config_for(dev9), "0009")
+    command.upgrade(config_for(prod8), LAST_UNGUARDED)
+    seed_wedding(prod8)
+    command.upgrade(config_for(prod8), "0008")
+    added = publish_like_replit(dev9, prod8)
+    # What replit.md tells the owner to expect, less the checks this stand-in can't copy.
+    assert sorted(added) == sorted(
+        [f"ADD COLUMN budget_costs.{c}" for c in (
+            "estimated_cents", "final_cents", "contract_status", "payment_method", "notes",
+            "link_url", "couple_vendor_id", "archived")]
+        + [f"ADD COLUMN budget_payments.{c}" for c in (
+            "paid_on", "method", "reference", "notes", "link_url", "refundable")]
+        + ["CREATE INDEX ix_budget_costs_couple_vendor_id",
+           "ADD CONSTRAINT fk_budget_costs_couple_vendor_id_couple_vendors"]), added
+    command.upgrade(config_for(prod8), "head")
+    with create_engine(prod8).connect() as conn:
+        diff = compare_metadata(MigrationContext.configure(conn), SQLModel.metadata)
+        expense = conn.execute(text(
+            "SELECT vendor_name, couple_vendor_id FROM budget_costs")).fetchall()
+    assert not diff, diff
+    assert [tuple(r) for r in expense] == [("Wildman BT", "wildman-bt-w1")], expense
 
     fixture_dir = os.path.join(work, "fixture_versions")
     os.makedirs(fixture_dir)
@@ -594,6 +628,99 @@ def main() -> None:
             "SELECT name, status, not_selected FROM couple_vendors")).fetchall()
     assert [(r[0], r[1], bool(r[2])) for r in flags] == [
         ("Wildman BT", "contacted", False)], flags
+
+    print("3h. Checking that 0009 keeps existing expenses and adds Wildman BT unpaid (B65)...")
+    command.downgrade(cfg, "0008")
+    with engine.begin() as conn:
+        # Earlier steps here already ran 0009 on w1; start from an untouched budget.
+        for table in ("budget_payments", "budget_costs", "budget_categories"):
+            conn.execute(text(f"DELETE FROM {table}"))
+        conn.execute(text(
+            "INSERT INTO budget_categories (id, wedding_id, name, planned_cents, created_at, "
+            "updated_at) VALUES ('cat1', 'w1', ' venue ', 100, '2026-01-01', '2026-01-01')"))
+        conn.execute(text(
+            "INSERT INTO budget_costs (id, wedding_id, category_id, vendor_name, quoted_cents, "
+            "created_at, updated_at) VALUES ('cost1', 'w1', 'cat1', 'Sample Hall', 5000, "
+            "'2026-01-01', '2026-01-01')"))
+        conn.execute(text(
+            "INSERT INTO budget_payments (id, wedding_id, cost_id, kind, amount_cents, due_on, "
+            "paid, created_at) VALUES ('pay1', 'w1', 'cost1', 'deposit', 2500, '2026-02-01', "
+            "1, '2026-01-01')"))
+        conn.execute(text(
+            "INSERT INTO weddings (id, couple_user_id, region, ceremony_type, "
+            "guest_count_estimate, currency, status, created_at) "
+            "VALUES ('w5', 'u1', 'Placeholder', 'Jewish', 10, 'USD', 'intake', '2026-01-01')"))
+    command.upgrade(cfg, "head")
+
+    def wildman(conn, wedding_id):
+        cost = conn.execute(text(
+            "SELECT c.id, k.name, c.quoted_cents, c.estimated_cents, c.final_cents, "
+            "c.contract_status, c.couple_vendor_id, c.archived FROM budget_costs c "
+            "JOIN budget_categories k ON k.id = c.category_id "
+            "WHERE c.wedding_id = :w AND c.vendor_name = 'Wildman BT'"),
+            {"w": wedding_id}).fetchall()
+        assert len(cost) == 1, cost
+        pays = conn.execute(text(
+            "SELECT kind, amount_cents, due_on, refundable, paid, paid_at, paid_on "
+            "FROM budget_payments WHERE cost_id = :c ORDER BY due_on, amount_cents DESC"),
+            {"c": cost[0][0]}).fetchall()
+        return tuple(cost[0][1:]), [(r[0], r[1], r[2], bool(r[3]), bool(r[4]), r[5], r[6])
+                                    for r in pays]
+
+    expected_pays = [
+        ("deposit", 600_000, "2026-11-11", False, False, None, None),
+        ("payment", 600_000, "2027-09-23", False, False, None, None),
+        ("deposit", 200_000, "2027-09-23", True, False, None, None),
+    ]
+    with engine.connect() as conn:
+        kept = conn.execute(text(
+            "SELECT vendor_name, quoted_cents, estimated_cents, final_cents, contract_status, "
+            "archived, couple_vendor_id FROM budget_costs WHERE id = 'cost1'")).fetchall()
+        kept_pay = conn.execute(text(
+            "SELECT amount_cents, paid, refundable, paid_on FROM budget_payments "
+            "WHERE id = 'pay1'")).fetchall()
+        w1_vendor = conn.execute(text(
+            "SELECT id FROM couple_vendors WHERE wedding_id = 'w1' AND name = 'Wildman BT'"
+        )).scalar()
+        w1_cost, w1_pays = wildman(conn, "w1")
+        w5_cost, w5_pays = wildman(conn, "w5")
+        w5_categories = conn.execute(text(
+            "SELECT name, planned_cents FROM budget_categories WHERE wedding_id = 'w5'"
+        )).fetchall()
+        checks = {ck["name"] for ck in inspect(conn).get_check_constraints("budget_costs")}
+    assert [(r[0], r[1], r[2], r[3], r[4], bool(r[5]), r[6]) for r in kept] == [
+        ("Sample Hall", 5000, None, None, "none", False, None)], kept
+    assert [(r[0], bool(r[1]), bool(r[2]), r[3]) for r in kept_pay] == [
+        (2500, True, False, None)], "an existing paid tick is kept, and not refundable"
+    assert w1_cost == (" venue ", 1_200_000, None, None, "none", w1_vendor, 0), w1_cost
+    assert w1_vendor and w1_pays == expected_pays, w1_pays
+    assert w5_cost == ("Venue & Catering", 1_200_000, None, None, "none", None, 0), w5_cost
+    assert w5_pays == expected_pays, w5_pays
+    assert [tuple(r) for r in w5_categories] == [("Venue & Catering", None)], w5_categories
+    assert {"ck_budget_cost_quoted", "ck_budget_cost_estimated", "ck_budget_cost_final",
+            "ck_budget_cost_contract"} <= checks, f"checks survive the table copy: {checks}"
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "m0009", os.path.join(HERE, "migrations", "versions", "0009_budget_expenses.py"))
+    m0009 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m0009)
+    with engine.begin() as conn:
+        before = conn.execute(text("SELECT COUNT(*) FROM budget_payments")).scalar()
+        m0009.add_wildman_bt(conn)
+        after = conn.execute(text("SELECT COUNT(*) FROM budget_payments")).scalar()
+    assert before == after == 7, "running the data step again adds nothing"
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE budget_costs SET contract_status = 'accepted' "
+                              "WHERE id = 'cost1'"))
+        raise AssertionError("contract status is none, sent or signed")
+    except sa.exc.IntegrityError:
+        pass
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM budget_payments WHERE wedding_id = 'w5'"))
+        conn.execute(text("DELETE FROM budget_costs WHERE wedding_id = 'w5'"))
+        conn.execute(text("DELETE FROM budget_categories WHERE wedding_id = 'w5'"))
+        conn.execute(text("DELETE FROM weddings WHERE id = 'w5'"))
 
     print("4. Downgrading to the start and back up again...")
     command.downgrade(cfg, "base")

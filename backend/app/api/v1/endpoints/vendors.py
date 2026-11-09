@@ -25,7 +25,7 @@ from app.api.v1.endpoints.auth import get_current_user
 from app.api.v1.review import MAX_PROMPT_CHARS, needs_review
 from app.config import settings
 from app.db.models import (
-    NOT_SELECTED, CoupleVendor, CoupleVendorQuote, User, VENDOR_SECTIONS, utcnow,
+    NOT_SELECTED, BudgetCost, CoupleVendor, CoupleVendorQuote, User, VENDOR_SECTIONS, utcnow,
 )
 from app.db.session import get_db
 from app.utils.tasks import enqueue_agent_task
@@ -313,6 +313,12 @@ async def remove_vendor(
     for q in (await db.exec(select(CoupleVendorQuote).where(
             CoupleVendorQuote.vendor_id == row.id))).all():
         await db.delete(q)
+    # Budget expenses linked to the vendor stay, unlinked. Done here as well as by
+    # ON DELETE SET NULL, because SQLite only enforces foreign keys when asked to.
+    for cost in (await db.exec(select(BudgetCost).where(
+            BudgetCost.couple_vendor_id == row.id))).all():
+        cost.couple_vendor_id = None
+        db.add(cost)
     await db.delete(row)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

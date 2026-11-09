@@ -1,6 +1,8 @@
-"""The couple's budget (PD-004): total, categories, vendor costs, payments, contributions.
+"""The couple's budget (PD-004, PD-013): total, categories, expenses, payments,
+contributions.
 
-Every amount is whole US cents and every sum here is integer arithmetic (rule 4).
+Every amount is whole US cents and every sum here is integer arithmetic (rule 4); the
+figures are worked out on read by ``utils/budget_math.py``.
 Anyone on the access list can read the budget, including family (viewers); only
 owners and editors can change it or ask for the AI split. A payment is marked paid
 only by a signed-in owner or editor clicking it, never by an agent (rule 4), and
@@ -8,6 +10,7 @@ nothing here contacts anyone (rule 1).
 """
 import datetime
 from typing import List, Literal, Optional
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
@@ -20,15 +23,19 @@ from app.api.v1.review import Approval, needs_review
 from app.api.v1.access import require_wedding_access
 from app.api.v1.endpoints.auth import get_current_user
 from app.db.models import (
-    BudgetCategory, BudgetContribution, BudgetCost, BudgetPayment, User, utcnow,
+    BudgetCategory, BudgetContribution, BudgetCost, BudgetPayment, CoupleVendor, User, utcnow,
 )
 from app.db.session import get_db
+from app.utils.budget_math import add_up, basis_of, cost_figures, is_overdue
+from app.utils.checklist import wedding_today
 
 router = APIRouter()
 
 # $10 million per amount: far above any wedding, and inside Postgres INTEGER (about
 # $21 million in cents). Totals are summed in Python, so they can't overflow.
 MAX_CENTS = 1_000_000_000
+MAX_NOTES = 2000
+MAX_LINK = 2000
 
 
 def Cents(default=None):
@@ -55,14 +62,44 @@ class CategoryPatch(BaseModel):
     planned_cents: Optional[int] = Cents()
 
 
+ContractStatus = Literal["none", "sent", "signed"]
+
+
+def Short(default=None):
+    return Field(default=default, max_length=120)
+
+
+def Notes(default=None):
+    return Field(default=default, max_length=MAX_NOTES)
+
+
+def Link(default=None):
+    return Field(default=default, max_length=MAX_LINK)
+
+
 class CostIn(BaseModel):
     vendor_name: str = Name()
     quoted_cents: Optional[int] = Cents()
+    estimated_cents: Optional[int] = Cents()
+    final_cents: Optional[int] = Cents()
+    contract_status: ContractStatus = "none"
+    payment_method: Optional[str] = Short()
+    notes: Optional[str] = Notes()
+    link_url: Optional[str] = Link()
+    couple_vendor_id: Optional[str] = None
 
 
 class CostPatch(BaseModel):
     vendor_name: Optional[str] = Name(None)
     quoted_cents: Optional[int] = Cents()
+    estimated_cents: Optional[int] = Cents()
+    final_cents: Optional[int] = Cents()
+    contract_status: Optional[ContractStatus] = None
+    payment_method: Optional[str] = Short()
+    notes: Optional[str] = Notes()
+    link_url: Optional[str] = Link()
+    couple_vendor_id: Optional[str] = None
+    archived: Optional[bool] = None
     category_id: Optional[str] = None
 
 
@@ -70,16 +107,29 @@ class PaymentIn(BaseModel):
     kind: Literal["deposit", "payment"] = "payment"
     amount_cents: int = Field(ge=1, le=MAX_CENTS)
     due_on: Optional[datetime.date] = None
+    refundable: bool = False
+    method: Optional[str] = Short()
+    reference: Optional[str] = Short()
+    notes: Optional[str] = Notes()
+    link_url: Optional[str] = Link()
 
 
 class PaymentPatch(BaseModel):
     kind: Optional[Literal["deposit", "payment"]] = None
     amount_cents: Optional[int] = Field(default=None, ge=1, le=MAX_CENTS)
     due_on: Optional[datetime.date] = None
+    refundable: Optional[bool] = None
+    method: Optional[str] = Short()
+    reference: Optional[str] = Short()
+    notes: Optional[str] = Notes()
+    link_url: Optional[str] = Link()
+    # Only on a payment already ticked paid; ticking it is PUT .../paid.
+    paid_on: Optional[datetime.date] = None
 
 
 class PaidIn(BaseModel):
     paid: bool
+    paid_on: Optional[datetime.date] = None
 
 
 class ContributionIn(BaseModel):
@@ -105,16 +155,10 @@ class ApplySplitIn(BaseModel):
 
 # --- Responses ------------------------------------------------------------------------
 
-# Where a "committed" figure comes from: the vendor's quote, the payments scheduled so
-# far (no quote recorded), or a mix of both across several vendors.
-Basis = Literal["none", "quote", "scheduled", "mixed"]
-
-
-def _basis(parts: list) -> str:
-    kinds = {p for p in parts if p != "none"}
-    if not kinds:
-        return "none"
-    return kinds.pop() if len(kinds) == 1 else "mixed"
+# Where a "committed" figure comes from: the final cost, the quote, the estimate, the
+# payments scheduled so far (none of those recorded), or a mix across expenses.
+Basis = Literal["none", "final", "quote", "estimate", "scheduled", "mixed"]
+Status = Literal["unpaid", "partly_paid", "paid", "overdue"]
 
 
 class PaymentOut(BaseModel):
@@ -126,18 +170,48 @@ class PaymentOut(BaseModel):
     paid: bool
     paid_at: Optional[datetime.datetime]
     paid_by_name: Optional[str]
+    paid_on: Optional[datetime.date]
+    refundable: bool
+    method: Optional[str]
+    reference: Optional[str]
+    notes: Optional[str]
+    link_url: Optional[str]
+    overdue: bool
+    # How far over the expense's cost paid would be if this were ticked; 0 if it
+    # wouldn't be (and always 0 for refundable or paid payments).
+    would_overpay_cents: int
+
+
+class VendorRef(BaseModel):
+    """The linked vendor on the Vendors page: name and section only, no contacts."""
+    id: str
+    name: str
+    section: str
 
 
 class CostOut(BaseModel):
     id: str
     category_id: str
     vendor_name: str
+    estimated_cents: Optional[int]
     quoted_cents: Optional[int]
+    final_cents: Optional[int]
+    contract_status: str
+    payment_method: Optional[str]
+    notes: Optional[str]
+    link_url: Optional[str]
+    vendor: Optional[VendorRef]
+    archived: bool
+    status: Status
     committed_cents: int
     committed_basis: Basis
+    scheduled_cents: int
+    over_scheduled_cents: int
     paid_cents: int
     remaining_cents: int
     overpaid_cents: int
+    refundable_cents: int
+    refundable_paid_cents: int
     payments: List[PaymentOut]
 
 
@@ -150,6 +224,9 @@ class CategoryOut(BaseModel):
     paid_cents: int
     remaining_cents: int
     overpaid_cents: int
+    refundable_cents: int
+    refundable_paid_cents: int
+    # Every expense, archived ones included (flagged); the sums leave archived out.
     costs: List[CostOut]
 
 
@@ -162,12 +239,14 @@ class ContributionOut(BaseModel):
 
 class DueOut(BaseModel):
     payment_id: str
+    cost_id: str
     category_name: str
     vendor_name: str
     kind: str
     amount_cents: int
     due_on: Optional[datetime.date]
     overdue: bool
+    refundable: bool
 
 
 class Totals(BaseModel):
@@ -179,6 +258,8 @@ class Totals(BaseModel):
     remaining_cents: int
     overpaid_cents: int
     contributions_cents: int
+    refundable_cents: int
+    refundable_paid_cents: int
 
 
 class Overview(BaseModel):
@@ -186,15 +267,53 @@ class Overview(BaseModel):
     categories: List[CategoryOut]
     contributions: List[ContributionOut]
     next_due: List[DueOut]
+    # The day "overdue" is measured against: today in Chicago (B45).
+    today: datetime.date
 
 
 # --- Helpers --------------------------------------------------------------------------
+
+def _today() -> datetime.date:
+    # Chicago's date, as the checklist uses (B45). One place, so tests can fix it.
+    return wedding_today()
+
 
 def _clean(text: str) -> str:
     text = " ".join(text.split())
     if not text:
         raise HTTPException(status_code=422, detail="Please type a name")
     return text
+
+
+def _short(text: Optional[str]) -> Optional[str]:
+    """A one-line field (method, reference): spaces tidied, blank means none."""
+    if text is None:
+        return None
+    return " ".join(text.split()) or None
+
+
+def _notes(text: Optional[str]) -> Optional[str]:
+    if text is None:
+        return None
+    return text.strip() or None
+
+
+def _link(text: Optional[str]) -> Optional[str]:
+    """A pasted link, such as a Google Drive file. Only web links: any other scheme
+    could run or open something on the reader's device when clicked."""
+    if text is None or not text.strip():
+        return None
+    url = text.strip()
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        parts, host = None, None
+    if (parts is None or parts.scheme.lower() not in ("http", "https") or not host
+            or any(ch.isspace() for ch in url)):
+        raise HTTPException(status_code=422,
+                            detail="Please paste a full web link starting with https://")
+    return url
 
 
 async def _row(db: AsyncSession, model, row_id: str, wedding_id: str, what: str):
@@ -206,17 +325,19 @@ async def _row(db: AsyncSession, model, row_id: str, wedding_id: str, what: str)
     return row
 
 
+async def _vendor(db: AsyncSession, vendor_id: Optional[str], wedding_id: str) -> Optional[str]:
+    """A vendor id from this wedding's Vendors page, or None to unlink."""
+    if not vendor_id:
+        return None
+    found = (await db.exec(select(CoupleVendor.id).where(
+        CoupleVendor.id == vendor_id, CoupleVendor.wedding_id == wedding_id))).first()
+    if not found:
+        raise HTTPException(status_code=404, detail="That vendor isn't on your Vendors page")
+    return vendor_id
+
+
 async def _editor(db: AsyncSession, wedding_id: str, user: User):
     return await require_wedding_access(db, wedding_id, user, "editor")
-
-
-def _committed(cost: BudgetCost, payments: list) -> tuple:
-    """The quote if there is one, otherwise what's been scheduled so far, with which."""
-    if cost.quoted_cents is not None:
-        return cost.quoted_cents, "quote"
-    if not payments:
-        return 0, "none"
-    return sum(p.amount_cents for p in payments), "scheduled"
 
 
 async def _check_unique_name(db: AsyncSession, wedding_id: str, name: str,
@@ -230,8 +351,42 @@ async def _check_unique_name(db: AsyncSession, wedding_id: str, name: str,
                                 detail=f"You already have a category called {row.name}")
 
 
+def _payment_out(row: BudgetPayment, paid_by_name: Optional[str], figures,
+                 today: datetime.date) -> PaymentOut:
+    return PaymentOut(
+        id=row.id, cost_id=row.cost_id, kind=row.kind, amount_cents=row.amount_cents,
+        due_on=row.due_on, paid=row.paid, paid_at=row.paid_at,
+        paid_by_name=paid_by_name if row.paid else None,
+        paid_on=row.paid_on if row.paid else None, refundable=row.refundable,
+        method=row.method, reference=row.reference, notes=row.notes,
+        link_url=row.link_url, overdue=is_overdue(row, today),
+        would_overpay_cents=figures.would_overpay.get(row.id, 0),
+    )
+
+
+def _cost_out(cost: BudgetCost, pays: list, payers: dict, vendors: dict,
+              today: datetime.date) -> CostOut:
+    f = cost_figures(cost, pays, today)
+    v = vendors.get(cost.couple_vendor_id)
+    return CostOut(
+        id=cost.id, category_id=cost.category_id, vendor_name=cost.vendor_name,
+        estimated_cents=cost.estimated_cents, quoted_cents=cost.quoted_cents,
+        final_cents=cost.final_cents, contract_status=cost.contract_status,
+        payment_method=cost.payment_method, notes=cost.notes, link_url=cost.link_url,
+        vendor=VendorRef(id=v.id, name=v.name, section=v.section) if v else None,
+        archived=cost.archived, status=f.status,
+        committed_cents=f.committed_cents, committed_basis=f.committed_basis,
+        scheduled_cents=f.scheduled_cents, over_scheduled_cents=f.over_scheduled_cents,
+        paid_cents=f.paid_cents, remaining_cents=f.remaining_cents,
+        overpaid_cents=f.overpaid_cents, refundable_cents=f.refundable_cents,
+        refundable_paid_cents=f.refundable_paid_cents,
+        payments=[_payment_out(p, payers.get(p.paid_by_user_id), f, today) for p in pays],
+    )
+
+
 async def _overview(db: AsyncSession, wedding) -> Overview:
     wid = wedding.id
+    today = _today()
     categories = (await db.exec(
         select(BudgetCategory).where(BudgetCategory.wedding_id == wid)
         .order_by(BudgetCategory.created_at, BudgetCategory.id)
@@ -248,6 +403,8 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
         select(BudgetContribution).where(BudgetContribution.wedding_id == wid)
         .order_by(BudgetContribution.created_at, BudgetContribution.id)
     )).all()
+    vendors = {v.id: v for v in (await db.exec(
+        select(CoupleVendor).where(CoupleVendor.wedding_id == wid))).all()}
     payer_ids = {p.paid_by_user_id for p in payments if p.paid_by_user_id}
     payers = {}
     if payer_ids:
@@ -262,48 +419,39 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
     for c in costs:
         by_category.setdefault(c.category_id, []).append(c)
 
-    today = datetime.date.today()
     names = {}
     out_categories = []
     for cat in categories:
         out_costs = []
         for cost in by_category.get(cat.id, []):
-            pays = by_cost.get(cost.id, [])
-            names[cost.id] = (cat.name, cost.vendor_name)
-            committed, basis = _committed(cost, pays)
-            paid = sum(p.amount_cents for p in pays if p.paid)
+            if not cost.archived:
+                names[cost.id] = (cat.name, cost.vendor_name)
             # Paying one vendor more than agreed doesn't reduce what's owed to another,
-            # so "still to pay" and "overpaid" are worked out per vendor, never netted.
-            out_costs.append(CostOut(
-                id=cost.id, category_id=cat.id, vendor_name=cost.vendor_name,
-                quoted_cents=cost.quoted_cents,
-                committed_cents=committed, committed_basis=basis, paid_cents=paid,
-                remaining_cents=max(committed - paid, 0),
-                overpaid_cents=max(paid - committed, 0),
-                payments=[_payment_out(p, payers.get(p.paid_by_user_id)) for p in pays],
-            ))
+            # so "still to pay" and "overpaid" are worked out per expense, never netted.
+            out_costs.append(_cost_out(cost, by_cost.get(cost.id, []), payers, vendors, today))
+        counted = [c for c in out_costs if not c.archived]
         out_categories.append(CategoryOut(
             id=cat.id, name=cat.name, planned_cents=cat.planned_cents,
-            committed_basis=_basis([c.committed_basis for c in out_costs]),
-            costs=out_costs, **_sums(out_costs),
+            committed_basis=basis_of(c.committed_basis for c in counted),
+            costs=out_costs, **add_up(counted),
         ))
 
-    # Unpaid payments, soonest first; ones with no date yet go last.
+    # Unpaid payments on expenses still in play, soonest first; undated ones last.
     unpaid = [p for p in payments if not p.paid and p.cost_id in names]
     unpaid.sort(key=lambda p: (p.due_on is None, p.due_on or today, p.created_at))
     next_due = [DueOut(
-        payment_id=p.id, category_name=names[p.cost_id][0], vendor_name=names[p.cost_id][1],
-        kind=p.kind, amount_cents=p.amount_cents, due_on=p.due_on,
-        overdue=p.due_on is not None and p.due_on < today,
+        payment_id=p.id, cost_id=p.cost_id, category_name=names[p.cost_id][0],
+        vendor_name=names[p.cost_id][1], kind=p.kind, amount_cents=p.amount_cents,
+        due_on=p.due_on, overdue=is_overdue(p, today), refundable=p.refundable,
     ) for p in unpaid]
 
     return Overview(
         totals=Totals(
             total_cents=wedding.budget_total_cents,
             planned_cents=sum(c.planned_cents or 0 for c in categories),
-            committed_basis=_basis([c.committed_basis for c in out_categories]),
+            committed_basis=basis_of(c.committed_basis for c in out_categories),
             contributions_cents=sum(c.amount_cents for c in contributions),
-            **_sums(out_categories),
+            **add_up(out_categories),
         ),
         categories=out_categories,
         contributions=[ContributionOut(
@@ -311,12 +459,21 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
             category_id=c.category_id,
         ) for c in contributions],
         next_due=next_due,
+        today=today,
     )
 
 
-def _sums(rows: list) -> dict:
-    return {field: sum(getattr(r, field) for r in rows) for field in (
-        "committed_cents", "paid_cents", "remaining_cents", "overpaid_cents")}
+async def _payment_response(db: AsyncSession, row: BudgetPayment) -> PaymentOut:
+    """One payment, with the figures that depend on the rest of its expense."""
+    cost = await db.get(BudgetCost, row.cost_id)
+    pays = (await db.exec(select(BudgetPayment).where(
+        BudgetPayment.cost_id == row.cost_id))).all()
+    today = _today()
+    payer = None
+    if row.paid and row.paid_by_user_id:
+        user = await db.get(User, row.paid_by_user_id)
+        payer = user.name if user else None
+    return _payment_out(row, payer, cost_figures(cost, list(pays), today), today)
 
 
 # --- Routes ---------------------------------------------------------------------------
@@ -422,8 +579,15 @@ async def add_cost(
 ):
     await _editor(db, wedding_id, current_user)
     await _row(db, BudgetCategory, category_id, wedding_id, "category")
-    row = BudgetCost(wedding_id=wedding_id, category_id=category_id,
-                     vendor_name=_clean(payload.vendor_name), quoted_cents=payload.quoted_cents)
+    row = BudgetCost(
+        wedding_id=wedding_id, category_id=category_id,
+        vendor_name=_clean(payload.vendor_name), quoted_cents=payload.quoted_cents,
+        estimated_cents=payload.estimated_cents, final_cents=payload.final_cents,
+        contract_status=payload.contract_status,
+        payment_method=_short(payload.payment_method), notes=_notes(payload.notes),
+        link_url=_link(payload.link_url),
+        couple_vendor_id=await _vendor(db, payload.couple_vendor_id, wedding_id),
+    )
     db.add(row)
     await db.commit()
     await db.refresh(row)
@@ -435,13 +599,28 @@ async def edit_cost(
     wedding_id: str, cost_id: str, payload: CostPatch,
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
+    """Changes an expense. A field left out stays as it is; null clears an optional one.
+    ``archived`` keeps the expense and its payments but leaves them out of the totals."""
     await _editor(db, wedding_id, current_user)
     row = await _row(db, BudgetCost, cost_id, wedding_id, "vendor cost")
     updates = payload.model_dump(exclude_unset=True)
     if "vendor_name" in updates:
         row.vendor_name = _clean(updates["vendor_name"] or "")
-    if "quoted_cents" in updates:
-        row.quoted_cents = updates["quoted_cents"]
+    for field in ("quoted_cents", "estimated_cents", "final_cents"):
+        if field in updates:
+            setattr(row, field, updates[field])
+    if updates.get("contract_status"):
+        row.contract_status = updates["contract_status"]
+    if "payment_method" in updates:
+        row.payment_method = _short(updates["payment_method"])
+    if "notes" in updates:
+        row.notes = _notes(updates["notes"])
+    if "link_url" in updates:
+        row.link_url = _link(updates["link_url"])
+    if "couple_vendor_id" in updates:
+        row.couple_vendor_id = await _vendor(db, updates["couple_vendor_id"], wedding_id)
+    if updates.get("archived") is not None:
+        row.archived = updates["archived"]
     if updates.get("category_id"):
         await _row(db, BudgetCategory, updates["category_id"], wedding_id, "category")
         row.category_id = updates["category_id"]
@@ -473,27 +652,23 @@ async def add_payment(
     """Adds a deposit or payment, always unpaid. Ticking it paid is a separate click."""
     await _editor(db, wedding_id, current_user)
     await _row(db, BudgetCost, cost_id, wedding_id, "vendor cost")
-    row = BudgetPayment(wedding_id=wedding_id, cost_id=cost_id, kind=payload.kind,
-                        amount_cents=payload.amount_cents, due_on=payload.due_on)
+    row = BudgetPayment(
+        wedding_id=wedding_id, cost_id=cost_id, kind=payload.kind,
+        amount_cents=payload.amount_cents, due_on=payload.due_on,
+        refundable=payload.refundable, method=_short(payload.method),
+        reference=_short(payload.reference), notes=_notes(payload.notes),
+        link_url=_link(payload.link_url),
+    )
     db.add(row)
     await db.commit()
     await db.refresh(row)
-    return _payment_out(row, None)
+    return await _payment_response(db, row)
 
 
-async def _payer_name(db: AsyncSession, row: BudgetPayment) -> Optional[str]:
-    if not (row.paid and row.paid_by_user_id):
-        return None
-    payer = await db.get(User, row.paid_by_user_id)
-    return payer.name if payer else None
-
-
-def _payment_out(row: BudgetPayment, paid_by_name: Optional[str]) -> PaymentOut:
-    return PaymentOut(
-        id=row.id, cost_id=row.cost_id, kind=row.kind, amount_cents=row.amount_cents,
-        due_on=row.due_on, paid=row.paid, paid_at=row.paid_at,
-        paid_by_name=paid_by_name if row.paid else None,
-    )
+def _paid_on(day: Optional[datetime.date]) -> Optional[datetime.date]:
+    if day is not None and day > _today():
+        raise HTTPException(status_code=422, detail="The date paid can't be in the future")
+    return day
 
 
 @router.patch("/{wedding_id}/budget/payments/{payment_id}", response_model=PaymentOut)
@@ -501,6 +676,7 @@ async def edit_payment(
     wedding_id: str, payment_id: str, payload: PaymentPatch,
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
+    """Changes a payment's details. It never ticks or unticks it; that's PUT .../paid."""
     await _editor(db, wedding_id, current_user)
     row = await _row(db, BudgetPayment, payment_id, wedding_id, "payment")
     updates = payload.model_dump(exclude_unset=True)
@@ -510,10 +686,24 @@ async def edit_payment(
         row.amount_cents = updates["amount_cents"]
     if "due_on" in updates:
         row.due_on = updates["due_on"]
+    if updates.get("refundable") is not None:
+        row.refundable = updates["refundable"]
+    for field in ("method", "reference"):
+        if field in updates:
+            setattr(row, field, _short(updates[field]))
+    if "notes" in updates:
+        row.notes = _notes(updates["notes"])
+    if "link_url" in updates:
+        row.link_url = _link(updates["link_url"])
+    if "paid_on" in updates:
+        if updates["paid_on"] is not None and not row.paid:
+            raise HTTPException(status_code=422,
+                                detail="Tick the payment as paid before giving the date paid")
+        row.paid_on = _paid_on(updates["paid_on"])
     db.add(row)
     await db.commit()
     await db.refresh(row)
-    return _payment_out(row, await _payer_name(db, row))
+    return await _payment_response(db, row)
 
 
 @router.put("/{wedding_id}/budget/payments/{payment_id}/paid", response_model=PaymentOut)
@@ -523,19 +713,30 @@ async def mark_paid(
 ):
     """The only way a payment becomes paid: a signed-in owner or editor ticking it.
 
-    Records who ticked it and when. Ticking an already-paid payment again keeps the
-    original record; unticking clears both.
+    Records who ticked it and when, and the date paid if they give one. Ticking an
+    already-paid payment again keeps the original record (a new date paid replaces
+    the old one); unticking clears all three. Ticking a payment that takes paid over
+    the expense's cost is allowed: the screen warns first, and it shows as overpaid.
     """
     await _editor(db, wedding_id, current_user)
     row = await _row(db, BudgetPayment, payment_id, wedding_id, "payment")
+    if not payload.paid and payload.paid_on is not None:
+        raise HTTPException(status_code=422, detail="An unpaid payment has no date paid")
+    changed = False
     if payload.paid != row.paid:
         row.paid = payload.paid
         row.paid_at = utcnow() if payload.paid else None
         row.paid_by_user_id = current_user.id if payload.paid else None
+        row.paid_on = None
+        changed = True
+    if payload.paid and payload.paid_on is not None:
+        row.paid_on = _paid_on(payload.paid_on)
+        changed = True
+    if changed:
         db.add(row)
         await db.commit()
         await db.refresh(row)
-    return _payment_out(row, await _payer_name(db, row))
+    return await _payment_response(db, row)
 
 
 @router.delete("/{wedding_id}/budget/payments/{payment_id}",

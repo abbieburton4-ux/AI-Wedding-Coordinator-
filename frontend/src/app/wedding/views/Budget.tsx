@@ -5,9 +5,10 @@ import { useApi, USE_FASTAPI_BACKEND } from "../../api";
 import { useActiveWedding } from "../WeddingProvider";
 import { AMOUNT_HINT, centsToInput, committedLabel, formatCents, parseDollars } from "./budget/money";
 import {
-  AddCategoryForm, CategoryCard, Contributions, MoneyInput, NextDue, linkButton, overpaidNote, primaryButton,
+  AddCategoryForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, NextDue, linkButton, overpaidNote,
+  primaryButton,
 } from "./budget/parts";
-import type { Overview, Run, SplitSuggestion } from "./budget/types";
+import type { Overview, Run, SplitSuggestion, VendorRef } from "./budget/types";
 import { useReviewedRequest } from "../../api/review";
 
 // Shown only when the backend is switched off (USE_FASTAPI_BACKEND), and labelled as sample.
@@ -30,6 +31,7 @@ export function Budget() {
   const canEdit = myLevel === "owner" || myLevel === "editor";
 
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [vendors, setVendors] = useState<VendorRef[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -37,7 +39,13 @@ export function Budget() {
   const load = useCallback(async () => {
     if (!weddingId || !USE_FASTAPI_BACKEND) return;
     try {
-      setOverview(await request<Overview>(`/weddings/${weddingId}/budget/overview`));
+      const [ov, list] = await Promise.all([
+        request<Overview>(`/weddings/${weddingId}/budget/overview`),
+        // Only for linking an expense to a vendor; the budget works without it.
+        request<{ vendors: VendorRef[] }>(`/weddings/${weddingId}/vendors`).catch(() => null),
+      ]);
+      setOverview(ov);
+      if (list) setVendors(list.vendors.map(({ id, name, section }) => ({ id, name, section })));
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Couldn't load the budget.");
@@ -75,7 +83,8 @@ export function Budget() {
           Budget
         </h1>
         <p className="text-on-surface-variant">
-          Plan each category, record what vendors quote, and tick off payments as you make them. Amounts are in US dollars.
+          Plan each category, record each vendor's estimated, quoted and final cost, and tick off payments as you make
+          them. Amounts are in US dollars; "overdue" uses today's date in Chicago.
         </p>
         {!canEdit && myLevel && (
           <p className="text-sm text-on-surface-variant mt-2">You can see the budget but not change it.</p>
@@ -117,10 +126,11 @@ export function Budget() {
             )}
             <div className="space-y-6 mb-6">
               {overview.categories.map((cat) => (
-                <CategoryCard key={cat.id} base={base} category={cat} canEdit={canEdit} run={run} request={request} busy={busy} />
+                <CategoryCard key={cat.id} base={base} category={cat} vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} />
               ))}
             </div>
             {canEdit && <AddCategoryForm base={base} run={run} request={request} busy={busy} />}
+            {canEdit && <MethodSuggestions />}
           </section>
 
           <Contributions
@@ -187,6 +197,12 @@ function Summary({ overview }: { overview: Overview }) {
           />
         ))}
       </div>
+      {t.refundable_cents > 0 && (
+        <p className="text-sm text-on-surface-variant mt-3">
+          Refundable deposits: {formatCents(t.refundable_cents)}, not counted in the figures above
+          {t.refundable_paid_cents > 0 ? `. ${formatCents(t.refundable_paid_cents)} paid so far, to come back to you.` : "."}
+        </p>
+      )}
       {overTotal && t.total_cents !== null && (
         <div className="bg-error-container/15 border border-error-container/40 rounded-[2rem] p-4 mt-4 flex items-start gap-3">
           <Icon name="warning" size={22} className="text-error mt-0.5" />

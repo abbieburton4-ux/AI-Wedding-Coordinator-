@@ -133,6 +133,32 @@ publish should list **no** database changes.
   it says `NOT NULL` without `DEFAULT false`, stop and tell the team.
   [ASSUMPTION] This is what Alembic's PostgreSQL SQL looks like; Replit's own
   screen hasn't been seen for it.
+- `0009` (B65, budget expenses and payments that add up): new columns on two
+  existing tables, and nothing else. Expect these lines, all additions:
+  - 8 × `ADD COLUMN` on `budget_costs`: `estimated_cents`, `final_cents`,
+    `contract_status`, `payment_method`, `notes`, `link_url`, `couple_vendor_id`
+    and `archived`;
+  - 6 × `ADD COLUMN` on `budget_payments`: `paid_on`, `method`, `reference`,
+    `notes`, `link_url` and `refundable`;
+  - `CREATE INDEX ix_budget_costs_couple_vendor_id`;
+  - `ADD CONSTRAINT fk_budget_costs_couple_vendor_id_couple_vendors` (a link to
+    `couple_vendors`, `ON DELETE SET NULL`);
+  - `ADD CONSTRAINT` for three checks: `ck_budget_cost_estimated`,
+    `ck_budget_cost_final` and `ck_budget_cost_contract`. These may instead appear
+    inside the `ADD COLUMN` lines; either is fine.
+
+  Three of the columns are required, so the pane may turn orange: `contract_status`
+  must say `DEFAULT 'none'`, and `archived` and `refundable` must say
+  `DEFAULT false`. If any of the three says `NOT NULL` without its default, stop
+  and tell the team. If `0008` goes out in the same publish, its `not_selected`
+  line is listed too. There should be no `DROP`, no `ALTER COLUMN` and no
+  `DROP CONSTRAINT`; the existing checks (`ck_budget_cost_quoted`,
+  `ck_budget_payment_kind`, `ck_budget_payment_amount`) don't change. Every
+  expense and payment already entered keeps its amounts and paid ticks. The
+  Wildman BT expense and its three unpaid payments are added when the published
+  app starts, not by Publish.
+  [ASSUMPTION] This is what Alembic's PostgreSQL SQL looks like; Replit's own
+  screen hasn't been seen for it.
 
 **When you publish** (plain steps for the owner):
 1. In the workspace, **Pull** the latest code.

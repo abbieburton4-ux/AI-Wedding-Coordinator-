@@ -5,8 +5,10 @@ from pydantic import BaseModel, Field
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from google.genai import types
-from app.db.models import Wedding, Venue, Supplier, Booking, BudgetLine
+from app.db.models import Wedding, Venue, Supplier, Booking, BudgetCategory
+from app.agents.budget_split import category_key
 from app.agents.orchestrator import run_agent
+from app.utils.budget_compare import BUDGET_CURRENCY
 from app.agents.base import get_client, model_for, get_prompt_version
 from app.agents.privacy import send_prompt
 from app.utils.constants import region_matches
@@ -59,10 +61,28 @@ SUPPLIER_SYSTEM_INSTRUCTION_TEMPLATE = (
 )
 
 
-def _share(total, fraction):
-    """A rough share of the intake total, or None (sent as null) when no budget is set
-    yet (PD-009), so the model is never told the budget is 0."""
-    return None if total is None else total * fraction
+async def _category_budget(db: AsyncSession, wedding: Wedding, category: str,
+                           share_percent: int) -> dict:
+    """What the couple's own budget (PD-004) allows for a vendor category, in cents.
+
+    The planned amount of their budget category with the same name if they've set
+    one; otherwise a rough share of their total; otherwise null with "no budget set"
+    (PD-009), so the model is never told the budget is 0."""
+    key = category_key(category)
+    rows = (await db.exec(
+        select(BudgetCategory).where(BudgetCategory.wedding_id == wedding.id)
+        .order_by(BudgetCategory.created_at, BudgetCategory.id)
+    )).all()
+    match = next((c for c in rows if category_key(c.name) == key
+                  and c.planned_cents is not None), None)
+    if match:
+        cents, source = match.planned_cents, f"planned for the couple's {match.name} category"
+    elif wedding.budget_total_cents:
+        cents = wedding.budget_total_cents * share_percent // 100
+        source = f"a rough {share_percent}% share of the couple's total budget"
+    else:
+        cents, source = None, "no budget set yet"
+    return {"amount_cents": cents, "currency": BUDGET_CURRENCY, "source": source}
 
 
 @run_agent("venue_matcher", "venue_match")
@@ -78,13 +98,8 @@ async def run_venue_matcher(db: AsyncSession, wedding_id: str):
     if not wedding:
         raise ValueError(f"Wedding not found: {wedding_id}")
         
-    # Get budget allocation for venue
-    budget_result = await db.exec(
-        select(BudgetLine).where(BudgetLine.wedding_id == wedding_id, BudgetLine.category == "venue")
-    )
-    venue_budget_row = budget_result.first()
-    venue_budget = venue_budget_row.allocated_amount if venue_budget_row else _share(wedding.budget_total, 0.4)
-    
+    venue_budget = await _category_budget(db, wedding, "venue", 40)
+
     guest_count = wedding.guest_count_estimate
     preferred_region = wedding.region
     
@@ -223,13 +238,8 @@ async def run_supplier_matcher(db: AsyncSession, wedding_id: str, category: str)
     if not wedding:
         raise ValueError(f"Wedding not found: {wedding_id}")
         
-    # Get budget allocation for category
-    budget_result = await db.exec(
-        select(BudgetLine).where(BudgetLine.wedding_id == wedding_id, BudgetLine.category == category)
-    )
-    cat_budget_row = budget_result.first()
-    cat_budget = cat_budget_row.allocated_amount if cat_budget_row else _share(wedding.budget_total, 0.1)
-    
+    cat_budget = await _category_budget(db, wedding, category, 10)
+
     guest_count = wedding.guest_count_estimate
     preferred_region = wedding.region
     

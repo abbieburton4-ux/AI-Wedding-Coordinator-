@@ -320,17 +320,22 @@ async def run_async_verification():
             
             # --- TEST 6: QUOTE EXTRACTOR (UNDER BUDGET) ---
             print("\nTEST 6: Running Quote Extractor (Under Budget Path)...")
-            # Create pre-made budget line for photography
+            # B44: the alert compares with the couple's own budget category (PD-004), in
+            # US dollars. An old euro budget line is still there, and is ignored: a big
+            # gap between the two would show which one the alert read.
+            from app.db.models import BudgetCategory as _BudgetCategory, BudgetCost as _BudgetCost
             photo_budget = BudgetLine(
                 id="bl_photo_test_2",
                 wedding_id="wedding_planning_test",
                 category="photography",
-                allocated_amount=4000.0,
+                allocated_amount=100.0,
                 spent_amount=0.0
             )
             db.add(photo_budget)
+            db.add(_BudgetCategory(id="cat_photo_test", wedding_id="wedding_planning_test",
+                                   name="Photography", planned_cents=400_000))
             await db.commit()
-            
+
             quote_under_response = {
                 "is_available": True,
                 "line_items": [
@@ -338,7 +343,7 @@ async def run_async_verification():
                     {"item": "Album", "description": "Custom leather book", "amount": 500.0}
                 ],
                 "total_amount": 3000.0,
-                "currency": "EUR",
+                "currency": "USD",
                 "rationale_text": "Standard package, available.",
                 "confidence_score": 0.95
             }
@@ -389,26 +394,26 @@ async def run_async_verification():
                     {"item": "Luxury Package", "description": "All-in coverage + engagement", "amount": 5000.0}
                 ],
                 "total_amount": 5000.0,
-                "currency": "EUR",
-                "rationale_text": "Premium package exceeds photo budget of €4,000.",
+                "currency": "USD",
+                "rationale_text": "Premium package exceeds photo budget of $4,000.",
                 "confidence_score": 0.95
             }
-            
+
             async def mock_generate_content_quote_over(*args, **kwargs):
                 return MockResponse(json.dumps(quote_over_response))
-                
+
             mock_models.generate_content = mock_generate_content_quote_over
-            
-            res_over = await approved(run_quote_extractor, 
+
+            res_over = await approved(run_quote_extractor,
                 db,
                 "wedding_planning_test",
                 "booking_photo_test",
-                "Hi, luxury package is €5,000."
+                "Hi, luxury package is $5,000."
             )
-            
+
             # Verify booking transitioned to quoted
             assert booking.status == "quoted"
-            
+
             # Verify budget_monitor audit log row created automatically as a side effect!
             alert_result = await db.exec(
                 select(AgentDecisionLog)
@@ -419,6 +424,33 @@ async def run_async_verification():
             assert len(alerts) == 1
             print(f"   * Alert message: {alerts[0].rationale_summary}")
             assert "exceeds" in alerts[0].rationale_summary
+            alert = alerts[0].rationale_summary
+            assert alert.startswith("Budget alert for Photography: the quote from "), alert
+            assert alert.endswith("($5,000) exceeds what you planned ($4,000) by $1,000."), alert
+            assert alerts[0].input_payload == {"planned_cents": 400_000, "quote_cents": 500_000}
+
+            # TEST 7a: a quote in another currency isn't compared (no alert rather than a
+            # guessed one), and the extractor writes nothing into the couple's budget.
+            print("\nTEST 7a: Quote Extractor leaves the budget alone (B44)...")
+            booking.status = "inquired"
+            db.add(booking)
+            await db.commit()
+            quote_over_response["currency"] = "EUR"
+            await approved(run_quote_extractor, db, "wedding_planning_test",
+                           "booking_photo_test", "Hi, luxury package is 5,000 euro.")
+            alerts = (await db.exec(select(AgentDecisionLog).where(
+                AgentDecisionLog.wedding_id == "wedding_planning_test",
+                AgentDecisionLog.agent_id == "budget_monitor"))).all()
+            assert len(alerts) == 1, "no alert for a quote in euros against a dollar budget"
+            await db.refresh(photo_budget)
+            assert photo_budget.spent_amount == 0.0, "the old euro line isn't written either"
+            assert (await db.exec(select(_BudgetCost).where(
+                _BudgetCost.wedding_id == "wedding_planning_test"))).all() == [], \
+                "a quote never becomes an expense; the couple record costs"
+            cat = (await db.exec(select(_BudgetCategory).where(
+                _BudgetCategory.id == "cat_photo_test"))).first()
+            assert cat.planned_cents == 400_000
+            print("   * Alerts read the couple's own budget in dollars; nothing is written to it")
 
             # --- TEST 7b: A REPLY TO ONE OF THE COUPLE'S OWN VENDORS (B62) ---
             print("\nTEST 7b: Reading a reply to the couple's own vendor...")
@@ -729,6 +761,76 @@ async def run_async_verification():
             print("   * Unfinished tasks in stage order; done tasks and notes left out")
             assert "Clara" not in context, "the couple's names stay out of the prompt (PD-009)"
             assert "Total budget: €30,000" in context
+            assert "Budget lines" not in context and "allocated" not in context, \
+                "the old euro budget lines aren't read any more (B44)"
+
+            print("\nTEST 12a: Concierge and matchers read the couple's own budget (B44)...")
+            import datetime as _dt0
+            from app.agents import concierge as concierge_module
+            from app.agents.matcher import _category_budget
+            from app.db.models import (BudgetCategory as _Cat, BudgetCost as _Cost,
+                                       BudgetPayment as _Pay)
+            db.add_all([
+                _Cat(id="cat_c_venue", wedding_id="wedding_intake_test", name="Venue",
+                     planned_cents=1_500_000),
+                _Cost(id="cost_c_hall", wedding_id="wedding_intake_test",
+                      category_id="cat_c_venue", vendor_name="Placeholder Hall",
+                      quoted_cents=1_200_000, notes="Private placeholder budget note",
+                      link_url="https://example.test/private-contract",
+                      payment_method="Placeholder method"),
+                _Cost(id="cost_c_old", wedding_id="wedding_intake_test",
+                      category_id="cat_c_venue", vendor_name="Archived Placeholder Barn",
+                      quoted_cents=900_000, archived=True),
+                _Pay(id="pay_c_1", wedding_id="wedding_intake_test", cost_id="cost_c_hall",
+                     kind="deposit", amount_cents=600_000, due_on=_dt0.date(2026, 11, 11),
+                     paid=True, reference="Placeholder ref 123"),
+                _Pay(id="pay_c_2", wedding_id="wedding_intake_test", cost_id="cost_c_hall",
+                     amount_cents=600_000, due_on=_dt0.date(2027, 9, 23)),
+                _Pay(id="pay_c_3", wedding_id="wedding_intake_test", cost_id="cost_c_hall",
+                     kind="deposit", amount_cents=200_000, due_on=_dt0.date(2027, 9, 23),
+                     refundable=True),
+                _Pay(id="pay_c_4", wedding_id="wedding_intake_test", cost_id="cost_c_old",
+                     amount_cents=1_000, due_on=_dt0.date(2026, 1, 1)),
+            ])
+            await db.commit()
+            real_today = concierge_module.wedding_today
+            concierge_module.wedding_today = lambda: _dt0.date(2026, 12, 1)
+            try:
+                context = await _build_context(db, w_ctx)
+            finally:
+                concierge_module.wedding_today = real_today
+            assert "  - Venue: $15,000 planned / $12,000 committed / $6,000 paid" in context, context
+            assert "    - Placeholder Hall: $12,000 (quoted), $6,000 paid, partly paid" in context
+            assert "  - Placeholder Hall: $6,000, due 2027-09-23" in context
+            assert "  - Placeholder Hall: $2,000, due 2027-09-23, refundable deposit" in context
+            assert "Archived Placeholder Barn" not in context, "archived expenses are left out"
+            for private in ("Private placeholder budget note", "example.test/private-contract",
+                            "Placeholder method", "Placeholder ref 123"):
+                assert private not in context, f"{private!r} stays out of the prompt"
+            print("   * Concierge: planned, committed, paid and payments due; archived, notes, "
+                  "links, methods and references left out")
+
+            w_ctx.budget_total_cents = 5_000_000
+            db.add(w_ctx)
+            await db.commit()
+            assert await _category_budget(db, w_ctx, "venue", 40) == {
+                "amount_cents": 1_500_000, "currency": "USD",
+                "source": "planned for the couple's Venue category"}
+            assert await _category_budget(db, w_ctx, "photography", 10) == {
+                "amount_cents": 500_000, "currency": "USD",
+                "source": "a rough 10% share of the couple's total budget"}
+            w_ctx.budget_total_cents = None
+            db.add(w_ctx)
+            await db.commit()
+            assert (await _category_budget(db, w_ctx, "photography", 10))["amount_cents"] is None, \
+                "no budget is sent as null, never 0"
+            for row_id, model in (("pay_c_1", _Pay), ("pay_c_2", _Pay), ("pay_c_3", _Pay),
+                                  ("pay_c_4", _Pay), ("cost_c_hall", _Cost),
+                                  ("cost_c_old", _Cost), ("cat_c_venue", _Cat)):
+                await db.delete(await db.get(model, row_id))
+            await db.commit()
+            print("   * Matchers: the couple's category plan, else a share of their total, "
+                  "else null")
 
             # B48: due dates read "provisional" until the couple confirm the date.
             import datetime as _dt
