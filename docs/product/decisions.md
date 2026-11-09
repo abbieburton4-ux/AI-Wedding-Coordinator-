@@ -274,3 +274,14 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - *Recommended summary rule:* Not selected vendors don't count toward a category's status. A category whose vendors are all Not selected shows "Still to do", because it still needs a vendor.
 - As with the other statuses, only the couple set it; the app never changes it.
 
+## PD-014 — The published app is Public on Replit; the app's own sign-in is the gate
+
+**Date:** 2026-11-09 · **Status:** ratified (by the owner, one of the couple, 2026-11-09: "option A sounds good")
+**Context:** The owner added three family members as View only on the "Who has access" screen. When they opened the app, Replit stopped them with "You don't have access to this published app. Switch to an account with access." The published app was set to private on Replit, so Replit turned them away before they reached the app's own sign-in. Their access-list entries were never checked. Replit's private options ("Workspace only", "Invite only") only admit people Replit itself knows ([Replit: private deployments](https://docs.replit.com/features/publishing/private-deployments), checked 2026-11-09).
+**Options:**
+- A: set the published app to Public on Replit. Anyone with the link sees only the sign-in page. Only the couple and people on the wedding's access list get past it (PD-002).
+- B: keep it private on Replit and also invite each person inside Replit. Each person needs a Replit account, the couple keep two lists in step, and Replit may charge for it [GAP: not checked].
+**Recommendation:** A. The access list was built for this. One list to manage, and nothing past sign-in is visible without being on it.
+**Decision:** A. The owner switched the app to Public and republished it on 2026-11-09 (Publish listed no database changes). Who sees what stays as PD-002 and `wedding.md` set it.
+**Reversible:** yes, in Replit's publishing settings, followed by a republish.
+
