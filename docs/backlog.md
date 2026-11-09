@@ -11,8 +11,8 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-09 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B60** — make publishing a database change on Replit safe, before B62. `in review` (#61): new tables and columns Replit already added are skipped on start; data steps still run via Alembic. Follow-up: test on PostgreSQL; a release that drops or alters a column still needs the team on the publish screen with the owner
-2. **B62** — the couple add their own vendors in each Vendors section (PD-012 call (a), ratified). `ready` (after B60)
+1. **B62** — the couple add their own vendors in each Vendors section (PD-012 call (a), ratified). `in progress`
+2. **B63** — vendor tiles with coloured statuses and a per-category status summary (PD-012 follow-up). `ready` (after B62)
 3. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
 4. **B56** — the Wildman BT payments on the Budget screen (the checklist tasks V1–V3 came in with the load, #56). `ready`
 5. **B45** — the budget screen uses the server's date, not Chicago's; date tests can fail falsely around midnight in Chicago. `ready`
@@ -66,9 +66,9 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B58 — The RUNBOOK backup step doesn't work on Replit.** Found while writing the B53 steps (2026-11-09): the RUNBOOK's checklist-import backup uses `SYNC_DATABASE_URL`, which Replit's Shell doesn't set; there `DATABASE_URL` works, and the Shell always reaches the development database, not the published app's production one. *Fix:* update RUNBOOK for Replit. *Also for B14:* when the app is published, Replit offers to copy development data into production; that is when the imported checklist would carry over, and the publishing plan should cover it. If the wedding is already in production, the Shell can't reach it without pasting a secret, so a safe import route is needed first. *Depends on:* nothing. *#58 (B59):* the backup command now works in Replit's Shell; the publishing note remains.
 
-- **B60 — Publishing a database change may still need care.** Found in #58 (B59): now that the workspace stays up to date, a publish that ships a new migration will show Replit additions ("ADD COLUMN", "CREATE TABLE"). If Replit offers no skip, approving them would leave the published app unable to start, because Alembic would find the change already made. *Until fixed:* whenever a publish shows any database change, the owner stops and tells the team (`replit.md`). *Fix:* make future migrations safe when Replit has already applied them, or find a supported way to publish without Replit's schema step. *Depends on:* nothing; before the next migration ships.
-
 - **B62 — The couple add their own vendors.** PD-012 call (a), ratified 2026-11-09: in each Vendors section, owners and editors add, edit and remove a vendor (name, website, contact person, email or phone, status looking / contacted / booked set only by the couple, notes); viewers see them. Pasting a vendor's emailed reply returns on each vendor, with the check-before-sending rule. Vendor contact details are business details, but keep them out of git, logs and AI prompts beyond what a decision needs. *Depends on:* B61; and, if it needs a database change, B60 first, so publishing it is safe.
+
+- **B63 — Vendor tiles with coloured statuses, and a status summary per category.** PD-012 follow-up, ratified 2026-11-09. Each vendor its own tile, status in its own colour plus the word (looking grey, contacted blue, booked green); a summary at the top with each category's status (furthest vendor status; "Still to do" when empty). *Depends on:* B62 (in progress when asked); build on its branch or right after it.
 
 ### Housekeeping
 
@@ -106,6 +106,7 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-09 | **B60** — a migration still succeeds when Replit's publish step has already added the new table or column; plain publish rules in `replit.md` (approve additions the team announced; stop on DROP, ALTER or renames). Follow-up: a PostgreSQL test; a dropping or altering release needs the team on the publish screen | #61 |
 | 2026-11-09 | **B61** — Vendors page shows the couple's seven sections (Venue: Wildman BT); AI suggestions, the matcher button and the Dashboard shortlist card removed (hidden, not deleted). Pasting a vendor reply returns with B62 | #60 |
 | 2026-11-09 | **B59** — Run in the Replit workspace brings the database up to date before the app starts; plain publishing steps; Shell check `db_status.py`; Replit backup command fixed (B58, backup half) | #58 |
 | 2026-11-09 | **B53** — the owner loaded her checklist on the published app with "Load my checklist" (PD-011), including the 18 Jewish-tradition tasks and the Wildman BT tasks V1–V3 (B56, checklist part) | #56 |
