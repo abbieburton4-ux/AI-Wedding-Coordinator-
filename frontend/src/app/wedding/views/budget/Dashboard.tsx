@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Icon } from "../../../shared/Icon";
 import { AMOUNT_HINT, committedLabel, formatCents, parseDollars } from "./money";
 import { MoneyInput, inputClass, linkButton, overpaidNote, primaryButton } from "./parts";
+import { FoldBody, SECTION_SCROLL, SectionHeading, scrollToElement, sectionId, useFolds } from "./sections";
 import { Bar, Chip, type Tone } from "./status";
 import type { Category, Overview, Run } from "./types";
 
@@ -50,13 +51,11 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-/** Scrolls to the "Next payments due" list and moves focus there. */
-function goToDue() {
-  const el = document.getElementById("next-due");
-  if (!el) return;
-  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-  el.focus({ preventScroll: true });
+/** Scrolls to the "Upcoming payments" list (unfolding it) and moves focus there. */
+function goToDue(folds: ReturnType<typeof useFolds>) {
+  if (folds) { folds.jumpTo("upcoming"); return; }
+  const el = document.getElementById(sectionId("upcoming"));
+  if (el) scrollToElement(el);
 }
 
 /**
@@ -64,7 +63,8 @@ function goToDue() {
  * what's paid, what's still owed, what's coming up, and whether you're within budget.
  * Every figure comes from the API, worked out on read.
  */
-export function BudgetDashboard({ overview }: { overview: Overview }) {
+export function BudgetDashboard({ overview, children }: { overview: Overview; children?: ReactNode }) {
+  const folds = useFolds();
   const t = overview.totals;
   const d = overview.dashboard;
   const hasTotal = t.total_cents !== null;
@@ -87,8 +87,11 @@ export function BudgetDashboard({ overview }: { overview: Overview }) {
           };
 
   return (
-    <section aria-labelledby="glance-heading" className="mb-10">
-      <h2 id="glance-heading" className="font-headline-sm text-headline-sm text-on-surface mb-3">At a glance</h2>
+    <section id={sectionId("overview")} tabIndex={-1} aria-labelledby="glance-heading" className={`mb-10 ${SECTION_SCROLL} focus:outline-none`}>
+      <SectionHeading section="overview" id="glance-heading" className="font-headline-sm text-headline-sm text-on-surface mb-3">
+        Overview
+      </SectionHeading>
+      <FoldBody section="overview">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <Card
           label="What you can spend"
@@ -125,7 +128,7 @@ export function BudgetDashboard({ overview }: { overview: Overview }) {
           explain="Unpaid payments that aren't overdue yet, including ones with no due date. Overdue means the due date has passed (Chicago's date). The app doesn't send reminders."
         >
           {d.upcoming_count + d.overdue_count > 0 && (
-            <button type="button" onClick={goToDue} className={`${linkButton} self-start mt-2`}>
+            <button type="button" onClick={() => goToDue(folds)} className={`${linkButton} self-start mt-2`}>
               See the payments due
             </button>
           )}
@@ -207,6 +210,8 @@ export function BudgetDashboard({ overview }: { overview: Overview }) {
           {" "}{d.near_limit_pct}% or more of {d.categories_near_limit === 1 ? "its" : "their"} target.
         </p>
       )}
+      {children}
+      </FoldBody>
     </section>
   );
 }

@@ -116,3 +116,28 @@ export function moveItem(ids, from, to) {
   next.splice(to, 0, item);
   return next;
 }
+
+/**
+ * A category name in one comparable form, as the API compares them: case and spaces
+ * ignored, "&" read as "and". "Venue  &  catering" is "venue and catering".
+ * @param {string} name
+ */
+export function categoryKey(name) {
+  return name.toLowerCase().replace(/&/g, " and ").split(/\s+/).filter(Boolean).join(" ");
+}
+
+const VENUE_KEYS = new Set(["venue", "venues"]);
+
+/**
+ * Whether a category gets the "Rename to Venue" button (PD-015 call b): "offer" for one
+ * still called Venue & Catering, "clash" if another category is already Venue (renaming
+ * would make two), and null for every other category, so the button goes once renamed.
+ * @param {{ id: string, name: string }} category
+ * @param {{ id: string, name: string }[]} categories
+ * @returns {"offer" | "clash" | null}
+ */
+export function venueRename(category, categories) {
+  if (categoryKey(category.name) !== "venue and catering") return null;
+  const clash = categories.some((c) => c.id !== category.id && VENUE_KEYS.has(categoryKey(c.name)));
+  return clash ? "clash" : "offer";
+}

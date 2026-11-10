@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, filterExpenses, flattenExpenses, moveItem, sortExpenses } from "./expenses.js";
+import {
+  addDays, categoryKey, filterExpenses, flattenExpenses, moveItem, sortExpenses, venueRename,
+} from "./expenses.js";
 
 const pay = (due_on, paid = false) => ({ due_on, paid });
 const cost = (id, over) => ({
@@ -85,4 +87,20 @@ test("moving a category up or down", () => {
   assert.deepEqual(moveItem(["a", "b", "c"], 0, 1), ["b", "a", "c"]);
   assert.deepEqual(moveItem(["a", "b", "c"], 0, -1), ["a", "b", "c"], "nothing above the first");
   assert.deepEqual(moveItem(["a", "b", "c"], 2, 3), ["a", "b", "c"], "nothing below the last");
+});
+
+test("Rename to Venue shows only for a category still called Venue & Catering (PD-015)", () => {
+  const cat = (id, name) => ({ id, name });
+  const old = cat("a", "Venue & Catering");
+  assert.equal(venueRename(old, [old]), "offer");
+  for (const name of [" venue  &  CATERING ", "Venue and Catering", "venue AND catering"]) {
+    assert.equal(venueRename(cat("a", name), [cat("a", name)]), "offer", name);
+  }
+  for (const name of ["Venue", "Food & Drink", "Venue & Catering hire", "Catering"]) {
+    assert.equal(venueRename(cat("a", name), [cat("a", name)]), null, name);
+  }
+  assert.equal(venueRename(old, [old, cat("b", " venue ")]), "clash", "a Venue already exists");
+  assert.equal(venueRename(old, [old, cat("b", "Venues")]), "clash");
+  assert.equal(venueRename(old, [old, cat("b", "Food & Drink")]), "offer");
+  assert.equal(categoryKey("  Flowers   &Decor "), "flowers and decor");
 });

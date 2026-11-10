@@ -29,3 +29,7 @@ export function hasUnpaidDue(cost: Cost, from: string, to: string): boolean;
 export function filterExpenses(rows: ExpenseRow[], f: ExpenseFilters, today: string): ExpenseRow[];
 export function sortExpenses(rows: ExpenseRow[], key: string, dir: "asc" | "desc"): ExpenseRow[];
 export function moveItem(ids: string[], from: number, to: number): string[];
+export function categoryKey(name: string): string;
+export function venueRename(
+  category: { id: string; name: string }, categories: { id: string; name: string }[],
+): "offer" | "clash" | null;

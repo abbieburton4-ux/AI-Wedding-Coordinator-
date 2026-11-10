@@ -11,11 +11,16 @@ import { UpcomingPayments } from "./budget/Upcoming";
 import { BudgetExport } from "./budget/Export";
 import { AMOUNT_HINT, centsToInput, formatCents, parseDollars } from "./budget/money";
 import {
-  AddCategoryForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, linkButton, primaryButton,
+  AddCategoryForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, inputClass, linkButton, primaryButton,
   type OpenRequest,
 } from "./budget/parts";
-import type { Overview, Run, SplitSuggestion, VendorRef } from "./budget/types";
+import {
+  FoldBody, FoldProvider, JumpBar, SECTIONS, SECTION_SCROLL, SectionHeading, scrollToElement, sectionId, useFolds,
+} from "./budget/sections";
+import type { Category, Overview, Run, SplitSuggestion, VendorRef } from "./budget/types";
 import { useReviewedRequest } from "../../api/review";
+
+const SUGGESTIONS_ID = "budget-suggestions";
 
 // Shown only when the backend is switched off (USE_FASTAPI_BACKEND), and labelled as sample.
 const STATIC_CATEGORIES = [
@@ -27,14 +32,26 @@ const STATIC_CATEGORIES = [
  * The couple's budget (PD-004): an optional total, categories with planned amounts,
  * vendor costs with deposits and payments, who's contributing, and what's due next.
  * Everyone on the access list can see it; only owners and editors see edit controls,
- * and the API refuses edits from anyone else.
+ * and the API refuses edits from anyone else. A jump-to bar and a fold on each section
+ * (PD-015) keep the long page manageable.
  */
 export function Budget() {
+  const { activeWedding } = useActiveWedding();
+  return (
+    <FoldProvider weddingId={activeWedding?.id ?? null}>
+      <BudgetScreen />
+    </FoldProvider>
+  );
+}
+
+function BudgetScreen() {
   const { activeWedding, myLevel } = useActiveWedding();
   const weddingId = activeWedding?.id ?? null;
   const { request } = useApi();
   const base = `/weddings/${weddingId}/budget`;
   const canEdit = myLevel === "owner" || myLevel === "editor";
+  const folds = useFolds();
+  const openFold = folds?.open;
 
   const [overview, setOverview] = useState<Overview | null>(null);
   const [vendors, setVendors] = useState<VendorRef[]>([]);
@@ -42,10 +59,23 @@ export function Budget() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [openRequest, setOpenRequest] = useState<OpenRequest>(null);
+  // Opening an expense (from Upcoming payments or All expenses) unfolds Categories first.
   const openExpense = useCallback(
-    (id: string) => setOpenRequest((prev) => ({ id, n: (prev?.n ?? 0) + 1 })),
-    [],
+    (id: string) => {
+      openFold?.("categories");
+      setOpenRequest((prev) => ({ id, n: (prev?.n ?? 0) + 1 }));
+    },
+    [openFold],
   );
+  const [addRequest, setAddRequest] = useState<OpenRequest>(null);
+  const addExpenseTo = useCallback(
+    (id: string) => {
+      openFold?.("categories");
+      setAddRequest((prev) => ({ id, n: (prev?.n ?? 0) + 1 }));
+    },
+    [openFold],
+  );
+  const clearAdd = useCallback(() => setAddRequest(null), []);
   const clearOpen = useCallback(() => setOpenRequest(null), []);
   // A chart's category opens the list of all expenses, filtered to it.
   const [categoryRequest, setCategoryRequest] = useState<CategoryRequest>(null);
@@ -107,7 +137,21 @@ export function Budget() {
         {!canEdit && myLevel && (
           <p className="text-sm text-on-surface-variant mt-2">You can see the budget but not change it.</p>
         )}
+        {canEdit && overview && (
+          <AddExpenseStart
+            categories={overview.categories}
+            hasSuggestions={overview.missing_default_categories.length > 0 || overview.removed_default_categories.length > 0}
+            onPick={addExpenseTo}
+          />
+        )}
       </div>
+
+      {overview && (
+        <JumpBar
+          present={SECTIONS.map((s) => s.key).filter((k) =>
+            (k !== "expenses" || overview.categories.some((c) => c.costs.length > 0)) && (k !== "export" || !!weddingId))}
+        />
+      )}
 
       {error && (
         <p role="alert" className="mb-6 text-sm text-error">{error}</p>
@@ -125,11 +169,14 @@ export function Budget() {
         </div>
       ) : (
         <>
-          <BudgetDashboard overview={overview} />
-          <TotalCard base={base} totalCents={overview.totals.total_cents} canEdit={canEdit} run={run} request={request} busy={busy} />
-          {canEdit && overview.totals.total_cents !== null && (
-            <SplitPanel base={base} request={request} run={run} busy={busy} />
-          )}
+          <BudgetDashboard overview={overview}>
+            <div className="mt-10">
+              <TotalCard base={base} totalCents={overview.totals.total_cents} canEdit={canEdit} run={run} request={request} busy={busy} />
+              {canEdit && overview.totals.total_cents !== null && (
+                <SplitPanel base={base} request={request} run={run} busy={busy} />
+              )}
+            </div>
+          </BudgetDashboard>
 
           <UpcomingPayments categories={overview.categories} today={overview.today} onOpen={openExpense} />
 
@@ -139,8 +186,14 @@ export function Budget() {
             categories={overview.categories} today={overview.today} onOpen={openExpense} categoryRequest={categoryRequest}
           />
 
-          <section aria-labelledby="cat-heading" className="mb-10">
-            <h2 id="cat-heading" className="font-headline-sm text-headline-sm text-on-surface mb-3">Categories</h2>
+          <section
+            id={sectionId("categories")} tabIndex={-1} aria-labelledby="cat-heading"
+            className={`mb-10 ${SECTION_SCROLL} focus:outline-none`}
+          >
+            <SectionHeading section="categories" id="cat-heading" className="font-headline-sm text-headline-sm text-on-surface mb-3">
+              Categories
+            </SectionHeading>
+            <FoldBody section="categories">
             {overview.categories.length === 0 && (
               <p className="text-sm text-on-surface-variant mb-4">
                 {canEdit
@@ -153,10 +206,12 @@ export function Budget() {
             )}
             {canEdit && (overview.missing_default_categories.length > 0
               || overview.removed_default_categories.length > 0) && (
-              <DefaultCategoriesOffer
-                base={base} missing={overview.missing_default_categories} removed={overview.removed_default_categories}
-                hasAny={overview.categories.length > 0} run={run} request={request} busy={busy}
-              />
+              <div id={SUGGESTIONS_ID} tabIndex={-1} className={`${SECTION_SCROLL} focus:outline-none`}>
+                <DefaultCategoriesOffer
+                  base={base} missing={overview.missing_default_categories} removed={overview.removed_default_categories}
+                  hasAny={overview.categories.length > 0} run={run} request={request} busy={busy}
+                />
+              </div>
             )}
             {canEdit && (
               <CategoryOrder base={base} categories={overview.categories} run={run} request={request} busy={busy} />
@@ -166,12 +221,13 @@ export function Budget() {
                 <CategoryCard
                   key={cat.id} base={base} category={cat} categories={overview.categories} totals={overview.totals}
                   vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} openRequest={openRequest}
-                  onOpened={clearOpen}
+                  onOpened={clearOpen} addRequest={addRequest} onAddHandled={clearAdd}
                 />
               ))}
             </div>
             {canEdit && <AddCategoryForm base={base} run={run} request={request} busy={busy} />}
             {canEdit && <MethodSuggestions />}
+            </FoldBody>
           </section>
 
           {weddingId && <BudgetExport weddingId={weddingId} today={overview.today} />}
@@ -366,6 +422,85 @@ function SplitPanel({
         <button type="button" onClick={() => setSuggestion(null)} className={linkButton}>Discard</button>
       </div>
     </section>
+  );
+}
+
+/**
+ * The main "Add expense" (PD-015 step 2): asks which category, then opens that
+ * category's own form. With no categories yet, it points to the suggestions first.
+ */
+function AddExpenseStart({
+  categories, hasSuggestions, onPick,
+}: { categories: Category[]; hasSuggestions: boolean; onPick: (categoryId: string) => void }) {
+  const folds = useFolds();
+  const [asking, setAsking] = useState(false);
+  const [picked, setPicked] = useState("");
+  // The list can reload while this is open; never pick a category that's gone.
+  const target = categories.some((c) => c.id === picked) ? picked : categories[0]?.id ?? "";
+
+  const goTo = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (folds) folds.jumpTo("categories", el);
+    else scrollToElement(el);
+  };
+
+  const start = (
+    <button
+      type="button"
+      onClick={() => setAsking((a) => !a)}
+      aria-expanded={asking}
+      className={`${primaryButton} inline-flex items-center gap-2`}
+    >
+      <Icon name="add" size={18} /> Add expense
+    </button>
+  );
+
+  if (!asking) return <div className="mt-4">{start}</div>;
+
+  if (categories.length === 0) {
+    return (
+      <div className="mt-4 flex flex-wrap items-center gap-4">
+        {start}
+        <p className="text-sm text-on-surface">
+          Each expense goes in a category, and you don't have any yet.{" "}
+          {hasSuggestions ? (
+            <button type="button" onClick={() => goTo(SUGGESTIONS_ID)} className={`${linkButton} font-bold text-primary`}>
+              Add the suggested categories first
+            </button>
+          ) : (
+            <button type="button" onClick={() => goTo("new-cat-name")} className={`${linkButton} font-bold text-primary`}>
+              Add a category first
+            </button>
+          )}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="mt-4 flex flex-wrap items-end gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!target) return;
+        setAsking(false);
+        onPick(target);
+      }}
+    >
+      {start}
+      <span className="flex flex-col gap-1">
+        <label htmlFor="add-expense-category" className="text-xs text-on-surface-variant">Which category is it for?</label>
+        <select
+          id="add-expense-category" value={target} onChange={(e) => setPicked(e.target.value)}
+          className={inputClass}
+        >
+          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </span>
+      <button type="submit" className={primaryButton}>Continue</button>
+      <button type="button" onClick={() => setAsking(false)} className={linkButton}>Cancel</button>
+    </form>
   );
 }
 

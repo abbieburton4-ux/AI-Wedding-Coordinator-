@@ -1,6 +1,7 @@
 import { useId, useMemo, useState } from "react";
 import { formatCents, formatDay } from "./money";
 import { linkButton } from "./parts";
+import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId } from "./sections";
 import { Chip } from "./status";
 import type { Category } from "./types";
 import { daysUntil, upcomingPayments, type Group, type PaymentTag, type UpcomingItem } from "./figures";
@@ -40,8 +41,11 @@ export function UpcomingPayments({
   const count = (Object.keys(groups) as Group[]).reduce((n, g) => n + groups[g].items.length, 0);
 
   return (
-    <section id="next-due" tabIndex={-1} aria-labelledby="due-heading" className="mb-10 scroll-mt-24 focus:outline-none">
-      <h2 id="due-heading" className="font-headline-sm text-headline-sm text-on-surface mb-1">Upcoming payments</h2>
+    <section id={sectionId("upcoming")} tabIndex={-1} aria-labelledby="due-heading" className={`mb-10 ${SECTION_SCROLL} focus:outline-none`}>
+      <SectionHeading section="upcoming" id="due-heading" className="font-headline-sm text-headline-sm text-on-surface mb-1">
+        Upcoming payments
+      </SectionHeading>
+      <FoldBody section="upcoming">
       <p className="text-xs text-on-surface-variant mb-3">
         Shown here only: the app doesn't send reminders or pay anyone. To tick a payment as paid, open its expense.
         Refundable deposits are listed, but they aren't part of what anything costs.
@@ -75,6 +79,7 @@ export function UpcomingPayments({
           )}
         </div>
       )}
+      </FoldBody>
     </section>
   );
 }

@@ -1177,18 +1177,18 @@ def test_api_suite():
         mine = c.post(f"{b_url}/categories", json={"name": "Mine"}, headers=headers).json()["id"]
         ov = c.get(f"{b_url}/overview", headers=viewer_headers).json()
         assert ov["missing_default_categories"] == [n for n in DEFAULT_NAMES
-                                                    if n != "Venue & Catering"], ov
+                                                    if n != "Venue"], ov
         assert c.post(f"{b_url}/categories/defaults", headers=headers,
                       json={"names": ["Nope"]}).status_code == 422
         res = c.post(f"{b_url}/categories/defaults", headers=editor_headers)
         assert res.status_code == 200, res.text
-        assert res.json() == {"added": [n for n in DEFAULT_NAMES if n != "Venue & Catering"],
-                              "already_had": ["Venue & Catering"]}, res.json()
+        assert res.json() == {"added": [n for n in DEFAULT_NAMES if n != "Venue"],
+                              "already_had": ["Venue"]}, res.json()
         ov = c.get(f"{b_url}/overview", headers=viewer_headers).json()
         names = [k["name"] for k in ov["categories"]]
         assert names == ["venue and CATERING", "Mine"] + res.json()["added"], \
             "added after the couple's own, in the suggested order"
-        assert len(ov["categories"]) == 11 and ov["missing_default_categories"] == []
+        assert len(ov["categories"]) == 12 and ov["missing_default_categories"] == []
         by_name = {k["name"]: k for k in ov["categories"]}
         own = by_name["venue and CATERING"]
         assert (own["id"], own["planned_cents"], [x["id"] for x in own["costs"]]) == (
@@ -1199,10 +1199,16 @@ def test_api_suite():
         ceremony = by_name["Ceremony & Legal"]["suggestions"]
         assert {"Ketubah", "Chuppah", "Rabbi's fee", "Officiant"} <= set(ceremony), ceremony
         assert own["suggestions"][:2] == ["Ceremony venue", "Reception venue"]
+        # PD-015: catering has its own category, so it isn't offered under Venue too.
+        assert "Catering" not in own["suggestions"], own["suggestions"]
+        food = by_name["Food & Drink"]["suggestions"]
+        assert food == ["Catering", "Bar and beverages", "Wedding cake and desserts",
+                        "Cocktail hour", "Late-night food", "Service charge and gratuity",
+                        "Catering rentals"], food
         assert by_name["Mine"]["suggestions"] == [] and by_name["Contingency"]["suggestions"] == []
         again = c.post(f"{b_url}/categories/defaults", headers=headers, json={})
         assert again.json() == {"added": [], "already_had": list(DEFAULT_NAMES)}, again.json()
-        assert len(c.get(f"{b_url}/overview", headers=headers).json()["categories"]) == 11, \
+        assert len(c.get(f"{b_url}/overview", headers=headers).json()["categories"]) == 12, \
             "a second click adds nothing"
         # Adding or renaming uses the same rule, so look-alikes can't be made by hand.
         for name in ("Flowers and Decor", "venues", " ceremony AND legal "):
@@ -1278,6 +1284,51 @@ def test_api_suite():
         assert theirs["removed_default_categories"] == [], "another wedding's list untouched"
         print("   * Removed suggestions: not offered again, the rest still are; a rename "
               "isn't a removal; restored on an editor's click; viewers can't change it")
+
+        # PD-015: "Venue & Catering", the name before Venue and Food & Drink split,
+        # still stands for Venue, both as a category and as a removed suggestion.
+        from app.utils.budget_defaults import missing_defaults, removed_defaults
+        assert DEFAULT_NAMES == (
+            "Venue", "Food & Drink", "Photography & Entertainment", "Attire & Beauty",
+            "Flowers & Decor", "Planning & Stationery", "Transportation & Accommodation",
+            "Ceremony & Legal", "Additional Events", "Other", "Contingency"), DEFAULT_NAMES
+        rest = [n for n in DEFAULT_NAMES if n != "Venue"]
+        assert missing_defaults(["Venue & Catering"]) == rest, "Venue isn't offered twice"
+        assert missing_defaults([" venues "]) == rest
+        assert missing_defaults([], ["Venue & Catering"]) == rest, "declined under the old name"
+        assert removed_defaults([], ["venue and catering"]) == ["Venue"]
+        assert removed_defaults(["Venue"], ["Venue & Catering"]) == []
+        assert "Food & Drink" in missing_defaults([], ["Venue & Catering"]), \
+            "removing the old venue category doesn't decline the new Food & Drink"
+        from app.db.models import Wedding as _Wedding
+        with Session(sync_engine) as s:
+            s.get(_Wedding, wedding_id).declined_budget_defaults = ["Venue & Catering"]
+            s.commit()
+        assert offered() == ([], []), "they have a venue category, so nothing to restore"
+        # The Rename to Venue button is an ordinary rename, allowed over its own old name.
+        res = c.patch(f"{b_url}/categories/{venue_own}", json={"name": "Our hall"},
+                      headers=headers)
+        assert res.status_code == 200, res.text
+        assert offered() == ([], ["Venue"]), offered()
+        assert c.post(f"{b_url}/categories/defaults/restore", headers=headers,
+                      json={"names": ["Venue & Catering"]}).json() == {"restored": ["Venue"]}
+        assert offered() == (["Venue"], []), offered()
+        res = c.patch(f"{b_url}/categories/{venue_own}", json={"name": "Venue & Catering"},
+                      headers=headers)
+        assert res.status_code == 200 and offered() == ([], []), res.text
+        res = c.patch(f"{b_url}/categories/{venue_own}", json={"name": "Venue"},
+                      headers=editor_headers)
+        assert res.status_code == 200 and res.json()["name"] == "Venue", res.text
+        assert c.patch(f"{b_url}/categories/{venue_own}", json={"name": "Venue & Catering"},
+                       headers=viewer_headers).status_code == 403
+        after = {k["name"]: k for k in c.get(f"{b_url}/overview", headers=headers).json()[
+            "categories"]}
+        assert [x["id"] for x in after["Venue"]["costs"]] == [hall], "its expense stays put"
+        assert after["Food & Drink"]["costs"] == [], "nothing moves to Food & Drink by itself"
+        res = c.post(f"{b_url}/categories", json={"name": "Venue & Catering"}, headers=headers)
+        assert res.status_code == 409, "no look-alike of Venue beside it"
+        print("   * PD-015: Venue and Food & Drink suggested; the old Venue & Catering name "
+              "counts as Venue, kept or declined; renaming it to Venue moves nothing")
 
         order_url = f"{b_url}/categories/order"
         ids = [k["id"] for k in c.get(f"{b_url}/overview", headers=headers).json()["categories"]]
