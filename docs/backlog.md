@@ -11,21 +11,22 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-10 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B19** — guest planning: list, food, seating (must-have 3). `needs-owner: what next — guest planning (recommended) or quick fixes?`
-2. **B70** — Publish offered to delete the Vendors section from the live app because the workspace hadn't caught up; make that harder to hit. `ready`
-3. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
-4. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
-5. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-6. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-7. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
-8. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
-9. **B34** — database-level guard against the same email being added twice. `ready`
-10. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
-11. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
-12. **B8** — record missing token counts as empty, not 0. `ready`
-13. **B17** — stop tracking the test database files. `ready`
-14. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
-15. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
+1. **Budget enhancements** — the owner will send a list (2026-11-10: "lets make enhancements to the budget page next"). `needs-owner: the list`
+2. **B19** — guest planning: list, food, seating (must-have 3), after the budget enhancements. `needs-owner: guest-planning scope PD, to be proposed`
+3. **B70** — Publish offered to delete the Vendors section from the live app because the workspace hadn't caught up; make that harder to hit. `ready`
+4. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
+5. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
+6. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+7. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
+8. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
+9. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+10. **B34** — database-level guard against the same email being added twice. `ready`
+11. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+12. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
+13. **B8** — record missing token counts as empty, not 0. `ready`
+14. **B17** — stop tracking the test database files. `ready`
+15. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
+16. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
 
 ## Open
 
