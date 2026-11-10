@@ -12,7 +12,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B70** — Publish offered to delete the Vendors section from the live app because the workspace hadn't caught up; make that harder to hit. `ready`
-2. **B65–B69** — the full budget tracker, five steps (PD-013). ratified 2026-11-09; B65 done (#72); B65 and B66 done (#72, #74); B67 `in review` (#76; Publish shows one `ADD COLUMN sort_order` on `budget_categories`), then B68 and B69. `needs-owner: should a suggested category you removed stop being offered?` (recommended: yes)
+2. **B65–B69** — the full budget tracker, five steps (PD-013). ratified 2026-11-09; B65 done (#72); B65 and B66 done (#72, #74); B65–B67 done (#72, #74, #76); B68 `in review` (#78, no database change), then B71 (small), then B69
 3. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
 4. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
 5. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
@@ -63,7 +63,13 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B58 — The RUNBOOK backup step doesn't work on Replit.** Found while writing the B53 steps (2026-11-09): the RUNBOOK's checklist-import backup uses `SYNC_DATABASE_URL`, which Replit's Shell doesn't set; there `DATABASE_URL` works, and the Shell always reaches the development database, not the published app's production one. *Fix:* update RUNBOOK for Replit. *Also for B14:* when the app is published, Replit offers to copy development data into production; that is when the imported checklist would carry over, and the publishing plan should cover it. If the wedding is already in production, the Shell can't reach it without pasting a secret, so a safe import route is needed first. *Depends on:* nothing. *#58 (B59):* the backup command now works in Replit's Shell; the publishing note remains.
 
-- **B65–B69 — The full budget tracker (PD-013, ratified 2026-11-09).** The owner's brief, 2026-11-09, split into five steps: B65 expenses and payments that add up (database change; folds in B44, B45 and the budget half of B56); B66 dashboard and allocation (done, #74; Contingency recognised by its name); B67 (`in progress`) B67 categories and the expense list (small database change); B68 charts and upcoming payments; B69 export (CSV and a printable page). Receipts and contracts are Google Drive links; default categories as in call (b); the engineering team enters Wildman BT in B65 as a one-time data step.
+- **B65–B69 — The full budget tracker (PD-013, ratified 2026-11-09).** The owner's brief, 2026-11-09, split into five steps: B65 expenses and payments that add up (database change; folds in B44, B45 and the budget half of B56); B66 dashboard and allocation (done, #74; Contingency recognised by its name); B67 done (#76) B67 categories and the expense list (small database change); B68 charts and upcoming payments; B69 export (CSV and a printable page). Receipts and contracts are Google Drive links; default categories as in call (b); the engineering team enters Wildman BT in B65 as a one-time data step.
+
+- **B71 — A removed suggested category keeps being offered.** Found in #76 (B67): "Add the suggested categories" offers any of the ten that are missing on each visit until the couple click "Not now", including one they removed on purpose. Owner, 2026-11-10: "yes": once the couple remove a suggested category, it is not offered again. `ready` (after B68; small, may need a database field to remember it)
+
+- **B72 — White text on the gold buttons is hard to read.** Found in #78 (B68) by the accessibility review: the app's primary gold buttons with white text fall below the contrast standard. Affects the whole app, not just the budget. *Fix:* darken the button colour or use dark text, in the theme tokens. *Depends on:* nothing; small.
+
+- **B73 — A test fails now and then.** Found in #78 (B68): one existing check fails at random when a generated id contains "555" (it looks like a phone number to the privacy filter). Not caused by #78. *Fix:* make the test ids fixed, or teach the check to ignore ids. *Depends on:* nothing; small.
 
 ### Housekeeping
 
@@ -99,6 +105,7 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-10 | **B67** — budget step 3 (PD-013): the ten suggested categories on the couple's click, one-tap expense ideas (ketubah, chuppah, rabbi's fee under Ceremony & Legal), reorder, duplicate (no payments copied), delete only after moving expenses, and a sortable, filterable, searchable "All expenses" list. Publish adds `sort_order` to `budget_categories` | #76 |
 | 2026-11-10 | **B66** — budget step 2 (PD-013): the dashboard's six questions with explanations, progress bars, category targets with share and status, over-budget heads-ups, moving money between categories, Contingency on the couple's click. No database change | #74 |
 | 2026-11-09 | **B65** — budget step 1 (PD-013): estimated, quoted and final cost, contract status, method, notes, Drive link and vendor link per expense; method, reference, date paid and refundable per payment; unpaid / partly paid / paid / overdue on Chicago's date; overpay warning. Wildman BT entered by a one-time data step, nothing paid. Published 2026-11-09 with no Replit database step; the live app applied it on start. Also closes B44 (agents and Dashboard read the new budget), B45 (Chicago date) and B56 (budget half) | #72 |
 | 2026-11-09 | **B64** — "Not selected" vendor status: muted red, faded, at the bottom of its section; ignored by the section summary. Stored as a new yes/no column, so publishing added a column and dropped nothing | #69 |
