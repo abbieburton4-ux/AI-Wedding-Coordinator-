@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Icon } from "../../../shared/Icon";
 import {
   AMOUNT_HINT, centsToInput, committedLabel, formatCents, formatDay, formatInstantDay, parseDollars,
@@ -104,25 +104,14 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-/** What removing a category takes with it, spelt out before the couple confirm. */
-function removeCategoryText(category: Category): string {
-  const costs = category.costs.length;
-  if (!costs) return `Remove ${category.name}?`;
-  const payments = category.costs.reduce((n, c) => n + c.payments.length, 0);
-  const paid = category.costs.reduce((n, c) => n + c.payments.filter((p) => p.paid).length, 0);
-  const what = payments
-    ? `its ${plural(costs, "vendor cost")} and their ${plural(payments, "payment")}` +
-      (paid ? `, including ${paid} already ticked paid` : "")
-    : `its ${plural(costs, "vendor cost")}`;
-  return `Remove ${category.name}? This also removes ${what}. Contributions towards it are kept.`;
-}
-
-function Confirm({ text, onYes, onNo, busy }: { text: ReactNode; onYes: () => void; onNo: () => void; busy: boolean }) {
+function Confirm({
+  text, onYes, onNo, busy, yesLabel = "Yes, remove",
+}: { text: ReactNode; onYes: () => void; onNo: () => void; busy: boolean; yesLabel?: string }) {
   return (
     <span className="flex flex-wrap items-center gap-2 text-sm">
       <span>{text}</span>
       <button type="button" disabled={busy} onClick={onYes} className="text-error font-bold underline-offset-4 hover:underline">
-        Yes, remove
+        {yesLabel}
       </button>
       <button type="button" disabled={busy} onClick={onNo} className={linkButton}>Cancel</button>
     </span>
@@ -134,11 +123,16 @@ function Confirm({ text, onYes, onNo, busy }: { text: ReactNode; onYes: () => vo
 /** What a new or edited expense is measured against, for the "would go over" note. */
 type Limits = { target: number | null; committed: number; total: number | null; totalCommitted: number };
 
+/** Asks a category to open and scroll to one of its expenses; n changes on each ask. */
+export type OpenRequest = { id: string; n: number } | null;
+
 export function CategoryCard({
-  base, category, totals, vendors, canEdit, run, request, busy,
+  base, category, categories, totals, vendors, canEdit, run, request, busy, openRequest, onOpened,
 }: {
-  base: string; category: Category; totals: Totals; vendors: VendorRef[]; canEdit: boolean; run: Run;
-  request: Req; busy: boolean;
+  base: string; category: Category; categories: Category[]; totals: Totals; vendors: VendorRef[];
+  canEdit: boolean; run: Run; request: Req; busy: boolean; openRequest: OpenRequest;
+  /** Called once the asked-for expense has been scrolled to, so the ask is cleared. */
+  onOpened: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(category.name);
@@ -149,6 +143,18 @@ export function CategoryCard({
   const [showArchived, setShowArchived] = useState(false);
   const active = category.costs.filter((c) => !c.archived);
   const archived = category.costs.filter((c) => c.archived);
+  const asked = openRequest ? category.costs.find((c) => c.id === openRequest.id) : undefined;
+  const focusFor = (cost: Cost) => (openRequest && asked && cost.id === openRequest.id ? openRequest.n : 0);
+
+  // Opened from the list of all expenses: show this category's expenses (and the
+  // archived ones, if that's where it is) so the expense can be scrolled to.
+  const askedArchived = asked?.archived;
+  useEffect(() => {
+    if (!asked) return;
+    setOpen(true);
+    if (askedArchived) setShowArchived(true);
+    // Only a new ask (a new n) opens the category again; reloads don't.
+  }, [openRequest?.n]);
 
   const planned_cents = category.planned_cents;
   const over = category.state === "over";
@@ -186,11 +192,9 @@ export function CategoryCard({
           </h3>
           {canEdit && (
             confirm ? (
-              <Confirm
-                busy={busy}
-                text={removeCategoryText(category)}
-                onYes={() => run(() => request(`${base}/categories/${category.id}`, json("DELETE")))}
-                onNo={() => setConfirm(false)}
+              <RemoveCategory
+                base={base} category={category} categories={categories} run={run} request={request} busy={busy}
+                onCancel={() => setConfirm(false)}
               />
             ) : (
               <span className="flex gap-4">
@@ -262,15 +266,15 @@ export function CategoryCard({
       )}
 
       <button type="button" onClick={() => setOpen((o) => !o)} className={`${linkButton} mt-2`} aria-expanded={open}>
-        {open ? "Hide vendor costs" : `Show vendor costs (${active.length})`}
+        {open ? "Hide expenses" : `Show expenses (${active.length})`}
       </button>
       {open && (
         <div className="mt-4 space-y-4">
           {active.map((cost) => (
-            <CostBlock key={cost.id} base={base} cost={cost} limits={limits} vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} />
+            <CostBlock key={cost.id} base={base} cost={cost} limits={limits} vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} focus={focusFor(cost)} onOpened={onOpened} />
           ))}
           {active.length === 0 && (
-            <p className="text-sm text-on-surface-variant">No vendor costs recorded yet.</p>
+            <p className="text-sm text-on-surface-variant">No expenses yet.</p>
           )}
           {archived.length > 0 && (
             <>
@@ -278,14 +282,81 @@ export function CategoryCard({
                 {showArchived ? "Hide archived" : `Show archived (${archived.length}), not counted in totals`}
               </button>
               {showArchived && archived.map((cost) => (
-                <CostBlock key={cost.id} base={base} cost={cost} limits={limits} vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} />
+                <CostBlock key={cost.id} base={base} cost={cost} limits={limits} vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} focus={focusFor(cost)} onOpened={onOpened} />
               ))}
             </>
           )}
-          {canEdit && <AddCostForm base={base} categoryId={category.id} limits={limits} vendors={vendors} run={run} request={request} busy={busy} />}
+          {canEdit && (
+            <AddCostForm
+              base={base} categoryId={category.id} limits={limits} vendors={vendors} run={run} request={request} busy={busy}
+              suggestions={category.suggestions} taken={active.map((c) => c.vendor_name)}
+            />
+          )}
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * Removing a category. Its expenses and payments are money records, so they're never
+ * removed with it: the couple choose another category to move them to first (the API
+ * refuses otherwise). An empty category just asks for a yes.
+ */
+function RemoveCategory({
+  base, category, categories, run, request, busy, onCancel,
+}: {
+  base: string; category: Category; categories: Category[]; run: Run; request: Req; busy: boolean;
+  onCancel: () => void;
+}) {
+  const others = categories.filter((c) => c.id !== category.id);
+  const [picked, setTarget] = useState(others[0]?.id ?? "");
+  // The list can reload while this is open; never send a category that's gone.
+  const target = others.some((c) => c.id === picked) ? picked : others[0]?.id ?? "";
+  const count = category.costs.length;
+  const kept = "Contributions towards it are kept, towards the whole budget.";
+  const remove = (moveTo?: string) =>
+    run(() => request(
+      `${base}/categories/${category.id}${moveTo ? `?move_to=${encodeURIComponent(moveTo)}` : ""}`,
+      json("DELETE"),
+    ));
+
+  if (count === 0) {
+    return <Confirm busy={busy} text={`Remove ${category.name}? ${kept}`} onYes={() => remove()} onNo={onCancel} />;
+  }
+  const payments = category.costs.reduce((n, c) => n + c.payments.length, 0);
+  const paid = category.costs.reduce((n, c) => n + c.payments.filter((p) => p.paid).length, 0);
+  const what = `${plural(count, "expense")}` +
+    (payments ? ` with ${plural(payments, "payment")}${paid ? ` (${paid} ticked paid)` : ""}` : "");
+  if (others.length === 0) {
+    return (
+      <span role="alert" className="flex flex-wrap items-center gap-2 text-sm w-full">
+        <span>
+          {category.name} has {what}. To remove it, first add another category to move them to, or remove the
+          expenses one by one.
+        </span>
+        <button type="button" onClick={onCancel} className={linkButton}>OK</button>
+      </span>
+    );
+  }
+  const selectId = `move-to-${category.id}`;
+  return (
+    <span className="flex flex-wrap items-end gap-3 text-sm w-full">
+      <span className="w-full">
+        {category.name} has {what}. They aren't removed: choose where they move, with their payments and ticks. {kept}
+      </span>
+      <span className="flex flex-col gap-1">
+        <label htmlFor={selectId} className="text-xs text-on-surface-variant">Move them to</label>
+        <select id={selectId} value={target} onChange={(e) => setTarget(e.target.value)} className={inputClass}>
+          {others.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </span>
+      <button type="button" disabled={busy || !target} onClick={() => remove(target)}
+        className="text-error font-bold underline-offset-4 hover:underline pb-2">
+        Move them and remove {category.name}
+      </button>
+      <button type="button" disabled={busy} onClick={onCancel} className={`${linkButton} pb-2`}>Cancel</button>
+    </span>
   );
 }
 
@@ -437,14 +508,34 @@ function costLine(cost: Cost): string {
 }
 
 function CostBlock({
-  base, cost, limits, vendors, canEdit, run, request, busy,
-}: { base: string; cost: Cost; limits: Limits; vendors: VendorRef[]; canEdit: boolean; run: Run; request: Req; busy: boolean }) {
+  base, cost, limits, vendors, canEdit, run, request, busy, focus, onOpened,
+}: {
+  base: string; cost: Cost; limits: Limits; vendors: VendorRef[]; canEdit: boolean; run: Run; request: Req; busy: boolean;
+  /** Non-zero when the list of all expenses asked to open this one; a new number each time. */
+  focus: number;
+  onOpened: () => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [confirmCopy, setConfirmCopy] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!focus || !box.current) return;
+    box.current.scrollIntoView({ block: "center", behavior: "smooth" });
+    box.current.focus({ preventScroll: true });
+    onOpened();
+  }, [focus]);
 
   const counted = cost.payments.length > 0 || cost.committed_cents > 0;
   return (
-    <div className={`border rounded-[1.5rem] p-4 ${cost.archived ? "border-dashed border-outline-variant/40 bg-surface-container-low/40" : "border-outline-variant/30"}`}>
+    <div
+      ref={box}
+      id={`expense-${cost.id}`}
+      tabIndex={-1}
+      aria-label={`Expense: ${cost.vendor_name}`}
+      className={`border rounded-[1.5rem] p-4 scroll-mt-24 focus:outline-none focus:ring-2 focus:ring-primary/40 ${cost.archived ? "border-dashed border-outline-variant/40 bg-surface-container-low/40" : "border-outline-variant/30"}`}
+    >
       {editing ? (
         <CostEditForm base={base} cost={cost} limits={limits} vendors={vendors} run={run} request={request} busy={busy} onDone={() => setEditing(false)} />
       ) : (
@@ -463,9 +554,21 @@ function CostBlock({
               <Confirm busy={busy} text={`Remove ${cost.vendor_name} and its payments?`}
                 onYes={() => run(() => request(`${base}/costs/${cost.id}`, json("DELETE")))}
                 onNo={() => setConfirm(false)} />
+            ) : confirmCopy ? (
+              <Confirm
+                busy={busy}
+                yesLabel="Yes, make a copy"
+                text={`Make a copy of ${cost.vendor_name}? It copies the costs, payment method, notes, link and vendor. It starts with no payments and no contract, and counts in your totals straight away.`}
+                onYes={async () => {
+                  const ok = await run(() => request(`${base}/costs/${cost.id}/duplicate`, json("POST")));
+                  if (ok) setConfirmCopy(false);
+                }}
+                onNo={() => setConfirmCopy(false)}
+              />
             ) : (
-              <span className="flex gap-4">
+              <span className="flex flex-wrap gap-4">
                 <button type="button" onClick={() => setEditing(true)} className={linkButton}>Edit</button>
+                <button type="button" onClick={() => setConfirmCopy(true)} className={linkButton}>Duplicate</button>
                 <button
                   type="button"
                   disabled={busy}
@@ -556,7 +659,7 @@ function CostEditForm({
 
   return (
     <form onSubmit={save} className="flex flex-wrap items-end gap-3 mb-3">
-      <TextInput id={`cost-name-${id}`} label="Vendor" value={vendor} onChange={setVendor} wide />
+      <TextInput id={`cost-name-${id}`} label="Expense or vendor name" value={vendor} onChange={setVendor} wide />
       <VendorSelect id={`cost-vendor-${id}`} vendors={vendors} value={vendorId} onChange={pickVendor} />
       <MoneyInput id={`cost-est-${id}`} label="Estimated cost" value={estimate} onChange={setEstimate} />
       <MoneyInput id={`cost-quote-${id}`} label="Quoted cost" value={quote} onChange={setQuote} />
@@ -591,8 +694,12 @@ function CostEditForm({
 }
 
 function AddCostForm({
-  base, categoryId, limits, vendors, run, request, busy,
-}: { base: string; categoryId: string; limits: Limits; vendors: VendorRef[]; run: Run; request: Req; busy: boolean }) {
+  base, categoryId, limits, vendors, run, request, busy, suggestions, taken,
+}: {
+  base: string; categoryId: string; limits: Limits; vendors: VendorRef[]; run: Run; request: Req; busy: boolean;
+  /** One-tap ideas for this category; those already used here aren't offered. */
+  suggestions: string[]; taken: string[];
+}) {
   const [vendor, setVendor] = useState("");
   const [vendorId, setVendorId] = useState("");
   const [estimate, setEstimate] = useState("");
@@ -616,15 +723,36 @@ function AddCostForm({
     const picked = vendors.find((v) => v.id === value);
     if (picked && !vendor.trim()) setVendor(picked.name);
   };
+  const used = new Set(taken.map((t) => t.trim().toLowerCase()));
+  const ideas = suggestions.filter((s) => !used.has(s.toLowerCase()));
+  const ideasId = `ideas-${categoryId}`;
   return (
     <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+      {ideas.length > 0 && (
+        <div className="w-full">
+          <p id={ideasId} className="text-xs text-on-surface-variant mb-1">Ideas for this category: tap one to use it as the name</p>
+          <div role="group" aria-labelledby={ideasId} className="flex flex-wrap gap-2">
+            {ideas.map((idea) => (
+              <button
+                key={idea}
+                type="button"
+                aria-pressed={vendor === idea}
+                onClick={() => setVendor(idea)}
+                className={`rounded-full border px-3 py-1 text-xs ${vendor === idea ? "bg-primary text-on-primary border-primary" : "border-outline-variant/50 text-on-surface hover:border-primary"}`}
+              >
+                {idea}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {vendors.length > 0 && (
         <VendorSelect id={`new-cost-vendor-${categoryId}`} vendors={vendors} value={vendorId} onChange={pickVendor} />
       )}
-      <TextInput id={`new-cost-${categoryId}`} label="Vendor name" value={vendor} onChange={setVendor} wide />
+      <TextInput id={`new-cost-${categoryId}`} label="Expense or vendor name" value={vendor} onChange={setVendor} wide />
       <MoneyInput id={`new-est-${categoryId}`} label="Estimated (optional)" value={estimate} onChange={setEstimate} />
       <MoneyInput id={`new-quote-${categoryId}`} label="Quoted (optional)" value={quote} onChange={setQuote} />
-      <button type="submit" disabled={busy} className={primaryButton}>Add vendor cost</button>
+      <button type="submit" disabled={busy} className={primaryButton}>Add expense</button>
       <OverNote limits={limits} before={0} after={typedCost([null, quote, estimate], 0)} />
       {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
     </form>

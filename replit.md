@@ -159,6 +159,17 @@ publish should list **no** database changes.
   app starts, not by Publish.
   [ASSUMPTION] This is what Alembic's PostgreSQL SQL looks like; Replit's own
   screen hasn't been seen for it.
+- `0010` (B67, the couple's own order for budget categories): one new column and
+  nothing else. Publish lists one line, `ADD COLUMN sort_order` on
+  `budget_categories`, an optional whole number (`INTEGER`, no `NOT NULL`, no
+  default), so the pane shouldn't turn orange. If `0009` goes out in the same
+  publish, its lines are listed too. There should be no `DROP`, no
+  `ALTER COLUMN` and no new table: the suggested categories and their one-tap
+  ideas are in the code, not the database. Every category, expense and payment
+  already entered stays as it is; the categories are numbered in their current
+  order when the published app starts, not by Publish.
+  [ASSUMPTION] This is what Alembic's PostgreSQL SQL looks like; Replit's own
+  screen hasn't been seen for it.
 
 **When you publish** (plain steps for the owner):
 1. In the workspace, **Pull** the latest code.

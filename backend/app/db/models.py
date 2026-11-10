@@ -426,6 +426,10 @@ class BudgetCategory(SQLModel, table=True):
     wedding_id: str = Field(foreign_key="weddings.id", index=True, ondelete="CASCADE")
     name: str
     planned_cents: Optional[int] = None
+    # Where the couple put it on the Budget screen, lowest first (B67). The app numbers
+    # every category it adds; one without a number (added outside the app) goes last,
+    # in the order added.
+    sort_order: Optional[int] = None
     created_at: datetime.datetime = Field(default_factory=utcnow)
     updated_at: datetime.datetime = Field(default_factory=utcnow)
 

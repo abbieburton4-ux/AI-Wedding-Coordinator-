@@ -67,6 +67,8 @@ export interface Cost {
   overpaid_cents: number;
   refundable_cents: number;
   refundable_paid_cents: number;
+  /** The soonest due date among its unpaid payments; null when none has a date. */
+  next_due_on: string | null;
   payments: Payment[];
 }
 
@@ -94,6 +96,8 @@ export interface Category {
   used_pct: number | null;
   /** Expenses that aren't archived. */
   expense_count: number;
+  /** One-tap ideas for a new expense, for the suggested categories; empty otherwise. */
+  suggestions: string[];
   costs: Cost[];
 }
 
@@ -159,6 +163,8 @@ export interface Overview {
   categories: Category[];
   contributions: Contribution[];
   next_due: DuePayment[];
+  /** The suggested categories the couple don't have yet, in the suggested order. */
+  missing_default_categories: string[];
   /** Today in Chicago, the day "overdue" is measured against. */
   today: string;
 }

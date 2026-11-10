@@ -497,6 +497,15 @@ def test_api_suite():
         assert ov.json()["categories"] == [] and ov.json()["next_due"] == []
         assert c.get(f"{b_url}/overview", headers=unauth_headers).status_code == 403
 
+        def clear_category(cat_id):
+            # A category with expenses can't be removed (B67), so a test tidying up
+            # removes the expenses itself first.
+            ov = c.get(f"{b_url}/overview", headers=headers).json()
+            for cost in next(k for k in ov["categories"] if k["id"] == cat_id)["costs"]:
+                assert c.delete(f"{b_url}/costs/{cost['id']}",
+                                headers=headers).status_code == 204
+            assert c.delete(f"{b_url}/categories/{cat_id}", headers=headers).status_code == 204
+
         res = c.post(f"{b_url}/categories", json={"name": "  Venue ", "planned_cents": 1_500_000},
                      headers=headers)
         assert res.status_code == 201 and res.json()["name"] == "Venue", res.text
@@ -578,6 +587,10 @@ def test_api_suite():
             ("delete", f"{b_url}/contributions/{contribution_id}", None),
             ("post", f"{b_url}/suggest-split", None),
             ("post", f"{b_url}/apply-split", {"lines": [{"name": "Z", "planned_cents": 1}]}),
+            ("put", f"{b_url}/categories/order", {"category_ids": [venue_cat, flowers_cat]}),
+            ("post", f"{b_url}/categories/defaults", None),
+            ("post", f"{b_url}/costs/{cost_id}/duplicate", None),
+            ("delete", f"{b_url}/categories/{venue_cat}?move_to={flowers_cat}", None),
         ]
         for method, url, body in viewer_writes:
             kwargs = {"headers": viewer_headers}
@@ -644,7 +657,7 @@ def test_api_suite():
         assert (ov["totals"]["remaining_cents"], ov["totals"]["overpaid_cents"]) == (
             902_000, 5_000), "an overpayment isn't netted against other vendors"
         assert ov["totals"]["committed_basis"] == "mixed"
-        assert c.delete(f"{b_url}/categories/{cake_cat}", headers=headers).status_code == 204
+        clear_category(cake_cat)
         print("   * Overpaid: shown per vendor, never negative, never netted")
 
         res = c.put(paid_url, json={"paid": False}, headers=headers)
@@ -911,7 +924,7 @@ def test_api_suite():
                 from app.db.models import BudgetCost as _BudgetCostRow
                 assert s.get(_BudgetCostRow, loft).couple_vendor_id is None, \
                     "the link itself is cleared, not just hidden"
-            assert c.delete(f"{b_url}/categories/{exp_cat}", headers=headers).status_code == 204
+            clear_category(exp_cat)
 
             # The status describes the cost, so refundable deposits never move it to
             # paid or partly paid (the badge always agrees with "Paid").
@@ -1074,7 +1087,7 @@ def test_api_suite():
                                                  "to_category_id": cont,
                                                  "amount_cents": 1}).status_code == 403
         for k in (dash_a, dash_b, cont):
-            assert c.delete(f"{b_url}/categories/{k}", headers=headers).status_code == 204
+            clear_category(k)
         assert c.put(f"{b_url}/total", json={"total_cents": None},
                      headers=headers).status_code == 200
         print("   * Move money: both targets in one step, never below 0, refused moves "
@@ -1145,6 +1158,177 @@ def test_api_suite():
             "id"] == my_cost, "the cost stayed in this wedding's category"
         assert all(con["category_id"] is None for con in ours["contributions"])
         print("   * Cross-wedding: another wedding's real ids are refused (404) and untouched")
+
+        # 7c4. Categories and the expense list (PD-013 step 3, B67).
+        print("7c4. Verifying default categories, order, duplicate and removing a category...")
+        from app.utils.budget_defaults import DEFAULT_NAMES
+        for k in c.get(f"{b_url}/overview", headers=headers).json()["categories"]:
+            clear_category(k["id"])
+        # The couple's own venue category, under a look-alike name, holding an expense.
+        venue_own = c.post(f"{b_url}/categories", headers=headers, json={
+            "name": " venue  and CATERING", "planned_cents": 900_000}).json()["id"]
+        hall = c.post(f"{b_url}/categories/{venue_own}/costs", headers=headers, json={
+            "vendor_name": "Sample Hall", "quoted_cents": 500_000}).json()["id"]
+        mine = c.post(f"{b_url}/categories", json={"name": "Mine"}, headers=headers).json()["id"]
+        ov = c.get(f"{b_url}/overview", headers=viewer_headers).json()
+        assert ov["missing_default_categories"] == [n for n in DEFAULT_NAMES
+                                                    if n != "Venue & Catering"], ov
+        assert c.post(f"{b_url}/categories/defaults", headers=headers,
+                      json={"names": ["Nope"]}).status_code == 422
+        res = c.post(f"{b_url}/categories/defaults", headers=editor_headers)
+        assert res.status_code == 200, res.text
+        assert res.json() == {"added": [n for n in DEFAULT_NAMES if n != "Venue & Catering"],
+                              "already_had": ["Venue & Catering"]}, res.json()
+        ov = c.get(f"{b_url}/overview", headers=viewer_headers).json()
+        names = [k["name"] for k in ov["categories"]]
+        assert names == ["venue and CATERING", "Mine"] + res.json()["added"], \
+            "added after the couple's own, in the suggested order"
+        assert len(ov["categories"]) == 11 and ov["missing_default_categories"] == []
+        by_name = {k["name"]: k for k in ov["categories"]}
+        own = by_name["venue and CATERING"]
+        assert (own["id"], own["planned_cents"], [x["id"] for x in own["costs"]]) == (
+            venue_own, 900_000, [hall]), "an existing category and its expense stay as they are"
+        assert all(by_name[n]["planned_cents"] is None for n in res.json()["added"]), \
+            "no target is invented"
+        assert by_name["Contingency"]["is_contingency"] is True
+        ceremony = by_name["Ceremony & Legal"]["suggestions"]
+        assert {"Ketubah", "Chuppah", "Rabbi's fee", "Officiant"} <= set(ceremony), ceremony
+        assert own["suggestions"][:2] == ["Ceremony venue", "Reception venue"]
+        assert by_name["Mine"]["suggestions"] == [] and by_name["Contingency"]["suggestions"] == []
+        again = c.post(f"{b_url}/categories/defaults", headers=headers, json={})
+        assert again.json() == {"added": [], "already_had": list(DEFAULT_NAMES)}, again.json()
+        assert len(c.get(f"{b_url}/overview", headers=headers).json()["categories"]) == 11, \
+            "a second click adds nothing"
+        # Adding or renaming uses the same rule, so look-alikes can't be made by hand.
+        for name in ("Flowers and Decor", "venues", " ceremony AND legal "):
+            res = c.post(f"{b_url}/categories", json={"name": name}, headers=headers)
+            assert res.status_code == 409, (name, res.status_code)
+        assert c.patch(f"{b_url}/categories/{mine}", json={"name": "Venue"},
+                       headers=headers).status_code == 409
+        # Only one of them: a couple who removed Other can add just it back.
+        other = by_name["Other"]["id"]
+        assert c.delete(f"{b_url}/categories/{other}", headers=headers).status_code == 204
+        res = c.post(f"{b_url}/categories/defaults", headers=headers,
+                     json={"names": ["other", "Contingency"]})
+        assert res.json() == {"added": ["Other"], "already_had": ["Contingency"]}, res.json()
+        assert c.post(f"{b_url}/categories/defaults",
+                      headers=viewer_headers).status_code == 403
+        print("   * Default categories: on the couple's click only, after their own, no "
+              "targets; look-alike names kept, never doubled; suggestions per category")
+
+        order_url = f"{b_url}/categories/order"
+        ids = [k["id"] for k in c.get(f"{b_url}/overview", headers=headers).json()["categories"]]
+        wanted = list(reversed(ids))
+        assert c.put(order_url, headers=headers, json={"category_ids": wanted}).status_code == 204
+        assert [k["id"] for k in c.get(f"{b_url}/overview", headers=viewer_headers).json()[
+            "categories"]] == wanted
+        for bad in (wanted[1:], wanted + [wanted[0]], wanted[:-1] + [o_cat], []):
+            res = c.put(order_url, headers=headers, json={"category_ids": bad})
+            assert res.status_code in (409, 422), (bad, res.status_code)
+        assert [k["id"] for k in c.get(f"{b_url}/overview", headers=headers).json()[
+            "categories"]] == wanted, "a refused order changes nothing"
+        newest = c.post(f"{b_url}/categories", json={"name": "Newest"},
+                        headers=headers).json()["id"]
+        assert c.get(f"{b_url}/overview", headers=headers).json()["categories"][-1][
+            "id"] == newest, "a new category goes last"
+        assert c.put(order_url, headers=viewer_headers,
+                     json={"category_ids": wanted + [newest]}).status_code == 403
+        theirs = c.get(f"{o_url}/overview", headers=other_headers).json()
+        assert [k["name"] for k in theirs["categories"]] == ["Their venue"], "theirs untouched"
+        print("   * Order: the couple's order kept; the list must be complete and theirs; "
+              "new ones go last; viewers read only")
+
+        # Duplicate: what was typed is copied; payments and the contract aren't.
+        vendor_id = c.post(f"/api/v1/weddings/{wedding_id}/vendors", headers=headers, json={
+            "section": "photo_video", "name": "Sample Studio"}).json()["id"]
+        src = c.post(f"{b_url}/categories/{mine}/costs", headers=headers, json={
+            "vendor_name": "Photographer", "estimated_cents": 300_000, "quoted_cents": 320_000,
+            "final_cents": 310_000, "contract_status": "signed", "payment_method": "Check",
+            "notes": "Placeholder note", "link_url": "https://drive.example.test/f",
+            "couple_vendor_id": vendor_id}).json()["id"]
+        paid_pay = c.post(f"{b_url}/costs/{src}/payments", headers=headers, json={
+            "kind": "deposit", "amount_cents": 100_000, "due_on": "2026-01-02"}).json()["id"]
+        c.put(f"{b_url}/payments/{paid_pay}/paid", json={"paid": True}, headers=headers)
+        c.post(f"{b_url}/costs/{src}/payments", headers=headers, json={
+            "amount_cents": 50_000, "due_on": "2099-03-01"})
+        c.post(f"{b_url}/costs/{src}/payments", headers=headers, json={
+            "amount_cents": 50_000, "due_on": "2099-02-01", "refundable": True})
+        res = c.post(f"{b_url}/costs/{src}/duplicate", headers=editor_headers)
+        assert res.status_code == 201, res.text
+        dup = res.json()["id"]
+        assert dup != src
+
+        def cost_row(cost_id):
+            ov = c.get(f"{b_url}/overview", headers=viewer_headers).json()
+            return next(x for k in ov["categories"] for x in k["costs"] if x["id"] == cost_id)
+        copy, orig = cost_row(dup), cost_row(src)
+        assert (copy["category_id"], copy["vendor_name"], copy["estimated_cents"],
+                copy["quoted_cents"], copy["final_cents"], copy["payment_method"],
+                copy["notes"], copy["link_url"], copy["vendor"]["id"]) == (
+            mine, "Photographer (copy)", 300_000, 320_000, 310_000, "Check",
+            "Placeholder note", "https://drive.example.test/f", vendor_id), copy
+        assert (copy["contract_status"], copy["archived"], copy["payments"],
+                copy["paid_cents"], copy["status"], copy["next_due_on"]) == (
+            "none", False, [], 0, "unpaid", None), "no payments, nothing paid, no contract"
+        assert len(orig["payments"]) == 3 and orig["contract_status"] == "signed"
+        assert [p["paid"] for p in orig["payments"] if p["id"] == paid_pay] == [True], \
+            "the original's paid tick is untouched"
+        assert orig["next_due_on"] == "2099-02-01", "soonest unpaid, refundable included"
+        long_name = "x" * 120
+        long_id = c.post(f"{b_url}/categories/{mine}/costs", headers=headers,
+                         json={"vendor_name": long_name}).json()["id"]
+        long_copy = c.post(f"{b_url}/costs/{long_id}/duplicate", headers=headers).json()
+        assert len(long_copy["vendor_name"]) == 120 and long_copy["vendor_name"].endswith(
+            " (copy)")
+        assert c.post(f"{b_url}/costs/{src}/duplicate",
+                      headers=viewer_headers).status_code == 403
+        assert c.post(f"{b_url}/costs/{o_cost}/duplicate",
+                      headers=headers).status_code == 404, "another wedding's expense"
+        assert c.post(f"{b_url}/costs/nope/duplicate", headers=headers).status_code == 404
+        print("   * Duplicate: copies the costs, method, notes, link and vendor; never "
+              "payments, a paid tick or the contract; viewers read only")
+
+        # Removing a category with expenses: refused unless they move; never deleted.
+        c.patch(f"{b_url}/costs/{long_id}", json={"archived": True}, headers=headers)
+        before = cost_row(src)
+        res = c.delete(f"{b_url}/categories/{mine}", headers=headers)
+        assert res.status_code == 409 and "4 expenses" in res.json()["detail"], res.text
+        assert c.delete(f"{b_url}/categories/{mine}?move_to={mine}",
+                        headers=headers).status_code == 422
+        assert c.delete(f"{b_url}/categories/{mine}?move_to={o_cat}",
+                        headers=headers).status_code == 404, "another wedding's category"
+        assert c.delete(f"{b_url}/categories/{mine}?move_to=nope",
+                        headers=headers).status_code == 404
+        assert cost_row(src)["category_id"] == mine, "a refused removal changes nothing"
+        contribution = c.post(f"{b_url}/contributions", headers=headers, json={
+            "contributor": "Placeholder family", "amount_cents": 100,
+            "category_id": mine}).json()["id"]
+        res = c.delete(f"{b_url}/categories/{mine}?move_to={newest}", headers=editor_headers)
+        assert res.status_code == 204, res.text
+        ov = c.get(f"{b_url}/overview", headers=headers).json()
+        assert mine not in [k["id"] for k in ov["categories"]]
+        moved = next(k for k in ov["categories"] if k["id"] == newest)
+        assert sorted(x["id"] for x in moved["costs"]) == sorted(
+            [src, dup, long_id, long_copy["id"]]), "every expense moved, archived ones too"
+        after = cost_row(src)
+        assert [(p["id"], p["paid"], p["amount_cents"]) for p in after["payments"]] == [
+            (p["id"], p["paid"], p["amount_cents"]) for p in before["payments"]], \
+            "payments and paid ticks move unchanged"
+        assert next(x for x in ov["contributions"] if x["id"] == contribution)[
+            "category_id"] is None, "a contribution towards it stays, untied"
+        # An empty category goes without asking where; the viewer still can't.
+        empty = c.post(f"{b_url}/categories", json={"name": "Empty"},
+                       headers=headers).json()["id"]
+        assert c.delete(f"{b_url}/categories/{empty}",
+                        headers=viewer_headers).status_code == 403
+        assert c.delete(f"{b_url}/categories/{empty}", headers=headers).status_code == 204
+        c.delete(f"{b_url}/contributions/{contribution}", headers=headers)
+        for k in c.get(f"{b_url}/overview", headers=headers).json()["categories"]:
+            clear_category(k["id"])
+        assert c.delete(f"/api/v1/weddings/{wedding_id}/vendors/{vendor_id}",
+                        headers=headers).status_code == 204
+        print("   * Remove a category: refused while it has expenses unless they move; "
+              "moved with their payments; never deleted with it")
 
         print("7d. Verifying vendor cards compare quotes with the couple's own budget (B42)...")
         from app.db.models import Booking, BudgetLine, Quote, Supplier

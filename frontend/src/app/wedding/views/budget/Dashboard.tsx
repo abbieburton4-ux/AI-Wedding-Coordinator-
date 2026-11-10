@@ -314,32 +314,3 @@ export function MoveMoney({
     </section>
   );
 }
-
-/** Offered when there's no Contingency category; nothing is made until the couple click. */
-export function ContingencyOffer({ base, run, request, busy }: { base: string; run: Run; request: Req; busy: boolean }) {
-  const [amount, setAmount] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    const cents = parseDollars(amount);
-    if (cents === undefined) { setError(AMOUNT_HINT); return; }
-    await run(() =>
-      request(`${base}/categories`, { method: "POST", body: JSON.stringify({ name: "Contingency", planned_cents: cents }) }),
-    );
-  };
-  return (
-    <section aria-labelledby="contingency-heading" className="mb-8 bg-secondary-fixed/20 border border-secondary-fixed/50 rounded-[1.5rem] p-5">
-      <h3 id="contingency-heading" className="font-headline-sm text-lg text-on-surface mb-1">Add a contingency?</h3>
-      <p className="text-sm text-on-surface-variant mb-3">
-        A contingency is money kept aside for costs you didn't plan for. You choose how much, and you can change it
-        or move money in and out of it later.
-      </p>
-      <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
-        <MoneyInput id="contingency-amount" label="Target (optional)" value={amount} onChange={setAmount} />
-        <button type="submit" disabled={busy} className={primaryButton}>Add a Contingency category</button>
-        {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
-      </form>
-    </section>
-  );
-}

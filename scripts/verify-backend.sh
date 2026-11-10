@@ -36,6 +36,13 @@ if command -v node >/dev/null 2>&1 && ! node --test ../frontend/src/app/wedding/
   status=1
 fi
 
+# The list of all expenses: filters, search, sorting and moving categories (B67).
+echo "== expenses.test.js"
+if command -v node >/dev/null 2>&1 && ! node --test ../frontend/src/app/wedding/views/budget/expenses.test.js; then
+  echo "FAILED: expenses.test.js"
+  status=1
+fi
+
 # The scripts rewrite tracked test databases and leave SQLite side files (backlog B17).
 git restore endpoints_test.db endpoints_test.db-shm endpoints_test.db-wal 2>/dev/null || true
 rm -f verify_agents_test.db-shm verify_agents_test.db-wal verify_test.db-shm verify_test.db-wal
