@@ -6,7 +6,7 @@ automatically, and none comes with a target amount. Each category's items are
 suggestions shown while adding an expense, never rows of their own. This lives in
 code, not the database, so changing a suggestion needs no migration.
 """
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from app.agents.budget_split import category_key
 from app.utils.budget_math import CONTINGENCY_NAME
@@ -64,7 +64,24 @@ def suggestions_for(category_name: str) -> List[str]:
     return list(_SUGGESTIONS.get(default_key(category_name), ()))
 
 
-def missing_defaults(existing_names) -> List[str]:
-    """The suggested categories the couple don't have yet, in the suggested order."""
-    have = {default_key(n) for n in existing_names}
+_BY_KEY: Dict[str, str] = {default_key(name): name for name in DEFAULT_NAMES}
+
+
+def default_name(category_name: Optional[str]) -> Optional[str]:
+    """The suggested category a name stands for ("venues" is Venue & Catering), or None."""
+    return _BY_KEY.get(default_key(category_name))
+
+
+def missing_defaults(existing_names, declined: Iterable[str] = ()) -> List[str]:
+    """The suggested categories the couple don't have yet, in the suggested order,
+    leaving out any they removed on purpose (B71)."""
+    have = {default_key(n) for n in existing_names} | {default_key(n) for n in declined}
     return [name for name in DEFAULT_NAMES if default_key(name) not in have]
+
+
+def removed_defaults(existing_names, declined: Iterable[str]) -> List[str]:
+    """The suggested categories the couple removed and haven't added back, in order."""
+    have = {default_key(n) for n in existing_names}
+    gone = {default_key(n) for n in declined}
+    return [name for name in DEFAULT_NAMES
+            if default_key(name) in gone and default_key(name) not in have]

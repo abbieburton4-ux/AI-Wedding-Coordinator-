@@ -407,6 +407,23 @@ def check_publish_safety(real_head: str, new_revisions: list) -> None:
     assert [tuple(r) for r in order] == [("Venue & Catering", 0)], \
         "the data step numbers categories after Publish added the column"
 
+    print("6a4. Real migrations: 0010 already published, then 0011 on its own (B71)...")
+    dev11, prod10 = url("dev11"), url("prod10")
+    command.upgrade(config_for(dev11), "0011")
+    command.upgrade(config_for(prod10), LAST_UNGUARDED)
+    seed_wedding(prod10)
+    command.upgrade(config_for(prod10), "0010")
+    added = publish_like_replit(dev11, prod10)
+    assert added == ["ADD COLUMN weddings.declined_budget_defaults"], \
+        f"0011 adds one column and nothing else: {added}"
+    command.upgrade(config_for(prod10), "head")
+    with create_engine(prod10).connect() as conn:
+        diff = compare_metadata(MigrationContext.configure(conn), SQLModel.metadata)
+        declined = conn.execute(text(
+            "SELECT declined_budget_defaults FROM weddings")).fetchall()
+    assert not diff, diff
+    assert [r[0] for r in declined] == [None], "existing weddings have removed none"
+
     fixture_dir = os.path.join(work, "fixture_versions")
     os.makedirs(fixture_dir)
     with open(os.path.join(fixture_dir, "zz_fixture.py"), "w") as fh:

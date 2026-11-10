@@ -9,15 +9,36 @@ type Req = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
 /**
  * The suggested categories (PD-013 call b), added only when the couple click. Each
  * starts with no target, and categories they already have stay exactly as they are.
+ * One the couple removed isn't offered again (B71) until they click the quiet
+ * "Show suggestions you removed" link, which puts it back on this list, not yet added.
  */
 export function DefaultCategoriesOffer({
-  base, missing, hasAny, run, request, busy,
-}: { base: string; missing: string[]; hasAny: boolean; run: Run; request: Req; busy: boolean }) {
+  base, missing, removed, hasAny, run, request, busy,
+}: {
+  base: string; missing: string[]; removed: string[]; hasAny: boolean; run: Run; request: Req; busy: boolean;
+}) {
   const [picked, setPicked] = useState<string[]>(missing);
   const [hidden, setHidden] = useState(false);
   const key = missing.join("|");
   // A new list from the API (one was added or removed elsewhere): start fully ticked again.
   useEffect(() => { setPicked(key ? key.split("|") : []); }, [key]);
+  // "Not now" lasts until the list empties; restored suggestions then show open.
+  useEffect(() => { if (!key) setHidden(false); }, [key]);
+
+  const showRemoved = removed.length > 0 && (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => run(() => request(`${base}/categories/defaults/restore`, { method: "POST" }))}
+      className={`${linkButton} text-xs`}
+    >
+      Show suggestions you removed ({removed.length})
+    </button>
+  );
+
+  if (missing.length === 0) {
+    return <p className="mb-6">{showRemoved}</p>;
+  }
 
   if (hidden) {
     return (
@@ -70,6 +91,7 @@ export function DefaultCategoriesOffer({
             : `Add ${count} ${count === 1 ? "category" : "categories"}`}
         </button>
         <button type="button" onClick={() => setHidden(true)} className={linkButton}>Not now</button>
+        {showRemoved}
       </div>
     </section>
   );
