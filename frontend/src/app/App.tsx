@@ -9,6 +9,7 @@ import { Dashboard } from "./wedding/views/Dashboard";
 import { Intake } from "./wedding/views/Intake";
 import { Vendors } from "./wedding/views/Vendors";
 import { Budget } from "./wedding/views/Budget";
+import { BudgetPrint } from "./wedding/views/budget/Print";
 import { Guests } from "./wedding/views/Guests";
 import { Checklist } from "./wedding/views/Checklist";
 import { SeatingPlan } from "./wedding/views/SeatingPlan";
@@ -36,6 +37,7 @@ export default function App() {
               <Route path="intake" element={<Intake />} />
               <Route path="vendors" element={<Vendors />} />
               <Route path="budget" element={<Budget />} />
+              <Route path="budget/print" element={<BudgetPrint />} />
               <Route path="guests" element={<Guests />} />
               <Route path="seating" element={<SeatingPlan />} />
               <Route path="checklist" element={<Checklist />} />

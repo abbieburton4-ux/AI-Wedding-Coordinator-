@@ -8,6 +8,7 @@ import { CategoryOrder, DefaultCategoriesOffer } from "./budget/Categories";
 import { BudgetCharts } from "./budget/Charts";
 import { ExpenseList, type CategoryRequest } from "./budget/ExpenseList";
 import { UpcomingPayments } from "./budget/Upcoming";
+import { BudgetExport } from "./budget/Export";
 import { AMOUNT_HINT, centsToInput, formatCents, parseDollars } from "./budget/money";
 import {
   AddCategoryForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, linkButton, primaryButton,
@@ -172,6 +173,8 @@ export function Budget() {
             {canEdit && <AddCategoryForm base={base} run={run} request={request} busy={busy} />}
             {canEdit && <MethodSuggestions />}
           </section>
+
+          {weddingId && <BudgetExport weddingId={weddingId} today={overview.today} />}
 
           <Contributions
             base={base}

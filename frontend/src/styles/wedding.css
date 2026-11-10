@@ -121,3 +121,24 @@
   outline-offset: 2px;
   opacity: 0.7;
 }
+
+/* The printable budget (PD-013 step 5): plain white pages, sensible margins. */
+@media print {
+  @page {
+    margin: 15mm;
+  }
+  html,
+  body,
+  .wedding {
+    background: #fff !important;
+  }
+  .budget-print table {
+    border-collapse: collapse;
+  }
+  .budget-print thead {
+    display: table-header-group;
+  }
+  .budget-print tr {
+    break-inside: avoid;
+  }
+}
