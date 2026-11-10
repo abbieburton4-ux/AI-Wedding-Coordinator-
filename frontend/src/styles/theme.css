@@ -54,6 +54,25 @@
   --status-todo: #9A3412;
   --status-todo-foreground: #FFFFFF;
 
+  /* Budget charts (B68). Eight category colours in a fixed order, checked for
+     colour-blind separation on a white card; three of them are under 3:1, so every
+     chart also has its figures in words and a table. "Other" is the shared slice
+     past the eighth category. Paid, still to pay and target are separate tokens so
+     they never borrow a category's colour. Target and still to pay are light
+     tints, so each differs from its partner bar in lightness as well as hue. */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+  --chart-6: #008300;
+  --chart-7: #6250d6;
+  --chart-8: #e34948;
+  --chart-other: #8A8580;
+  --chart-paid: #1D6337;
+  --chart-owed: #C9C3BB;
+  --chart-target: #D0C5AF;
+
   --radius: 0.5rem;
 }
 

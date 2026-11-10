@@ -5,10 +5,12 @@ import { useApi, USE_FASTAPI_BACKEND } from "../../api";
 import { useActiveWedding } from "../WeddingProvider";
 import { BudgetDashboard, MoveMoney } from "./budget/Dashboard";
 import { CategoryOrder, DefaultCategoriesOffer } from "./budget/Categories";
-import { ExpenseList } from "./budget/ExpenseList";
+import { BudgetCharts } from "./budget/Charts";
+import { ExpenseList, type CategoryRequest } from "./budget/ExpenseList";
+import { UpcomingPayments } from "./budget/Upcoming";
 import { AMOUNT_HINT, centsToInput, formatCents, parseDollars } from "./budget/money";
 import {
-  AddCategoryForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, NextDue, linkButton, primaryButton,
+  AddCategoryForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, linkButton, primaryButton,
   type OpenRequest,
 } from "./budget/parts";
 import type { Overview, Run, SplitSuggestion, VendorRef } from "./budget/types";
@@ -44,6 +46,12 @@ export function Budget() {
     [],
   );
   const clearOpen = useCallback(() => setOpenRequest(null), []);
+  // A chart's category opens the list of all expenses, filtered to it.
+  const [categoryRequest, setCategoryRequest] = useState<CategoryRequest>(null);
+  const showCategory = useCallback(
+    (id: string) => setCategoryRequest((prev) => ({ id, n: (prev?.n ?? 0) + 1 })),
+    [],
+  );
 
   const load = useCallback(async () => {
     if (!weddingId || !USE_FASTAPI_BACKEND) return;
@@ -122,9 +130,13 @@ export function Budget() {
             <SplitPanel base={base} request={request} run={run} busy={busy} />
           )}
 
-          <NextDue items={overview.next_due} />
+          <UpcomingPayments categories={overview.categories} today={overview.today} onOpen={openExpense} />
 
-          <ExpenseList categories={overview.categories} today={overview.today} onOpen={openExpense} />
+          <BudgetCharts categories={overview.categories} onCategory={showCategory} />
+
+          <ExpenseList
+            categories={overview.categories} today={overview.today} onOpen={openExpense} categoryRequest={categoryRequest}
+          />
 
           <section aria-labelledby="cat-heading" className="mb-10">
             <h2 id="cat-heading" className="font-headline-sm text-headline-sm text-on-surface mb-3">Categories</h2>

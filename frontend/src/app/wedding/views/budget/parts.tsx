@@ -7,7 +7,7 @@ import {
 import { expenseCost, wouldGoOver } from "./forecast";
 import { Bar, Chip, TargetChip, targetTone } from "./status";
 import type {
-  Category, ContractStatus, Contribution, Cost, DuePayment, ExpenseStatus, Payment, Run, Totals, VendorRef,
+  Category, ContractStatus, Contribution, Cost, ExpenseStatus, Payment, Run, Totals, VendorRef,
 } from "./types";
 
 type Req = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
@@ -1015,47 +1015,6 @@ function AddPaymentForm({ base, cost, run, request, busy }: { base: string; cost
       )}
       {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
     </form>
-  );
-}
-
-// ---- Next payments due --------------------------------------------------------------
-
-export function NextDue({ items }: { items: DuePayment[] }) {
-  return (
-    <section id="next-due" tabIndex={-1} aria-labelledby="due-heading" className="mb-10 scroll-mt-24">
-      <h2 id="due-heading" className="font-headline-sm text-headline-sm text-on-surface mb-1">Next payments due</h2>
-      <p className="text-xs text-on-surface-variant mb-3">
-        Shown here only. The app doesn't send reminders or pay anyone.
-      </p>
-      {items.length === 0 ? (
-        <p className="text-sm text-on-surface-variant">Nothing unpaid. Payments you add to a vendor cost show here.</p>
-      ) : (
-        <ul className="divide-y divide-outline-variant/30 border-y border-outline-variant/30">
-          {items.map((d) => (
-            <li key={d.payment_id} className="py-3 flex flex-wrap items-center justify-between gap-2">
-              <span>
-                <span className="text-on-surface">{d.vendor_name}</span>
-                <span className="text-sm text-on-surface-variant">
-                  {" · "}{d.category_name} · {d.refundable ? "Refundable deposit" : KIND_LABEL[d.kind]}
-                </span>
-              </span>
-              <span className="flex items-center gap-3">
-                <span className="font-button-text text-on-surface">{formatCents(d.amount_cents)}</span>
-                {d.overdue ? (
-                  <span className="flex items-center gap-1 text-sm text-error font-bold">
-                    <Icon name="warning" size={16} /> Overdue, was due {formatDay(d.due_on as string)}
-                  </span>
-                ) : (
-                  <span className="text-sm text-on-surface-variant">
-                    {d.due_on ? `Due ${formatDay(d.due_on)}` : "No due date"}
-                  </span>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 
