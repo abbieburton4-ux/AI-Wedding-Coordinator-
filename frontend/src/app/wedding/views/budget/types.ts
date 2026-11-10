@@ -81,7 +81,44 @@ export interface Category {
   overpaid_cents: number;
   refundable_cents: number;
   refundable_paid_cents: number;
+  /** The category named Contingency: money set aside for surprises. */
+  is_contingency: boolean;
+  /** Committed against the target: none set, within, at 90% or more, or over. */
+  state: TargetState;
+  /** The target as a share of the total budget; null when either is blank. */
+  share_pct: number | null;
+  /** Target minus committed, never below 0; null with no target. */
+  target_left_cents: number | null;
+  over_target_cents: number;
+  /** Committed as a share of the target; null with no target or a 0 target. */
+  used_pct: number | null;
+  /** Expenses that aren't archived. */
+  expense_count: number;
   costs: Cost[];
+}
+
+export type TargetState = "no_target" | "within" | "near_limit" | "over";
+
+/** The dashboard's figures, worked out by the API. null means "not set yet", never 0. */
+export interface Dashboard {
+  budget_state: "not_set" | "within" | "near_limit" | "over";
+  left_of_total_cents: number | null;
+  over_total_cents: number | null;
+  unallocated_cents: number | null;
+  over_allocated_cents: number | null;
+  allocated_pct: number | null;
+  committed_pct: number | null;
+  /** Paid, counting each expense only up to its cost. */
+  paid_toward_cost_cents: number;
+  paid_pct: number | null;
+  categories_over: number;
+  categories_near_limit: number;
+  near_limit_pct: number;
+  expense_count: number;
+  /** Unpaid payments not yet overdue, refundable deposits included. */
+  upcoming_count: number;
+  overdue_count: number;
+  contingency_id: string | null;
 }
 
 export interface Contribution {
@@ -118,6 +155,7 @@ export interface Totals {
 
 export interface Overview {
   totals: Totals;
+  dashboard: Dashboard;
   categories: Category[];
   contributions: Contribution[];
   next_due: DuePayment[];
