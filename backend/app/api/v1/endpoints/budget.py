@@ -33,6 +33,8 @@ from app.db.session import get_db
 from app.utils.budget_defaults import (
     DEFAULT_NAMES, default_key, missing_defaults, suggestions_for,
 )
+from app.utils.budget_export import build_csv as budget_export_csv
+from app.utils.budget_export import filename as export_filename
 from app.utils.budget_math import (
     CONTINGENCY_NAME, add_up, basis_of, cost_figures, dashboard_figures, is_overdue,
     target_figures,
@@ -594,6 +596,37 @@ async def budget_overview(
     """Everything on the budget screen, with totals worked out in cents."""
     wedding = await require_wedding_access(db, wedding_id, current_user, "viewer")
     return await _overview(db, wedding)
+
+
+@router.get("/{wedding_id}/budget/export.csv")
+async def budget_export(
+    wedding_id: str,
+    include_archived: bool = Query(False),
+    include_contacts: bool = Query(False),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """The budget as one CSV, downloaded to the reader's own device (PD-013 step 5).
+
+    Anyone who can see the budget can download it, family included. Vendor contact
+    details are left out unless asked for. The file is built in memory and returned;
+    it's never written to disk, logged or sent anywhere (rule 1).
+    """
+    wedding = await require_wedding_access(db, wedding_id, current_user, "viewer")
+    overview = await _overview(db, wedding)
+    vendors = {v.id: v for v in (await db.exec(
+        select(CoupleVendor).where(CoupleVendor.wedding_id == wedding_id))).all()}
+    body = budget_export_csv(overview, vendors, include_archived=include_archived,
+                             include_contacts=include_contacts)
+    return Response(
+        content=body.encode("utf-8"), media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="{export_filename(overview.today)}"',
+            # Budget figures and, if asked for, contact details: never kept in a cache.
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.put("/{wedding_id}/budget/total", response_model=Totals)

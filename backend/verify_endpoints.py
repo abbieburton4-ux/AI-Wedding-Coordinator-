@@ -1330,6 +1330,181 @@ def test_api_suite():
         print("   * Remove a category: refused while it has expenses unless they move; "
               "moved with their payments; never deleted with it")
 
+        # 7c5. Export (PD-013 step 5, B69): one CSV from the same figures as the screen.
+        print("7c5. Verifying the budget export: CSV figures, formula guard, toggles, access...")
+        import csv as _csv
+        import io as _io
+        from app.utils.budget_export import dollars as _dollars, safe_cell
+        real_budget_today = budget_module._today
+        budget_module._today = lambda: _dt.date(2026, 11, 20)
+        before_total = c.get(f"{b_url}/overview", headers=headers).json()["totals"]["total_cents"]
+        try:
+            assert c.put(f"{b_url}/total", json={"total_cents": 3_000_000},
+                         headers=headers).status_code == 200
+            ex_cat = c.post(f"{b_url}/categories", headers=headers, json={
+                "name": "=Placeholder Hall", "planned_cents": 1_500_000}).json()["id"]
+            other_cat = c.post(f"{b_url}/categories", headers=headers, json={
+                "name": "Placeholder Flowers"}).json()["id"]
+            ex_vendor = c.post(f"/api/v1/weddings/{wedding_id}/vendors", headers=headers, json={
+                "section": "venue", "name": "Sample Export Hall",
+                "website": "https://hall.example.test", "contact_name": "Placeholder Contact",
+                "email": "hall@example.test", "phone": "(555) 010-0123"})
+            assert ex_vendor.status_code == 201, ex_vendor.text
+            ex_vendor_id = ex_vendor.json()["id"]
+            hall = c.post(f"{b_url}/categories/{ex_cat}/costs", headers=headers, json={
+                "vendor_name": "Sample Export Hall", "final_cents": 1_200_050,
+                "couple_vendor_id": ex_vendor_id, "contract_status": "signed",
+                "payment_method": "+Check", "notes": "@note, with a comma\nand a new line",
+                "link_url": "https://drive.example.test/file/d/hall"}).json()["id"]
+            p1 = c.post(f"{b_url}/costs/{hall}/payments", headers=headers, json={
+                "kind": "deposit", "amount_cents": 600_000, "due_on": "2026-11-11",
+                "reference": "-REF1"}).json()["id"]
+            c.post(f"{b_url}/costs/{hall}/payments", headers=headers, json={
+                "amount_cents": 600_050, "due_on": "2026-11-01"})
+            c.post(f"{b_url}/costs/{hall}/payments", headers=headers, json={
+                "kind": "deposit", "amount_cents": 200_000, "due_on": "2027-09-23",
+                "refundable": True})
+            assert c.put(f"{b_url}/payments/{p1}/paid", headers=headers,
+                         json={"paid": True, "paid_on": "2026-11-05"}).status_code == 200
+            c.post(f"{b_url}/categories/{other_cat}/costs", headers=headers, json={
+                "vendor_name": "Placeholder Florist", "estimated_cents": 250_000})
+            gone = c.post(f"{b_url}/categories/{other_cat}/costs", headers=headers, json={
+                "vendor_name": "Archived Placeholder", "quoted_cents": 99_900}).json()["id"]
+            c.post(f"{b_url}/costs/{gone}/payments", headers=headers,
+                   json={"amount_cents": 10_000, "due_on": "2026-12-01"})
+            assert c.patch(f"{b_url}/costs/{gone}", json={"archived": True},
+                           headers=headers).status_code == 200
+
+            def export(query="", who=None):
+                return c.get(f"{b_url}/export.csv{query}", headers=who or headers)
+
+            def sections(res):
+                assert res.status_code == 200, res.text
+                text = res.content.decode("utf-8")
+                assert text.startswith("\ufeff"), "UTF-8 marker for Excel"
+                out, heads, current = {}, {}, None
+                for row in _csv.reader(_io.StringIO(text.lstrip("\ufeff"))):
+                    if not row:
+                        continue
+                    if row[0] == "Section":
+                        current = row
+                        continue
+                    heads[row[0]] = current
+                    out.setdefault(row[0], []).append(dict(zip(current, row)))
+                return out, heads
+
+            res = export()
+            assert res.headers["content-type"].startswith("text/csv")
+            assert res.headers["content-disposition"] == \
+                'attachment; filename="wedding-budget-2026-11-20.csv"', "Chicago date"
+            assert res.headers["cache-control"] == "no-store"
+            got, heads = sections(res)
+            ov = c.get(f"{b_url}/overview", headers=headers).json()
+            summary = {r["Item"]: r["Value"] for r in got["Summary"]}
+            t = ov["totals"]
+            assert summary["Currency"] == "USD"
+            assert summary["Exported on (Chicago date)"] == "2026-11-20"
+            assert summary["Total budget (USD)"] == "30000.00"
+            for item, key in (("Committed (USD)", "committed_cents"), ("Paid (USD)", "paid_cents"),
+                              ("Still to pay (USD)", "remaining_cents"),
+                              ("Overpaid (USD)", "overpaid_cents"),
+                              ("Category targets added up (USD)", "planned_cents"),
+                              ("Refundable deposits (USD, not part of the cost)",
+                               "refundable_cents")):
+                assert summary[item] == _dollars(t[key]), (item, summary[item], t[key])
+            assert summary["Committed (USD)"] == "14500.50", "archived left out of the totals"
+            assert summary["Left of total budget (USD)"] == _dollars(
+                ov["dashboard"]["left_of_total_cents"])
+            assert summary["Payments overdue"] == str(ov["dashboard"]["overdue_count"]) == "1"
+            cats = {r["Category"]: r for r in got["Categories"]}
+            assert "'=Placeholder Hall" in cats, "formula-looking names become text"
+            for k in ov["categories"]:
+                row = cats[safe_cell(k["name"])]
+                assert row["Committed (USD)"] == _dollars(k["committed_cents"])
+                assert row["Paid (USD)"] == _dollars(k["paid_cents"])
+                assert row["Still to pay (USD)"] == _dollars(k["remaining_cents"])
+                assert row["Target (USD)"] == _dollars(k["planned_cents"])
+            assert cats["'=Placeholder Hall"]["Status"] == "Within target"
+            assert cats["'=Placeholder Hall"]["Share of total budget (%)"] == "50"
+            expenses = {r["Expense"]: r for r in got["Expenses"]}
+            assert set(expenses) == {"Sample Export Hall", "Placeholder Florist"}, \
+                "archived expenses left out by default"
+            h = expenses["Sample Export Hall"]
+            assert (h["Final (USD)"], h["Cost (USD)"], h["Paid (USD)"],
+                    h["Still to pay (USD)"], h["Refundable deposits (USD)"]) == (
+                "12000.50", "12000.50", "6000.00", "6000.50", "2000.00")
+            assert (h["Linked vendor"], h["Vendor website"], h["Contract"], h["Status"]) == (
+                "Sample Export Hall", "https://hall.example.test", "Signed", "Overdue")
+            assert h["Payment method"] == "'+Check"
+            assert h["Notes"] == "'@note, with a comma\nand a new line", "quoted, kept whole"
+            assert h["Link"] == "https://drive.example.test/file/d/hall"
+            assert expenses["Placeholder Florist"]["Cost based on"] == "Estimate"
+            assert not any("Vendor email" in (hd or []) for hd in heads.values())
+            assert b"hall@example.test" not in res.content and b"010-0123" not in res.content
+            assert b"Placeholder Contact" not in res.content, "no contacts unless asked"
+            pays = [r for r in got["Payments"] if r["Expense"] == "Sample Export Hall"]
+            assert len(pays) == 3 and all(r["Expense"] != "Archived Placeholder"
+                                          for r in got["Payments"])
+            paid_row = next(r for r in pays if r["Paid"] == "Yes")
+            assert (paid_row["Amount (USD)"], paid_row["Paid on"], paid_row["Reference"],
+                    paid_row["Status"], paid_row["Type"]) == (
+                "6000.00", "2026-11-05", "'-REF1", "Paid", "Deposit")
+            assert next(r for r in pays if r["Due"] == "2026-11-01")["Status"] == "Overdue"
+            assert next(r for r in pays if r["Refundable"] == "Yes")["Amount (USD)"] == "2000.00"
+            upcoming = got["Upcoming"]
+            assert [(r["Due"], r["Amount (USD)"], r["Status"]) for r in upcoming] == [
+                (d["due_on"] or "No date", _dollars(d["amount_cents"]),
+                 "Overdue" if d["overdue"] else "Unpaid") for d in ov["next_due"]]
+            assert [r["Due"] for r in upcoming] == ["2026-11-01", "2027-09-23"]
+            print("   * CSV: summary, categories, expenses, payments and upcoming match "
+                  "the overview, in plain dollars")
+
+            got, _ = sections(export("?include_archived=true"))
+            arch = {r["Expense"]: r for r in got["Expenses"]}
+            assert arch["Archived Placeholder"]["Archived"] == "Yes"
+            assert arch["Sample Export Hall"]["Archived"] == "No"
+            assert any(r["Expense"] == "Archived Placeholder" for r in got["Payments"])
+            assert {r["Item"]: r["Value"] for r in got["Summary"]}["Committed (USD)"] == \
+                "14500.50", "listing archived expenses doesn't add them to the totals"
+            assert all(r["Expense"] != "Archived Placeholder" for r in got["Upcoming"])
+            # As on the screen: an archived expense's payment keeps its own status, but
+            # isn't counted among the payments overdue or listed as upcoming.
+            gone_pay = next(r for r in got["Payments"] if r["Expense"] == "Archived Placeholder")
+            assert (gone_pay["Due"], gone_pay["Status"]) == ("2026-12-01", "Unpaid")
+            assert {r["Item"]: r["Value"] for r in got["Summary"]}["Payments overdue"] == "1"
+            print("   * Archived expenses: left out unless asked; never in a total")
+
+            res = export("?include_contacts=true")
+            got, _ = sections(res)
+            h = next(r for r in got["Expenses"] if r["Expense"] == "Sample Export Hall")
+            assert (h["Vendor contact"], h["Vendor email"], h["Vendor phone"]) == (
+                "Placeholder Contact", "hall@example.test", "(555) 010-0123")
+            assert {r["Item"]: r["Value"] for r in got["Summary"]}[
+                "Vendor contact details"] == "Included"
+            f = next(r for r in got["Expenses"] if r["Expense"] == "Placeholder Florist")
+            assert (f["Vendor email"], f["Linked vendor"]) == ("", "")
+            print("   * Vendor contacts: only when the box is ticked")
+
+            assert safe_cell("=1+1") == "'=1+1" and safe_cell("\tx") == "'\tx"
+            assert safe_cell("  =1") == "'  =1" and safe_cell("\uff1d1") == "'\uff1d1"
+            assert safe_cell("Plain") == "Plain" and safe_cell(None) == ""
+            assert _dollars(0) == "0.00" and _dollars(5) == "0.05" and _dollars(None) == ""
+
+            for who in (viewer_headers, editor_headers):
+                assert export("?include_contacts=true", who).status_code == 200, \
+                    "family and editors can download what they can see"
+            assert export(who=unauth_headers).status_code == 403
+            assert c.get(f"{b_url}/export.csv").status_code in (401, 403)
+            print("   * Export access: owners, editors and viewers; nobody outside the list")
+        finally:
+            budget_module._today = real_budget_today
+        for k in c.get(f"{b_url}/overview", headers=headers).json()["categories"]:
+            clear_category(k["id"])
+        assert c.delete(f"/api/v1/weddings/{wedding_id}/vendors/{ex_vendor_id}",
+                        headers=headers).status_code == 204
+        assert c.put(f"{b_url}/total", json={"total_cents": before_total},
+                     headers=headers).status_code == 200
+
         print("7d. Verifying vendor cards compare quotes with the couple's own budget (B42)...")
         from app.db.models import Booking, BudgetLine, Quote, Supplier
         names = {cat["name"].lower() for cat in ours["categories"]}

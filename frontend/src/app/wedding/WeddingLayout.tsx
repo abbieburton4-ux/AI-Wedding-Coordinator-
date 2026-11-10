@@ -95,8 +95,10 @@ function WeddingShell() {
   const { pathname } = useLocation();
   // Only decides what's offered; the API refuses non-owners on its own.
   const canManageAccess = useActiveWedding().myLevel === "owner";
-  // Concierge and the intake/onboarding flow render full-bleed (no nav chrome).
-  const showShell = !pathname.endsWith("/concierge") && !pathname.endsWith("/intake");
+  // Concierge, the intake/onboarding flow and the printable budget render full-bleed
+  // (no nav chrome).
+  const showShell = !pathname.endsWith("/concierge") && !pathname.endsWith("/intake")
+    && !pathname.endsWith("/budget/print");
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
