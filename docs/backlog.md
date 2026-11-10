@@ -12,21 +12,22 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B74** — budget page enhancements: Catering category, visible "Add expense", jump-to tabs, fold and unfold sections (PD-015). `in progress` (PD-015 ratified 2026-11-10)
-2. **B19** — guest planning: list, food, seating (must-have 3), after the budget enhancements. `needs-owner: guest-planning scope PD, to be proposed`
-3. **B70** — Publish offered to delete the Vendors section from the live app because the workspace hadn't caught up; make that harder to hit. `ready`
-4. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
-5. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
-6. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-7. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-8. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
-9. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
-10. **B34** — database-level guard against the same email being added twice. `ready`
-11. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
-12. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
-13. **B8** — record missing token counts as empty, not 0. `ready`
-14. **B17** — stop tracking the test database files. `ready`
-15. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
-16. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
+2. **B75** — fold and unfold the Vendors sections (PD-015 follow-up). `ready` (after B74)
+3. **B19** — guest planning: list, food, seating (must-have 3), after the budget enhancements. `needs-owner: guest-planning scope PD, to be proposed`
+4. **B70** — Publish offered to delete the Vendors section from the live app because the workspace hadn't caught up; make that harder to hit. `ready`
+5. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
+6. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
+7. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+8. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
+9. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
+10. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+11. **B34** — database-level guard against the same email being added twice. `ready`
+12. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+13. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
+14. **B8** — record missing token counts as empty, not 0. `ready`
+15. **B17** — stop tracking the test database files. `ready`
+16. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
+17. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
 
 ## Open
 
@@ -68,6 +69,8 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 - **B73 — A test fails now and then.** Found in #78 (B68): one existing check fails at random when a generated id contains "555" (it looks like a phone number to the privacy filter). Not caused by #78. *Fix:* make the test ids fixed, or teach the check to ignore ids. *Depends on:* nothing; small.
 
 - **B74 — Budget page enhancements.** Owner, 2026-11-10 (PD-015, ratified): Food & Drink as its own suggested category (food and drink ideas) with "Venue & Catering" becoming "Venue"; an always-visible "Add expense" on each category and at the top; jump-to tabs at the top; fold and unfold each section. No database change. A one-click "Rename to Venue" on an existing "Venue & Catering", which then disappears.
+
+- **B75 — Fold and unfold the Vendors sections.** Owner, 2026-11-10 (PD-015 follow-up, ratified): each of the seven Vendors sections folds and unfolds, with Expand all / Collapse all, remembered per device; the summary at the top opens a folded section. No database change. *Depends on:* B74 (reuse its fold control).
 
 ### Housekeeping
 
