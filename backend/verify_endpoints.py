@@ -589,6 +589,7 @@ def test_api_suite():
             ("post", f"{b_url}/apply-split", {"lines": [{"name": "Z", "planned_cents": 1}]}),
             ("put", f"{b_url}/categories/order", {"category_ids": [venue_cat, flowers_cat]}),
             ("post", f"{b_url}/categories/defaults", None),
+            ("post", f"{b_url}/categories/defaults/restore", None),
             ("post", f"{b_url}/costs/{cost_id}/duplicate", None),
             ("delete", f"{b_url}/categories/{venue_cat}?move_to={flowers_cat}", None),
         ]
@@ -1164,6 +1165,10 @@ def test_api_suite():
         from app.utils.budget_defaults import DEFAULT_NAMES
         for k in c.get(f"{b_url}/overview", headers=headers).json()["categories"]:
             clear_category(k["id"])
+        # Earlier steps removed suggested categories (Contingency); start from none
+        # removed, as a new wedding does (B71).
+        assert c.post(f"{b_url}/categories/defaults/restore",
+                      headers=headers).status_code == 200
         # The couple's own venue category, under a look-alike name, holding an expense.
         venue_own = c.post(f"{b_url}/categories", headers=headers, json={
             "name": " venue  and CATERING", "planned_cents": 900_000}).json()["id"]
@@ -1215,6 +1220,64 @@ def test_api_suite():
                       headers=viewer_headers).status_code == 403
         print("   * Default categories: on the couple's click only, after their own, no "
               "targets; look-alike names kept, never doubled; suggestions per category")
+
+        # B71: a suggestion the couple remove isn't offered again until they ask.
+        def offered():
+            ov = c.get(f"{b_url}/overview", headers=viewer_headers).json()
+            return ov["missing_default_categories"], ov["removed_default_categories"]
+        assert offered() == ([], []), "Other, removed and named back above, isn't declined"
+        assert c.delete(f"{b_url}/categories/{by_name['Contingency']['id']}",
+                        headers=editor_headers).status_code == 204
+        assert offered() == ([], ["Contingency"]), offered()
+        flowers_id = by_name["Flowers & Decor"]["id"]
+        assert c.delete(f"{b_url}/categories/{flowers_id}", headers=headers).status_code == 204
+        assert offered() == ([], ["Flowers & Decor", "Contingency"]), offered()
+        # A rename away isn't a removal: with none of that name left, it's offered.
+        ceremony_id = by_name["Ceremony & Legal"]["id"]
+        assert c.patch(f"{b_url}/categories/{ceremony_id}", json={"name": "Our ceremony"},
+                       headers=headers).status_code == 200
+        assert offered() == (["Ceremony & Legal"], ["Flowers & Decor", "Contingency"])
+        res = c.post(f"{b_url}/categories/defaults", headers=headers)
+        assert res.json()["added"] == ["Ceremony & Legal"], \
+            "adding all the suggestions leaves out the removed ones"
+        assert offered() == ([], ["Flowers & Decor", "Contingency"])
+        for body in ({"names": ["Nope"]}, {"names": []}):
+            assert c.post(f"{b_url}/categories/defaults/restore", headers=headers,
+                          json=body).status_code == 422, body
+        assert c.post(f"{b_url}/categories/defaults/restore", headers=viewer_headers,
+                      json={"names": ["Contingency"]}).status_code == 403
+        assert offered() == ([], ["Flowers & Decor", "Contingency"]), "viewers change nothing"
+        res = c.post(f"{b_url}/categories/defaults/restore", headers=headers,
+                     json={"names": [" contingency"]})
+        assert res.status_code == 200 and res.json() == {"restored": ["Contingency"]}, res.text
+        assert offered() == (["Contingency"], ["Flowers & Decor"]), offered()
+        # Adding one back by hand makes it theirs again; removing it again counts again.
+        res = c.post(f"{b_url}/categories", json={"name": "Flowers and Decor"}, headers=headers)
+        assert res.status_code == 201, res.text
+        assert offered() == (["Contingency"], [])
+        assert c.delete(f"{b_url}/categories/{res.json()['id']}",
+                        headers=headers).status_code == 204
+        assert offered() == (["Contingency"], ["Flowers & Decor"])
+        res = c.post(f"{b_url}/categories/defaults/restore", headers=editor_headers)
+        assert res.json() == {"restored": ["Flowers & Decor"]}, res.json()
+        assert offered() == (["Flowers & Decor", "Contingency"], [])
+        assert c.post(f"{b_url}/categories/defaults/restore",
+                      headers=headers).json() == {"restored": []}, "nothing left to restore"
+        # Naming a removed one adds it back and forgets the removal.
+        legal_id = next(k["id"] for k in c.get(f"{b_url}/overview", headers=headers).json()[
+            "categories"] if k["name"] == "Ceremony & Legal")
+        assert c.delete(f"{b_url}/categories/{legal_id}", headers=headers).status_code == 204
+        assert offered() == (["Flowers & Decor", "Contingency"], ["Ceremony & Legal"])
+        res = c.post(f"{b_url}/categories/defaults", headers=headers,
+                     json={"names": ["Ceremony & Legal", "Flowers & Decor", "Contingency"]})
+        assert res.json()["added"] == ["Flowers & Decor", "Ceremony & Legal", "Contingency"]
+        assert offered() == ([], [])
+        assert c.delete(f"{b_url}/categories/{ceremony_id}", headers=headers).status_code == 204
+        assert offered() == ([], []), "removing a category that isn't a suggestion declines none"
+        theirs = c.get(f"{o_url}/overview", headers=other_headers).json()
+        assert theirs["removed_default_categories"] == [], "another wedding's list untouched"
+        print("   * Removed suggestions: not offered again, the rest still are; a rename "
+              "isn't a removal; restored on an editor's click; viewers can't change it")
 
         order_url = f"{b_url}/categories/order"
         ids = [k["id"] for k in c.get(f"{b_url}/overview", headers=headers).json()["categories"]]

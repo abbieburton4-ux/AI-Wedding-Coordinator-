@@ -150,10 +150,11 @@ export function Budget() {
             {canEdit && (
               <MoveMoney base={base} categories={overview.categories} run={run} request={request} busy={busy} />
             )}
-            {canEdit && overview.missing_default_categories.length > 0 && (
+            {canEdit && (overview.missing_default_categories.length > 0
+              || overview.removed_default_categories.length > 0) && (
               <DefaultCategoriesOffer
-                base={base} missing={overview.missing_default_categories} hasAny={overview.categories.length > 0}
-                run={run} request={request} busy={busy}
+                base={base} missing={overview.missing_default_categories} removed={overview.removed_default_categories}
+                hasAny={overview.categories.length > 0} run={run} request={request} busy={busy}
               />
             )}
             {canEdit && (

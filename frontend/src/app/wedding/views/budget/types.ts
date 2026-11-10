@@ -165,6 +165,8 @@ export interface Overview {
   next_due: DuePayment[];
   /** The suggested categories the couple don't have yet, in the suggested order. */
   missing_default_categories: string[];
+  /** Suggested categories the couple removed, so no longer offered until they ask (B71). */
+  removed_default_categories: string[];
   /** Today in Chicago, the day "overdue" is measured against. */
   today: string;
 }

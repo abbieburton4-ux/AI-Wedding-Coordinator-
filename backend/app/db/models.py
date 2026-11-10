@@ -84,6 +84,11 @@ class Wedding(SQLModel, table=True):
     )
     # When the owner's checklist was imported (manage_checklist.py), so it runs once.
     checklist_imported_at: Optional[datetime.datetime] = Field(default=None)
+    # The suggested budget categories the couple removed (B71), by their suggested
+    # name, so the Budget screen stops offering them until the couple ask to see them
+    # again. Blank means none.
+    declined_budget_defaults: Optional[List[str]] = Field(
+        default=None, sa_column=Column(JSON, nullable=True))
     currency: str = Field(default="EUR")
     style_notes: Optional[str] = Field(default=None, sa_column=Column(Text))
     status: str = Field(default="intake")  # intake, planning, booked, completed, cancelled

@@ -31,7 +31,8 @@ from app.db.models import (
 )
 from app.db.session import get_db
 from app.utils.budget_defaults import (
-    DEFAULT_NAMES, default_key, missing_defaults, suggestions_for,
+    DEFAULT_NAMES, default_key, default_name, missing_defaults, removed_defaults,
+    suggestions_for,
 )
 from app.utils.budget_math import (
     CONTINGENCY_NAME, add_up, basis_of, cost_figures, dashboard_figures, is_overdue,
@@ -161,6 +162,11 @@ class OrderIn(BaseModel):
 
 class DefaultsIn(BaseModel):
     """Which suggested categories to add; all the missing ones when left out."""
+    names: Optional[List[str]] = Field(default=None, max_length=len(DEFAULT_NAMES))
+
+
+class RestoreIn(BaseModel):
+    """Which removed suggestions to offer again; all of them when left out."""
     names: Optional[List[str]] = Field(default=None, max_length=len(DEFAULT_NAMES))
 
 
@@ -328,8 +334,11 @@ class Overview(BaseModel):
     categories: List[CategoryOut]
     contributions: List[ContributionOut]
     next_due: List[DueOut]
-    # The suggested categories (PD-013 b) the couple don't have yet, in order.
+    # The suggested categories (PD-013 b) the couple don't have yet, in order, less
+    # the ones they removed on purpose (B71).
     missing_default_categories: List[str]
+    # The suggested categories they removed and haven't added back, in order (B71).
+    removed_default_categories: List[str]
     # The day "overdue" is measured against: today in Chicago (B45).
     today: datetime.date
 
@@ -337,6 +346,10 @@ class Overview(BaseModel):
 class DefaultsOut(BaseModel):
     added: List[str]
     already_had: List[str]
+
+
+class RestoreOut(BaseModel):
+    restored: List[str]
 
 
 # --- Helpers --------------------------------------------------------------------------
@@ -423,6 +436,42 @@ async def _next_position(db: AsyncSession, wedding_id: str) -> int:
 
 async def _editor(db: AsyncSession, wedding_id: str, user: User):
     return await require_wedding_access(db, wedding_id, user, "editor")
+
+
+def _declined(wedding: Wedding) -> List[str]:
+    """The suggested categories this wedding's couple removed (B71), by suggested name."""
+    names = {default_name(n) for n in (wedding.declined_budget_defaults or [])
+             if isinstance(n, str)}
+    return [n for n in DEFAULT_NAMES if n in names]
+
+
+async def _lock_wedding(db: AsyncSession, wedding: Wedding) -> None:
+    """Locks the wedding row until this commits and rereads it, so two changes to its
+    removed suggestions at once queue up instead of one overwriting the other.
+
+    FOR NO KEY UPDATE on Postgres: it queues these changes but not the foreign-key
+    checks of rows added under the wedding (an expense locks its category, then
+    the wedding), which a full FOR UPDATE would deadlock with."""
+    await db.execute(sa_select(Wedding.__table__.c.id)
+                     .where(Wedding.__table__.c.id == wedding.id)
+                     .with_for_update(key_share=True))
+    await db.refresh(wedding)
+
+
+def _set_declined(db: AsyncSession, wedding: Wedding, names) -> None:
+    wanted = set(names)
+    wedding.declined_budget_defaults = [n for n in DEFAULT_NAMES if n in wanted] or None
+    db.add(wedding)
+
+
+async def _undecline(db: AsyncSession, wedding: Wedding, category_name: str) -> None:
+    """A category the couple add or rename to a removed suggestion's name makes it
+    theirs again, so removing that one later is a fresh choice."""
+    suggested = default_name(category_name)
+    if suggested is None or suggested not in _declined(wedding):
+        return
+    await _lock_wedding(db, wedding)
+    _set_declined(db, wedding, [n for n in _declined(wedding) if n != suggested])
 
 
 async def _check_unique_name(db: AsyncSession, wedding_id: str, name: str,
@@ -565,7 +614,10 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
             category_id=c.category_id,
         ) for c in contributions],
         next_due=next_due,
-        missing_default_categories=missing_defaults(c.name for c in categories),
+        missing_default_categories=missing_defaults(
+            (c.name for c in categories), _declined(wedding)),
+        removed_default_categories=removed_defaults(
+            (c.name for c in categories), _declined(wedding)),
         today=today,
     )
 
@@ -616,9 +668,10 @@ async def add_category(
     wedding_id: str, payload: CategoryIn,
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
-    await _editor(db, wedding_id, current_user)
+    wedding = await _editor(db, wedding_id, current_user)
     name = _clean(payload.name)
     await _check_unique_name(db, wedding_id, name)
+    await _undecline(db, wedding, name)
     row = BudgetCategory(wedding_id=wedding_id, name=name, planned_cents=payload.planned_cents,
                          sort_order=await _next_position(db, wedding_id))
     db.add(row)
@@ -632,12 +685,15 @@ async def edit_category(
     wedding_id: str, category_id: str, payload: CategoryPatch,
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
-    await _editor(db, wedding_id, current_user)
+    wedding = await _editor(db, wedding_id, current_user)
     row = await _row(db, BudgetCategory, category_id, wedding_id, "category")
     updates = payload.model_dump(exclude_unset=True)
     if "name" in updates:
         name = _clean(updates["name"] or "")
         await _check_unique_name(db, wedding_id, name, except_id=row.id)
+        # Renaming a suggested category away doesn't count as removing it: with no
+        # category of that name left, it's offered again (B71).
+        await _undecline(db, wedding, name)
         row.name = name
     if "planned_cents" in updates:
         row.planned_cents = updates["planned_cents"]
@@ -668,13 +724,24 @@ async def remove_category(
     money records, so they're never removed with it: a category that has any is
     refused unless ``move_to`` names another of the wedding's categories, and then
     they all move there first, payments and paid ticks unchanged. Contributions
-    towards it stay, no longer tied to a category."""
-    await _editor(db, wedding_id, current_user)
+    towards it stay, no longer tied to a category.
+
+    Removing one of the suggested categories (PD-013 call b) also stops the Budget
+    screen offering it again (B71), until the couple ask to see it again."""
+    wedding = await _editor(db, wedding_id, current_user)
     row = await _row(db, BudgetCategory, category_id, wedding_id, "category")
+    # The wedding first, then the category: the order every lock here takes.
+    await _lock_wedding(db, wedding)
     # Locked first: an expense someone adds to it at the same moment then waits and
     # fails, rather than being removed with the category by ON DELETE CASCADE.
-    await db.execute(sa_select(BudgetCategory.__table__.c.id)
-                     .where(BudgetCategory.__table__.c.id == row.id).with_for_update())
+    locked = (await db.execute(sa_select(BudgetCategory.__table__.c.id)
+                               .where(BudgetCategory.__table__.c.id == row.id)
+                               .with_for_update())).first()
+    if locked is None:
+        raise HTTPException(status_code=404, detail="That category isn't in this budget")
+    # Reread under the lock, so a rename made meanwhile decides what's declined.
+    await db.refresh(row)
+    suggested = default_name(row.name)
     costs = (await db.exec(select(BudgetCost).where(BudgetCost.category_id == row.id))).all()
     if costs:
         if not move_to:
@@ -699,6 +766,12 @@ async def remove_category(
     )).all():
         c.category_id = None
         db.add(c)
+    if suggested is not None:
+        # Older data may hold a look-alike twin; while one is left, it isn't removed.
+        twins = (await db.exec(select(BudgetCategory.name).where(
+            BudgetCategory.wedding_id == wedding_id, BudgetCategory.id != row.id))).all()
+        if all(default_name(n) != suggested for n in twins):
+            _set_declined(db, wedding, _declined(wedding) + [suggested])
     await db.delete(row)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -743,9 +816,11 @@ async def add_default_categories(
     """Adds the suggested categories (PD-013 call b) the couple don't have yet, after
     their own, with no target. A category they already have under the same name
     (case, spaces and "&" or "and" ignored; "Venue" counts as Venue & Catering) is
-    left exactly as it is, so clicking twice adds nothing more."""
-    await _editor(db, wedding_id, current_user)
-    wanted = list(DEFAULT_NAMES)
+    left exactly as it is, so clicking twice adds nothing more. Left out, the names
+    are all the suggestions except any the couple removed (B71); naming a removed
+    one adds it back."""
+    wedding = await _editor(db, wedding_id, current_user)
+    wanted = None
     if payload is not None and payload.names is not None:
         asked = {default_key(n) for n in payload.names}
         unknown = asked - {default_key(n) for n in DEFAULT_NAMES}
@@ -755,8 +830,12 @@ async def add_default_categories(
         wanted = [n for n in DEFAULT_NAMES if default_key(n) in asked]
     # Locks the wedding until this commits, so two clicks at once (two tabs, or a
     # retried request) queue up: the second then finds them all there and adds none.
-    await db.execute(sa_select(Wedding.__table__.c.id)
-                     .where(Wedding.__table__.c.id == wedding_id).with_for_update())
+    await _lock_wedding(db, wedding)
+    declined = _declined(wedding)
+    if wanted is None:
+        wanted = [n for n in DEFAULT_NAMES if n not in declined]
+    elif any(n in declined for n in wanted):
+        _set_declined(db, wedding, [n for n in declined if n not in wanted])
     existing = (await db.exec(_ordered_categories(wedding_id))).all()
     missing = set(missing_defaults(c.name for c in existing))
     position = await _next_position(db, wedding_id)
@@ -771,6 +850,29 @@ async def add_default_categories(
         added.append(name)
     await db.commit()
     return DefaultsOut(added=added, already_had=already)
+
+
+@router.post("/{wedding_id}/budget/categories/defaults/restore", response_model=RestoreOut)
+async def restore_default_categories(
+    wedding_id: str, payload: Optional[RestoreIn] = Body(default=None),
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Offers removed suggestions again (B71): all of them, or the ones named. It adds
+    no category; the couple still choose what to add from the suggestions."""
+    wedding = await _editor(db, wedding_id, current_user)
+    await _lock_wedding(db, wedding)
+    declined = _declined(wedding)
+    restore = declined
+    if payload is not None and payload.names is not None:
+        asked = {default_name(n) for n in payload.names}
+        if None in asked or not asked:
+            raise HTTPException(status_code=422,
+                                detail="Choose from the suggested categories")
+        restore = [n for n in declined if n in asked]
+    if restore:
+        _set_declined(db, wedding, [n for n in declined if n not in restore])
+    await db.commit()
+    return RestoreOut(restored=restore)
 
 
 @router.post("/{wedding_id}/budget/categories/{category_id}/costs",
