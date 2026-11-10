@@ -12,7 +12,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B70** — Publish offered to delete the Vendors section from the live app because the workspace hadn't caught up; make that harder to hit. `ready`
-2. **B65–B69** — the full budget tracker, five steps (PD-013). ratified 2026-11-09; B65 done (#72); B65 and B66 done (#72, #74); B65–B67 done (#72, #74, #76); B65–B68 done (#72, #74, #76, #78); B71 `in progress` (small), then B69
+2. **B65–B69** — the full budget tracker, five steps (PD-013). ratified 2026-11-09; B65 done (#72); B65 and B66 done (#72, #74); B65–B67 done (#72, #74, #76); B65–B68 done (#72, #74, #76, #78); B71 `in review` (#80; Publish shows one `ADD COLUMN declined_budget_defaults` on `weddings`), then B69
 3. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
 4. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
 5. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
@@ -65,7 +65,7 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B65–B69 — The full budget tracker (PD-013, ratified 2026-11-09).** The owner's brief, 2026-11-09, split into five steps: B65 expenses and payments that add up (database change; folds in B44, B45 and the budget half of B56); B66 dashboard and allocation (done, #74; Contingency recognised by its name); B67 done (#76) B67 categories and the expense list (small database change); B68 charts and upcoming payments; B69 export (CSV and a printable page). Receipts and contracts are Google Drive links; default categories as in call (b); the engineering team enters Wildman BT in B65 as a one-time data step.
 
-- **B71 — A removed suggested category keeps being offered.** Found in #76 (B67): "Add the suggested categories" offers any of the ten that are missing on each visit until the couple click "Not now", including one they removed on purpose. Owner, 2026-11-10: "yes": once the couple remove a suggested category, it is not offered again. `in progress`
+- **B71 — A removed suggested category keeps being offered.** Found in #76 (B67): "Add the suggested categories" offers any of the ten that are missing on each visit until the couple click "Not now", including one they removed on purpose. Owner, 2026-11-10: "yes": once the couple remove a suggested category, it is not offered again. `in review` (#80). *Decided-by-agent, reversible:* only deleting counts, not renaming; "Show suggestions you removed" brings them all back to the list at once (adds nothing), which is fine at this size.
 
 - **B72 — White text on the gold buttons is hard to read.** Found in #78 (B68) by the accessibility review: the app's primary gold buttons with white text fall below the contrast standard. Affects the whole app, not just the budget. *Fix:* darken the button colour or use dark text, in the theme tokens. *Depends on:* nothing; small.
 
