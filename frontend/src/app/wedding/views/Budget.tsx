@@ -3,10 +3,13 @@ import { Icon } from "../../shared/Icon";
 import { SampleDataNotice } from "../../shared/SampleDataNotice";
 import { useApi, USE_FASTAPI_BACKEND } from "../../api";
 import { useActiveWedding } from "../WeddingProvider";
-import { BudgetDashboard, ContingencyOffer, MoveMoney } from "./budget/Dashboard";
+import { BudgetDashboard, MoveMoney } from "./budget/Dashboard";
+import { CategoryOrder, DefaultCategoriesOffer } from "./budget/Categories";
+import { ExpenseList } from "./budget/ExpenseList";
 import { AMOUNT_HINT, centsToInput, formatCents, parseDollars } from "./budget/money";
 import {
   AddCategoryForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, NextDue, linkButton, primaryButton,
+  type OpenRequest,
 } from "./budget/parts";
 import type { Overview, Run, SplitSuggestion, VendorRef } from "./budget/types";
 import { useReviewedRequest } from "../../api/review";
@@ -35,6 +38,12 @@ export function Budget() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [openRequest, setOpenRequest] = useState<OpenRequest>(null);
+  const openExpense = useCallback(
+    (id: string) => setOpenRequest((prev) => ({ id, n: (prev?.n ?? 0) + 1 })),
+    [],
+  );
+  const clearOpen = useCallback(() => setOpenRequest(null), []);
 
   const load = useCallback(async () => {
     if (!weddingId || !USE_FASTAPI_BACKEND) return;
@@ -115,26 +124,35 @@ export function Budget() {
 
           <NextDue items={overview.next_due} />
 
+          <ExpenseList categories={overview.categories} today={overview.today} onOpen={openExpense} />
+
           <section aria-labelledby="cat-heading" className="mb-10">
             <h2 id="cat-heading" className="font-headline-sm text-headline-sm text-on-surface mb-3">Categories</h2>
             {overview.categories.length === 0 && (
               <p className="text-sm text-on-surface-variant mb-4">
                 {canEdit
-                  ? "No categories yet. Add your first one below."
+                  ? "No categories yet. Add the suggested ones, or your own below."
                   : "No categories yet."}
               </p>
             )}
             {canEdit && (
               <MoveMoney base={base} categories={overview.categories} run={run} request={request} busy={busy} />
             )}
-            {canEdit && overview.dashboard.contingency_id === null && (
-              <ContingencyOffer base={base} run={run} request={request} busy={busy} />
+            {canEdit && overview.missing_default_categories.length > 0 && (
+              <DefaultCategoriesOffer
+                base={base} missing={overview.missing_default_categories} hasAny={overview.categories.length > 0}
+                run={run} request={request} busy={busy}
+              />
+            )}
+            {canEdit && (
+              <CategoryOrder base={base} categories={overview.categories} run={run} request={request} busy={busy} />
             )}
             <div className="space-y-6 mb-6">
               {overview.categories.map((cat) => (
                 <CategoryCard
-                  key={cat.id} base={base} category={cat} totals={overview.totals} vendors={vendors}
-                  canEdit={canEdit} run={run} request={request} busy={busy}
+                  key={cat.id} base={base} category={cat} categories={overview.categories} totals={overview.totals}
+                  vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} openRequest={openRequest}
+                  onOpened={clearOpen}
                 />
               ))}
             </div>

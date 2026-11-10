@@ -12,10 +12,11 @@ import datetime
 from typing import List, Literal, Optional
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select as sa_select, update as sa_update
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -25,9 +26,13 @@ from app.api.v1.review import Approval, needs_review
 from app.api.v1.access import require_wedding_access
 from app.api.v1.endpoints.auth import get_current_user
 from app.db.models import (
-    BudgetCategory, BudgetContribution, BudgetCost, BudgetPayment, CoupleVendor, User, utcnow,
+    BudgetCategory, BudgetContribution, BudgetCost, BudgetPayment, CoupleVendor, User, Wedding,
+    utcnow,
 )
 from app.db.session import get_db
+from app.utils.budget_defaults import (
+    DEFAULT_NAMES, default_key, missing_defaults, suggestions_for,
+)
 from app.utils.budget_math import (
     CONTINGENCY_NAME, add_up, basis_of, cost_figures, dashboard_figures, is_overdue,
     target_figures,
@@ -149,6 +154,16 @@ class ContributionPatch(BaseModel):
     category_id: Optional[str] = None
 
 
+class OrderIn(BaseModel):
+    """Every one of the wedding's category ids, in the order the couple want."""
+    category_ids: List[str] = Field(min_length=1, max_length=200)
+
+
+class DefaultsIn(BaseModel):
+    """Which suggested categories to add; all the missing ones when left out."""
+    names: Optional[List[str]] = Field(default=None, max_length=len(DEFAULT_NAMES))
+
+
 class MoveIn(BaseModel):
     from_category_id: str
     to_category_id: str
@@ -224,6 +239,9 @@ class CostOut(BaseModel):
     overpaid_cents: int
     refundable_cents: int
     refundable_paid_cents: int
+    # The soonest due date among its unpaid payments (refundable ones included), or
+    # None when nothing unpaid has a date. For sorting the list of all expenses.
+    next_due_on: Optional[datetime.date]
     payments: List[PaymentOut]
 
 
@@ -246,6 +264,8 @@ class CategoryOut(BaseModel):
     over_target_cents: int
     used_pct: Optional[int]           # committed as a share of the target
     expense_count: int                # not archived
+    # One-tap ideas for a new expense, for the suggested categories (B67); else none.
+    suggestions: List[str]
     # Every expense, archived ones included (flagged); the sums leave archived out.
     costs: List[CostOut]
 
@@ -308,8 +328,15 @@ class Overview(BaseModel):
     categories: List[CategoryOut]
     contributions: List[ContributionOut]
     next_due: List[DueOut]
+    # The suggested categories (PD-013 b) the couple don't have yet, in order.
+    missing_default_categories: List[str]
     # The day "overdue" is measured against: today in Chicago (B45).
     today: datetime.date
+
+
+class DefaultsOut(BaseModel):
+    added: List[str]
+    already_had: List[str]
 
 
 # --- Helpers --------------------------------------------------------------------------
@@ -380,17 +407,33 @@ async def _vendor(db: AsyncSession, vendor_id: Optional[str], wedding_id: str) -
     return vendor_id
 
 
+def _ordered_categories(wedding_id: str):
+    """The wedding's categories in the couple's order; unnumbered ones last, as added."""
+    return (select(BudgetCategory).where(BudgetCategory.wedding_id == wedding_id)
+            .order_by(BudgetCategory.sort_order.is_(None), BudgetCategory.sort_order,
+                      BudgetCategory.created_at, BudgetCategory.id))
+
+
+async def _next_position(db: AsyncSession, wedding_id: str) -> int:
+    """The sort_order that puts a new category last."""
+    top = (await db.exec(select(func.max(BudgetCategory.sort_order)).where(
+        BudgetCategory.wedding_id == wedding_id))).first()
+    return 0 if top is None else top + 1
+
+
 async def _editor(db: AsyncSession, wedding_id: str, user: User):
     return await require_wedding_access(db, wedding_id, user, "editor")
 
 
 async def _check_unique_name(db: AsyncSession, wedding_id: str, name: str,
                              except_id: Optional[str] = None) -> None:
-    key = category_key(name)
+    # The same rule the suggested categories use, so "Flowers and Decor" can't sit
+    # beside "Flowers & Decor", nor "Venue" beside "Venue & Catering".
+    key = default_key(name)
     for row in (await db.exec(
         select(BudgetCategory).where(BudgetCategory.wedding_id == wedding_id)
     )).all():
-        if row.id != except_id and category_key(row.name) == key:
+        if row.id != except_id and default_key(row.name) == key:
             raise HTTPException(status_code=409,
                                 detail=f"You already have a category called {row.name}")
 
@@ -412,6 +455,7 @@ def _cost_out(cost: BudgetCost, pays: list, payers: dict, vendors: dict,
               today: datetime.date) -> CostOut:
     f = cost_figures(cost, pays, today)
     v = vendors.get(cost.couple_vendor_id)
+    due_days = [p.due_on for p in pays if not p.paid and p.due_on is not None]
     return CostOut(
         id=cost.id, category_id=cost.category_id, vendor_name=cost.vendor_name,
         estimated_cents=cost.estimated_cents, quoted_cents=cost.quoted_cents,
@@ -424,6 +468,7 @@ def _cost_out(cost: BudgetCost, pays: list, payers: dict, vendors: dict,
         paid_cents=f.paid_cents, remaining_cents=f.remaining_cents,
         overpaid_cents=f.overpaid_cents, refundable_cents=f.refundable_cents,
         refundable_paid_cents=f.refundable_paid_cents,
+        next_due_on=min(due_days) if due_days else None,
         payments=[_payment_out(p, payers.get(p.paid_by_user_id), f, today) for p in pays],
     )
 
@@ -431,10 +476,7 @@ def _cost_out(cost: BudgetCost, pays: list, payers: dict, vendors: dict,
 async def _overview(db: AsyncSession, wedding) -> Overview:
     wid = wedding.id
     today = _today()
-    categories = (await db.exec(
-        select(BudgetCategory).where(BudgetCategory.wedding_id == wid)
-        .order_by(BudgetCategory.created_at, BudgetCategory.id)
-    )).all()
+    categories = (await db.exec(_ordered_categories(wid))).all()
     costs = (await db.exec(
         select(BudgetCost).where(BudgetCost.wedding_id == wid)
         .order_by(BudgetCost.created_at, BudgetCost.id)
@@ -485,7 +527,7 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
             id=cat.id, name=cat.name, planned_cents=cat.planned_cents,
             committed_basis=basis_of(c.committed_basis for c in counted),
             is_contingency=cat.id == contingency_id, expense_count=len(counted),
-            costs=out_costs, **sums,
+            suggestions=suggestions_for(cat.name), costs=out_costs, **sums,
             **target_figures(cat.planned_cents, sums["committed_cents"], total),
         ))
 
@@ -523,6 +565,7 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
             category_id=c.category_id,
         ) for c in contributions],
         next_due=next_due,
+        missing_default_categories=missing_defaults(c.name for c in categories),
         today=today,
     )
 
@@ -576,7 +619,8 @@ async def add_category(
     await _editor(db, wedding_id, current_user)
     name = _clean(payload.name)
     await _check_unique_name(db, wedding_id, name)
-    row = BudgetCategory(wedding_id=wedding_id, name=name, planned_cents=payload.planned_cents)
+    row = BudgetCategory(wedding_id=wedding_id, name=name, planned_cents=payload.planned_cents,
+                         sort_order=await _next_position(db, wedding_id))
     db.add(row)
     await db.commit()
     await db.refresh(row)
@@ -617,14 +661,39 @@ async def _delete_costs(db: AsyncSession, costs: list) -> None:
                status_code=status.HTTP_204_NO_CONTENT)
 async def remove_category(
     wedding_id: str, category_id: str,
+    move_to: Optional[str] = Query(default=None, description="Category to move its expenses to"),
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
-    """Removes a category with its vendor costs and payments. Contributions towards it
-    stay, no longer tied to a category."""
+    """Removes a category. Its expenses (archived ones too) and their payments are
+    money records, so they're never removed with it: a category that has any is
+    refused unless ``move_to`` names another of the wedding's categories, and then
+    they all move there first, payments and paid ticks unchanged. Contributions
+    towards it stay, no longer tied to a category."""
     await _editor(db, wedding_id, current_user)
     row = await _row(db, BudgetCategory, category_id, wedding_id, "category")
+    # Locked first: an expense someone adds to it at the same moment then waits and
+    # fails, rather than being removed with the category by ON DELETE CASCADE.
+    await db.execute(sa_select(BudgetCategory.__table__.c.id)
+                     .where(BudgetCategory.__table__.c.id == row.id).with_for_update())
     costs = (await db.exec(select(BudgetCost).where(BudgetCost.category_id == row.id))).all()
-    await _delete_costs(db, list(costs))
+    if costs:
+        if not move_to:
+            count = len(costs)
+            raise HTTPException(
+                status_code=409,
+                detail=f"{row.name} still has {count} expense{'' if count == 1 else 's'}. "
+                "Move them to another category first.")
+        if move_to == row.id:
+            raise HTTPException(status_code=422,
+                                detail="Choose a different category to move them to")
+        await _row(db, BudgetCategory, move_to, wedding_id, "category")
+        now = utcnow()
+        for cost in costs:
+            cost.category_id = move_to
+            cost.updated_at = now
+            db.add(cost)
+        # Moved before the category goes, so no database rule can take them with it.
+        await db.flush()
     for c in (await db.exec(
         select(BudgetContribution).where(BudgetContribution.category_id == row.id)
     )).all():
@@ -633,6 +702,75 @@ async def remove_category(
     await db.delete(row)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/{wedding_id}/budget/categories/order", status_code=status.HTTP_204_NO_CONTENT)
+async def reorder_categories(
+    wedding_id: str, payload: OrderIn,
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Puts the categories in the order given. The list must hold each of the
+    wedding's categories exactly once, so a screen that's out of date (someone added
+    or removed one meanwhile) is asked to reload instead of guessing."""
+    await _editor(db, wedding_id, current_user)
+    rows = {r.id: r for r in (await db.exec(
+        select(BudgetCategory).where(BudgetCategory.wedding_id == wedding_id))).all()}
+    ids = payload.category_ids
+    if len(set(ids)) != len(ids) or set(ids) != set(rows):
+        raise HTTPException(status_code=409,
+                            detail="The categories changed meanwhile. Reload and try again.")
+    now = utcnow()
+    for position, cid in enumerate(ids):
+        if rows[cid].sort_order != position:
+            rows[cid].sort_order = position
+            rows[cid].updated_at = now
+            db.add(rows[cid])
+    try:
+        await db.commit()
+    except (StaleDataError, DBAPIError):
+        # A category was removed between reading and saving: nothing is half-saved.
+        await db.rollback()
+        raise HTTPException(status_code=409,
+                            detail="The categories changed meanwhile. Reload and try again.")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{wedding_id}/budget/categories/defaults", response_model=DefaultsOut)
+async def add_default_categories(
+    wedding_id: str, payload: Optional[DefaultsIn] = Body(default=None),
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Adds the suggested categories (PD-013 call b) the couple don't have yet, after
+    their own, with no target. A category they already have under the same name
+    (case, spaces and "&" or "and" ignored; "Venue" counts as Venue & Catering) is
+    left exactly as it is, so clicking twice adds nothing more."""
+    await _editor(db, wedding_id, current_user)
+    wanted = list(DEFAULT_NAMES)
+    if payload is not None and payload.names is not None:
+        asked = {default_key(n) for n in payload.names}
+        unknown = asked - {default_key(n) for n in DEFAULT_NAMES}
+        if unknown or not asked:
+            raise HTTPException(status_code=422,
+                                detail="Choose from the suggested categories")
+        wanted = [n for n in DEFAULT_NAMES if default_key(n) in asked]
+    # Locks the wedding until this commits, so two clicks at once (two tabs, or a
+    # retried request) queue up: the second then finds them all there and adds none.
+    await db.execute(sa_select(Wedding.__table__.c.id)
+                     .where(Wedding.__table__.c.id == wedding_id).with_for_update())
+    existing = (await db.exec(_ordered_categories(wedding_id))).all()
+    missing = set(missing_defaults(c.name for c in existing))
+    position = await _next_position(db, wedding_id)
+    added, already = [], []
+    for name in wanted:
+        if name not in missing:
+            already.append(name)
+            continue
+        db.add(BudgetCategory(wedding_id=wedding_id, name=name, planned_cents=None,
+                              sort_order=position))
+        position += 1
+        added.append(name)
+    await db.commit()
+    return DefaultsOut(added=added, already_had=already)
 
 
 @router.post("/{wedding_id}/budget/categories/{category_id}/costs",
@@ -689,6 +827,36 @@ async def edit_cost(
         await _row(db, BudgetCategory, updates["category_id"], wedding_id, "category")
         row.category_id = updates["category_id"]
     row.updated_at = utcnow()
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
+@router.post("/{wedding_id}/budget/costs/{cost_id}/duplicate",
+             status_code=status.HTTP_201_CREATED, response_model=BudgetCost)
+async def duplicate_cost(
+    wedding_id: str, cost_id: str,
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """A copy of an expense in the same category, named "<name> (copy)".
+
+    It copies what the couple typed (costs, payment method, notes, link and vendor
+    link) but no payments, so nothing on the copy is paid, due or overdue until they
+    add its own. The contract starts at "none", because the copy's contract isn't
+    sent or signed just because the original's is (rule 4), and the copy is never
+    archived, so it counts in the totals straight away."""
+    await _editor(db, wedding_id, current_user)
+    src = await _row(db, BudgetCost, cost_id, wedding_id, "vendor cost")
+    suffix = " (copy)"
+    row = BudgetCost(
+        wedding_id=wedding_id, category_id=src.category_id,
+        vendor_name=src.vendor_name[:120 - len(suffix)].rstrip() + suffix,
+        estimated_cents=src.estimated_cents, quoted_cents=src.quoted_cents,
+        final_cents=src.final_cents, contract_status="none",
+        payment_method=src.payment_method, notes=src.notes, link_url=src.link_url,
+        couple_vendor_id=src.couple_vendor_id, archived=False,
+    )
     db.add(row)
     await db.commit()
     await db.refresh(row)
@@ -948,10 +1116,7 @@ async def suggest_split(
     wedding = await _editor(db, wedding_id, current_user)
     if not wedding.budget_total_cents:
         raise HTTPException(status_code=400, detail="Set your total budget first")
-    names = (await db.exec(
-        select(BudgetCategory.name).where(BudgetCategory.wedding_id == wedding_id)
-        .order_by(BudgetCategory.created_at, BudgetCategory.id)
-    )).all()
+    names = [c.name for c in (await db.exec(_ordered_categories(wedding_id))).all()]
     facts = dict(total_cents=wedding.budget_total_cents, category_names=list(names),
                  guest_count=wedding.guest_count_estimate, ceremony_type=wedding.ceremony_type)
     approved = approval.approved_prompt if approval else None
@@ -996,7 +1161,7 @@ async def apply_split(
     if not wedding.budget_total_cents:
         raise HTTPException(status_code=400, detail="Set your total budget first")
     lines = [(_clean(line.name), line.planned_cents) for line in payload.lines]
-    keys = [category_key(name) for name, _ in lines]
+    keys = [default_key(name) for name, _ in lines]
     if len(set(keys)) != len(keys):
         raise HTTPException(status_code=422, detail="Each category can only appear once")
     if sum(cents for _, cents in lines) != wedding.budget_total_cents:
@@ -1007,7 +1172,7 @@ async def apply_split(
     for row in (await db.exec(
         select(BudgetCategory).where(BudgetCategory.wedding_id == wedding_id)
     )).all():
-        existing.setdefault(category_key(row.name), []).append(row)
+        existing.setdefault(default_key(row.name), []).append(row)
     for key, (name, _) in zip(keys, lines):
         if len(existing.get(key, [])) > 1:
             names = " and ".join(r.name for r in existing[key])
@@ -1016,9 +1181,13 @@ async def apply_split(
                 detail=f"You have two categories that look the same ({names}). "
                 "Rename or remove one, then use the split.",
             )
+    position = await _next_position(db, wedding_id)
     for key, (name, cents) in zip(keys, lines):
-        row = existing[key][0] if key in existing else BudgetCategory(
-            wedding_id=wedding_id, name=name)
+        if key in existing:
+            row = existing[key][0]
+        else:
+            row = BudgetCategory(wedding_id=wedding_id, name=name, sort_order=position)
+            position += 1
         row.planned_cents = cents
         row.updated_at = utcnow()
         db.add(row)

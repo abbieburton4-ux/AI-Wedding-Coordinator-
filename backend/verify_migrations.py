@@ -389,6 +389,24 @@ def check_publish_safety(real_head: str, new_revisions: list) -> None:
     assert not diff, diff
     assert [tuple(r) for r in expense] == [("Wildman BT", "wildman-bt-w1")], expense
 
+    print("6a3. Real migrations: 0009 already published, then 0010 on its own (B67)...")
+    dev10, prod9 = url("dev10"), url("prod9")
+    command.upgrade(config_for(dev10), "0010")
+    command.upgrade(config_for(prod9), LAST_UNGUARDED)
+    seed_wedding(prod9)
+    command.upgrade(config_for(prod9), "0009")
+    added = publish_like_replit(dev10, prod9)
+    assert added == ["ADD COLUMN budget_categories.sort_order"], \
+        f"0010 adds one column and nothing else: {added}"
+    command.upgrade(config_for(prod9), "head")
+    with create_engine(prod9).connect() as conn:
+        diff = compare_metadata(MigrationContext.configure(conn), SQLModel.metadata)
+        order = conn.execute(text(
+            "SELECT name, sort_order FROM budget_categories")).fetchall()
+    assert not diff, diff
+    assert [tuple(r) for r in order] == [("Venue & Catering", 0)], \
+        "the data step numbers categories after Publish added the column"
+
     fixture_dir = os.path.join(work, "fixture_versions")
     os.makedirs(fixture_dir)
     with open(os.path.join(fixture_dir, "zz_fixture.py"), "w") as fh:
@@ -753,6 +771,62 @@ def main() -> None:
         conn.execute(text("DELETE FROM budget_costs WHERE wedding_id = 'w5'"))
         conn.execute(text("DELETE FROM budget_categories WHERE wedding_id = 'w5'"))
         conn.execute(text("DELETE FROM weddings WHERE id = 'w5'"))
+
+    print("3i. Checking that 0010 numbers categories in the order they were added (B67)...")
+    command.downgrade(cfg, "0009")
+    with engine.begin() as conn:
+        # Added out of id order, so the numbering must follow created_at, not ids.
+        for cid, wid, created in (("cat_c", "w1", "2026-03-01"), ("cat_b", "w1", "2026-02-01"),
+                                  ("cat_z", "w7", "2026-01-05")):
+            if wid == "w7" and not conn.execute(text(
+                    "SELECT 1 FROM weddings WHERE id = 'w7'")).first():
+                conn.execute(text(
+                    "INSERT INTO weddings (id, couple_user_id, region, ceremony_type, "
+                    "guest_count_estimate, currency, status, created_at) VALUES ('w7', 'u1', "
+                    "'Placeholder', 'Jewish', 10, 'USD', 'intake', '2026-01-01')"))
+            conn.execute(text(
+                "INSERT INTO budget_categories (id, wedding_id, name, planned_cents, "
+                "created_at, updated_at) VALUES (:id, :w, :id, 5, :t, :t)"),
+                {"id": cid, "w": wid, "t": created})
+        cats_before = conn.execute(text(
+            "SELECT id, name, planned_cents FROM budget_categories ORDER BY id")).fetchall()
+        costs_before = conn.execute(text(
+            "SELECT id, category_id FROM budget_costs ORDER BY id")).fetchall()
+    command.upgrade(cfg, "head")
+
+    def numbered(conn):
+        return [tuple(r) for r in conn.execute(text(
+            "SELECT wedding_id, id, sort_order FROM budget_categories "
+            "ORDER BY wedding_id, sort_order"))]
+    with engine.connect() as conn:
+        first = numbered(conn)
+        cats_after = conn.execute(text(
+            "SELECT id, name, planned_cents FROM budget_categories ORDER BY id")).fetchall()
+        costs_after = conn.execute(text(
+            "SELECT id, category_id FROM budget_costs ORDER BY id")).fetchall()
+    assert first == [("w1", "cat1", 0), ("w1", "cat_b", 1), ("w1", "cat_c", 2),
+                     ("w7", "cat_z", 0)], first
+    assert cats_after == cats_before and costs_after == costs_before, \
+        "names, targets and expenses stay as they are"
+    spec = importlib.util.spec_from_file_location(
+        "m0010", os.path.join(HERE, "migrations", "versions", "0010_budget_category_order.py"))
+    m0010 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m0010)
+    with engine.begin() as conn:
+        m0010.number_categories(conn)
+        assert numbered(conn) == first, "running the data step again changes nothing"
+        # The couple reorder, then a row arrives without a number: only it is numbered,
+        # after theirs, and their order is kept.
+        conn.execute(text("UPDATE budget_categories SET sort_order = 7 WHERE id = 'cat1'"))
+        conn.execute(text(
+            "INSERT INTO budget_categories (id, wedding_id, name, created_at, updated_at) "
+            "VALUES ('cat_new', 'w1', 'New', '2026-01-01', '2026-01-01')"))
+        m0010.number_categories(conn)
+        assert numbered(conn) == [("w1", "cat_b", 1), ("w1", "cat_c", 2), ("w1", "cat1", 7),
+                                  ("w1", "cat_new", 8), ("w7", "cat_z", 0)], numbered(conn)
+        for cid in ("cat_b", "cat_c", "cat_z", "cat_new"):
+            conn.execute(text("DELETE FROM budget_categories WHERE id = :c"), {"c": cid})
+        conn.execute(text("DELETE FROM weddings WHERE id = 'w7'"))
 
     print("4. Downgrading to the start and back up again...")
     command.downgrade(cfg, "base")
