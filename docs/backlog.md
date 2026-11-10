@@ -8,11 +8,11 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 ## Next up
 
-*Updated 2026-11-09 by the product lane. Re-rank if this date is more than 14 days old.*
+*Updated 2026-11-10 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B70** — Publish offered to delete the Vendors section from the live app because the workspace hadn't caught up; make that harder to hit. `ready`
-2. **B65–B69** — the full budget tracker, five steps (PD-013). ratified 2026-11-09; B65 done (#72); B66 `in review` (#74, no database change), then B67–B69 in order
+2. **B65–B69** — the full budget tracker, five steps (PD-013). ratified 2026-11-09; B65 done (#72); B65 and B66 done (#72, #74); B67 `in progress`, then B68 and B69
 3. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
 4. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
 5. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
@@ -63,7 +63,7 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B58 — The RUNBOOK backup step doesn't work on Replit.** Found while writing the B53 steps (2026-11-09): the RUNBOOK's checklist-import backup uses `SYNC_DATABASE_URL`, which Replit's Shell doesn't set; there `DATABASE_URL` works, and the Shell always reaches the development database, not the published app's production one. *Fix:* update RUNBOOK for Replit. *Also for B14:* when the app is published, Replit offers to copy development data into production; that is when the imported checklist would carry over, and the publishing plan should cover it. If the wedding is already in production, the Shell can't reach it without pasting a secret, so a safe import route is needed first. *Depends on:* nothing. *#58 (B59):* the backup command now works in Replit's Shell; the publishing note remains.
 
-- **B65–B69 — The full budget tracker (PD-013, ratified 2026-11-09).** The owner's brief, 2026-11-09, split into five steps: B65 expenses and payments that add up (database change; folds in B44, B45 and the budget half of B56); B66 dashboard and allocation (`in review`, #74; Contingency recognised by its name); B67 categories and the expense list (small database change); B68 charts and upcoming payments; B69 export (CSV and a printable page). Receipts and contracts are Google Drive links; default categories as in call (b); the engineering team enters Wildman BT in B65 as a one-time data step.
+- **B65–B69 — The full budget tracker (PD-013, ratified 2026-11-09).** The owner's brief, 2026-11-09, split into five steps: B65 expenses and payments that add up (database change; folds in B44, B45 and the budget half of B56); B66 dashboard and allocation (done, #74; Contingency recognised by its name); B67 (`in progress`) B67 categories and the expense list (small database change); B68 charts and upcoming payments; B69 export (CSV and a printable page). Receipts and contracts are Google Drive links; default categories as in call (b); the engineering team enters Wildman BT in B65 as a one-time data step.
 
 ### Housekeeping
 
@@ -99,6 +99,7 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-10 | **B66** — budget step 2 (PD-013): the dashboard's six questions with explanations, progress bars, category targets with share and status, over-budget heads-ups, moving money between categories, Contingency on the couple's click. No database change | #74 |
 | 2026-11-09 | **B65** — budget step 1 (PD-013): estimated, quoted and final cost, contract status, method, notes, Drive link and vendor link per expense; method, reference, date paid and refundable per payment; unpaid / partly paid / paid / overdue on Chicago's date; overpay warning. Wildman BT entered by a one-time data step, nothing paid. Published 2026-11-09 with no Replit database step; the live app applied it on start. Also closes B44 (agents and Dashboard read the new budget), B45 (Chicago date) and B56 (budget half) | #72 |
 | 2026-11-09 | **B64** — "Not selected" vendor status: muted red, faded, at the bottom of its section; ignored by the section summary. Stored as a new yes/no column, so publishing added a column and dropped nothing | #69 |
 | 2026-11-09 | **B63** — each vendor its own tile, status in colour plus the word (grey looking, blue contacted, green booked); "Where each section stands" summary at the top. Owner to check on a phone | #66 |
