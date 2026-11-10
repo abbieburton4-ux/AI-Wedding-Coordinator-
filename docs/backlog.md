@@ -11,7 +11,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-10 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **Budget enhancements** — the owner will send a list (2026-11-10: "lets make enhancements to the budget page next"). `needs-owner: the list`
+1. **B74** — budget page enhancements: Catering category, visible "Add expense", jump-to tabs, fold and unfold sections (PD-015). `needs-owner: PD-015 calls (a) name, (b) rename Venue & Catering`
 2. **B19** — guest planning: list, food, seating (must-have 3), after the budget enhancements. `needs-owner: guest-planning scope PD, to be proposed`
 3. **B70** — Publish offered to delete the Vendors section from the live app because the workspace hadn't caught up; make that harder to hit. `ready`
 4. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
@@ -66,6 +66,8 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 - **B72 — White text on the gold buttons is hard to read.** Found in #78 (B68) by the accessibility review: the app's primary gold buttons with white text fall below the contrast standard. Affects the whole app, not just the budget. *Fix:* darken the button colour or use dark text, in the theme tokens. *Depends on:* nothing; small.
 
 - **B73 — A test fails now and then.** Found in #78 (B68): one existing check fails at random when a generated id contains "555" (it looks like a phone number to the privacy filter). Not caused by #78. *Fix:* make the test ids fixed, or teach the check to ignore ids. *Depends on:* nothing; small.
+
+- **B74 — Budget page enhancements.** Owner, 2026-11-10 (PD-015, proposed): Catering as its own suggested category (food and drink ideas) with "Venue & Catering" becoming "Venue"; an always-visible "Add expense" on each category and at the top; jump-to tabs at the top; fold and unfold each section. No database change. *Depends on:* PD-015 calls (a) and (b).
 
 ### Housekeeping
 

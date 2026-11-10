@@ -305,3 +305,17 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 **Decision:** A. The owner switched the app to Public on 2026-11-09. Republishing alone kept it private, because Replit only changes access after the app is unpublished ([Replit: private deployments](https://docs.replit.com/features/publishing/private-deployments)). So the owner unpublished it, chose Public and published it again. Checked the same day: the address now opens the app, not Replit's sign-in. Who sees what stays as PD-002 and `wedding.md` set it.
 **Reversible:** yes: unpublish, change Replit's Sharing setting, publish again. Production data has Replit's 7-day rewind ([Replit: data recovery](https://docs.replit.com/features/data-and-storage/data-recovery)).
 
+
+## PD-015 — Budget page enhancements: catering, adding expenses, jump-to tabs, folding sections
+
+**Date:** 2026-11-10 · **Status:** proposed
+**Context:** Backlog B74. The owner, 2026-11-10: "add catering as a budget category, food & drink and anything related to that / I dont see how to add an expense, so we need to be able to add expenses to each category / I want tabs or buttons at the top of the page so we can click and go directly to that section / I want to be able to minimize/expand each section of the page". Inspected 2026-11-10: catering sits inside the suggested "Venue & Catering" category (PD-013 call (b)); a category's "Add expense" form is only reachable after clicking "Show expenses (0)", which is easy to miss; the page has no section navigation and no folding.
+**Proposed:**
+1. **Catering as its own category.** A new suggested category, **Catering**, for food and drink, with one-tap ideas: Catering, Bar and beverages, Wedding cake and desserts, Cocktail hour, Late-night food, Service charge and gratuity, Catering rentals. The suggested "Venue & Catering" becomes **Venue** (Ceremony venue, Reception venue, Rentals, Tables, chairs and linens), so catering isn't in two places. It matches the Vendors page's "Food & drink" section.
+2. **Adding an expense is obvious.** Every category shows an **Add expense** button at all times, even with no expenses yet. A main **Add expense** button near the top asks which category. If there are no categories yet, it points to "Add the suggested categories" first.
+3. **Jump-to tabs at the top:** Overview, Categories, All expenses, Upcoming payments, Charts, Who's contributing, Export. They stay at the top while scrolling, scroll sideways on a phone, and work with a keyboard.
+4. **Fold and unfold each section,** with "Expand all" and "Collapse all". Each device remembers which sections are folded (a screen preference, not wedding data). Clicking a tab opens its section if it's folded.
+**Technical choices settled by the team:** no database change; one PR and a routine publish.
+**Couple's calls:**
+- (a) The new category's name. *Recommended:* "Catering". Alternative: "Food & Drink", to match the Vendors page.
+- (b) Your existing "Venue & Catering" category, if you added it. *Recommended:* the app offers a one-click "Rename to Venue" next to it, and moves nothing by itself. Your Wildman BT entry stays where it is. Alternative: leave it as it is, and only add Catering.
