@@ -1,7 +1,5 @@
-import {
-  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode,
-} from "react";
-import { Icon } from "../../../shared/Icon";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { FoldChevron, scrollToElement, useRememberedFolds, type Folds as BaseFolds } from "../folds";
 
 // The same look as parts.tsx's linkButton; not imported, since parts.tsx imports this file.
 const linkButton =
@@ -26,7 +24,7 @@ export const SECTIONS: { key: SectionKey; label: string }[] = [
   { key: "contributions", label: "Who's contributing" },
 ];
 
-const KEYS = new Set<string>(SECTIONS.map((s) => s.key));
+const KEYS = SECTIONS.map((s) => s.key);
 
 export const sectionId = (key: SectionKey) => `budget-${key}`;
 const bodyId = (key: SectionKey) => `budget-${key}-body`;
@@ -38,11 +36,7 @@ const bodyId = (key: SectionKey) => `budget-${key}-body`;
 export const SECTION_SCROLL = "scroll-mt-48";
 const IN_VIEW_PX = 200;
 
-type Folds = {
-  folded: (key: SectionKey) => boolean;
-  toggle: (key: SectionKey) => void;
-  open: (key: SectionKey) => void;
-  setAll: (fold: boolean) => void;
+type Folds = BaseFolds<SectionKey> & {
   /** Opens a section if it's folded, then scrolls to it and moves focus there. */
   jumpTo: (key: SectionKey, target?: HTMLElement | null) => void;
 };
@@ -53,66 +47,22 @@ export function useFolds(): Folds | null {
   return useContext(FoldContext);
 }
 
-function storageKey(weddingId: string) {
-  return `venueflow.budgetFolds.${weddingId}`;
-}
-
-function readFolds(weddingId: string | null): SectionKey[] {
-  if (!weddingId) return [];
-  try {
-    const raw = JSON.parse(window.localStorage.getItem(storageKey(weddingId)) ?? "[]");
-    return Array.isArray(raw) ? raw.filter((k): k is SectionKey => typeof k === "string" && KEYS.has(k)) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function scrollToElement(el: HTMLElement) {
-  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-  el.focus({ preventScroll: true });
-}
+export { scrollToElement };
 
 export function FoldProvider({ weddingId, children }: { weddingId: string | null; children: ReactNode }) {
-  const [folded, setFolded] = useState<SectionKey[]>(() => readFolds(weddingId));
-  const loadedFor = useRef(weddingId);
+  const base = useRememberedFolds(weddingId ? `venueflow.budgetFolds.${weddingId}` : null, KEYS);
 
-  // Another wedding on the same device has its own preference. This effect must stay
-  // before the one that saves: it reads the new wedding's folds before that effect can
-  // write the old wedding's folds under the new key in the same render.
-  useEffect(() => {
-    if (loadedFor.current === weddingId) return;
-    loadedFor.current = weddingId;
-    setFolded(readFolds(weddingId));
-  }, [weddingId]);
-
-  useEffect(() => {
-    if (!weddingId || loadedFor.current !== weddingId) return;
-    try {
-      if (folded.length) window.localStorage.setItem(storageKey(weddingId), JSON.stringify(folded));
-      else window.localStorage.removeItem(storageKey(weddingId));
-    } catch {
-      // Private browsing or a full store: folding still works, it just isn't remembered.
-    }
-  }, [weddingId, folded]);
-
-  const value = useMemo<Folds>(() => {
-    const open = (key: SectionKey) => setFolded((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : prev));
-    return {
-      folded: (key) => folded.includes(key),
-      toggle: (key) => setFolded((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key])),
-      open,
-      setAll: (fold) => setFolded(fold ? SECTIONS.map((s) => s.key) : []),
-      jumpTo: (key, target) => {
-        open(key);
-        // After the section is shown again, so there's something to scroll to.
-        window.requestAnimationFrame(() => {
-          const el = target ?? document.getElementById(sectionId(key));
-          if (el) scrollToElement(el);
-        });
-      },
-    };
-  }, [folded]);
+  const value = useMemo<Folds>(() => ({
+    ...base,
+    jumpTo: (key, target) => {
+      base.open(key);
+      // After the section is shown again, so there's something to scroll to.
+      window.requestAnimationFrame(() => {
+        const el = target ?? document.getElementById(sectionId(key));
+        if (el) scrollToElement(el);
+      });
+    },
+  }), [base]);
 
   return <FoldContext.Provider value={value}>{children}</FoldContext.Provider>;
 }
@@ -137,11 +87,7 @@ export function SectionHeading({
         className="inline-flex items-center gap-2 text-left hover:text-primary rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
       >
         {children}
-        <Icon
-          name="expand_more"
-          size={22}
-          className={`text-on-surface-variant transition-transform motion-reduce:transition-none ${isFolded ? "-rotate-90" : ""}`}
-        />
+        <FoldChevron folded={isFolded} />
       </button>
     </h2>
   );
@@ -199,8 +145,6 @@ export function JumpBar({ present }: { present: SectionKey[] }) {
   }, [presentKey]);
 
   if (!folds || shown.length === 0) return null;
-  const allFolded = shown.every((s) => folds.folded(s.key));
-  const noneFolded = shown.every((s) => !folds.folded(s.key));
 
   return (
     <div className="sticky top-16 z-30 -mx-margin-mobile md:mx-0 mb-8 bg-wedding-white/95 backdrop-blur-md border-b border-outline-variant/20">
@@ -228,11 +172,12 @@ export function JumpBar({ present }: { present: SectionKey[] }) {
           ))}
         </ul>
       </nav>
+      {/* Never disabled: disabling the button just pressed would drop keyboard focus. */}
       <p className="flex gap-4 px-margin-mobile md:px-0 pb-2">
-        <button type="button" onClick={() => folds.setAll(false)} disabled={noneFolded} className={`${linkButton} text-xs`}>
+        <button type="button" onClick={() => folds.setAll(false)} className={`${linkButton} text-xs`}>
           Expand all
         </button>
-        <button type="button" onClick={() => folds.setAll(true)} disabled={allFolded} className={`${linkButton} text-xs`}>
+        <button type="button" onClick={() => folds.setAll(true)} className={`${linkButton} text-xs`}>
           Collapse all
         </button>
       </p>

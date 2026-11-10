@@ -4,6 +4,7 @@ import { useApi, USE_FASTAPI_BACKEND } from "../../api";
 import { useReviewedRequest } from "../../api/review";
 import { useActiveWedding } from "../WeddingProvider";
 import { inputClass, linkButton, primaryButton } from "./budget/parts";
+import { FoldChevron, scrollToElement, useRememberedFolds, type Folds } from "./folds";
 
 /**
  * The couple's own vendors, by section (PD-012, B62). Everyone on the access list can
@@ -63,6 +64,9 @@ const SECTIONS = [
   { key: "hair_makeup", title: "Hair & makeup", icon: "brush" },
   { key: "transportation", title: "Transportation", icon: "directions_car" },
 ] as const;
+
+type SectionKey = (typeof SECTIONS)[number]["key"];
+const SECTION_KEYS: readonly SectionKey[] = SECTIONS.map((s) => s.key);
 
 const STATUSES: { value: VendorStatus; label: string }[] = [
   { value: "looking", label: "Looking" },
@@ -491,7 +495,7 @@ function VendorCard({
 // ---- One section ---------------------------------------------------------------------
 
 function SectionCard({
-  section, vendors, status, base, canEdit, reload, request,
+  section, vendors, status, base, canEdit, reload, request, folded, onToggle,
 }: {
   section: (typeof SECTIONS)[number];
   vendors: Vendor[];
@@ -500,9 +504,13 @@ function SectionCard({
   canEdit: boolean;
   reload: () => Promise<Vendor[] | null>;
   request: ReturnType<typeof useApi>["request"];
+  folded: boolean;
+  onToggle: () => void;
 }) {
   const [adding, setAdding] = useState(false);
   const headingId = `vendor-section-${section.key}`;
+  const bodyId = `${sectionDomId(section.key)}-body`;
+  const count = `${vendors.length} ${vendors.length === 1 ? "vendor" : "vendors"}`;
 
   async function add(d: Draft): Promise<string | null> {
     try {
@@ -526,9 +534,24 @@ function SectionCard({
         <span className="w-10 h-10 shrink-0 rounded-full bg-primary/10 flex items-center justify-center">
           <Icon name={section.icon} size={20} className="text-primary" />
         </span>
-        <h3 id={headingId} className="font-headline-sm text-headline-sm text-on-surface">{section.title}</h3>
-        <span className="ml-auto"><StatusBadge status={status} srPrefix="Section status: " /></span>
+        <h3 id={headingId} className="min-w-0 font-headline-sm text-headline-sm text-on-surface">
+          <button
+            type="button"
+            aria-expanded={!folded}
+            aria-controls={bodyId}
+            onClick={onToggle}
+            className="inline-flex min-h-11 items-center gap-2 text-left hover:text-primary rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          >
+            <span className="break-words">{section.title}</span>
+            <FoldChevron folded={folded} />
+          </button>
+        </h3>
+        <span className="ml-auto flex items-center gap-3">
+          <span className="text-sm text-on-surface-variant whitespace-nowrap">{count}</span>
+          <StatusBadge status={status} srPrefix="Section status: " />
+        </span>
       </div>
+      <div id={bodyId} hidden={folded} className="flex flex-col gap-4">
       {vendors.length > 0 ? (
         <ul className="flex flex-col gap-4">
           {inPlayFirst(vendors).map((v) => (
@@ -547,6 +570,7 @@ function SectionCard({
           <Icon name="add" size={18} /> Add a vendor<span className="sr-only"> to {section.title}</span>
         </button>
       ))}
+      </div>
     </section>
   );
 }
@@ -562,15 +586,17 @@ const SUMMARY_ITEM: Record<CategoryStatus, string> = {
   booked: calmItem,
 };
 
-function goToSection(key: string) {
-  const el = document.getElementById(sectionDomId(key));
-  if (!el) return;
-  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-  el.focus({ preventScroll: true });
-}
-
-function CategorySummary({ sectionStatus }: { sectionStatus: Record<string, CategoryStatus> }) {
+function CategorySummary({
+  sectionStatus, folds,
+}: { sectionStatus: Record<string, CategoryStatus>; folds: Folds<SectionKey> }) {
+  // Opens a folded section first, then scrolls once it's shown again.
+  const goToSection = (key: SectionKey) => {
+    folds.open(key);
+    window.requestAnimationFrame(() => {
+      const el = document.getElementById(sectionDomId(key));
+      if (el) scrollToElement(el);
+    });
+  };
   const rows = SECTIONS.map((s) => ({ section: s, status: sectionStatus[s.key] ?? "todo" }));
   const count = (st: CategoryStatus) => rows.filter((r) => r.status === st).length;
   const parts = (["todo", "looking", "contacted", "booked"] as const)
@@ -584,6 +610,14 @@ function CategorySummary({ sectionStatus }: { sectionStatus: Record<string, Cate
       </h3>
       <p className="text-sm text-on-surface-variant mt-1">
         {parts.join(", ")}. This shows only what you've set; the app never changes a status.
+      </p>
+      <p className="flex flex-wrap gap-x-6 gap-y-2 mt-3">
+        <button type="button" onClick={() => folds.setAll(false)} className={linkButton}>
+          Expand all<span className="sr-only"> vendor sections</span>
+        </button>
+        <button type="button" onClick={() => folds.setAll(true)} className={linkButton}>
+          Collapse all<span className="sr-only"> vendor sections</span>
+        </button>
       </p>
       <ul className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {rows.map(({ section, status }) => (
@@ -620,6 +654,7 @@ export function Vendors() {
   const [vendors, setVendors] = useState<Vendor[] | null>(null);
   const [sectionStatus, setSectionStatus] = useState<Record<string, CategoryStatus>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
+  const folds = useRememberedFolds(weddingId ? `venueflow.vendorFolds.${weddingId}` : null, SECTION_KEYS);
 
   const reload = useCallback(async (): Promise<Vendor[] | null> => {
     if (!weddingId || !USE_FASTAPI_BACKEND) return null;
@@ -666,12 +701,13 @@ export function Vendors() {
         <p className="px-margin-mobile md:px-margin-desktop py-6 text-on-surface-variant" aria-busy="true">Loading your vendors…</p>
       ) : (
         <>
-          <CategorySummary sectionStatus={sectionStatus} />
+          <CategorySummary sectionStatus={sectionStatus} folds={folds} />
           <div className="px-margin-mobile md:px-margin-desktop py-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter items-start">
             {SECTIONS.map((s) => (
               <SectionCard key={s.key} section={s} vendors={vendors.filter((v) => v.section === s.key)}
                 status={sectionStatus[s.key] ?? "todo"}
-                base={base} canEdit={canEdit} reload={reload} request={request} />
+                base={base} canEdit={canEdit} reload={reload} request={request}
+                folded={folds.folded(s.key)} onToggle={() => folds.toggle(s.key)} />
             ))}
           </div>
         </>
