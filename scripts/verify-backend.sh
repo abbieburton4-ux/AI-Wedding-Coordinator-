@@ -29,6 +29,13 @@ elif ! node --test ../frontend/src/app/auth/sessionProfile.test.js; then
   status=1
 fi
 
+# The budget's "would this go over?" note (B66), same runner.
+echo "== forecast.test.js"
+if command -v node >/dev/null 2>&1 && ! node --test ../frontend/src/app/wedding/views/budget/forecast.test.js; then
+  echo "FAILED: forecast.test.js"
+  status=1
+fi
+
 # The scripts rewrite tracked test databases and leave SQLite side files (backlog B17).
 git restore endpoints_test.db endpoints_test.db-shm endpoints_test.db-wal 2>/dev/null || true
 rm -f verify_agents_test.db-shm verify_agents_test.db-wal verify_test.db-shm verify_test.db-wal

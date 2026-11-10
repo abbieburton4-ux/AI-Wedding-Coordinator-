@@ -935,6 +935,151 @@ def test_api_suite():
               "overdue on Chicago's date; refundable kept out; overpay warned; archive kept "
               "out of totals; links checked; viewers read only")
 
+        # 7c3. The dashboard and moving money between categories (PD-013 step 2, B66).
+        print("7c3. Verifying the budget dashboard, targets, contingency and moving money...")
+        from app.utils.budget_math import dashboard_figures, target_figures, target_state
+        # Each category against its target: blank, zero, near (90%+), at, over.
+        assert target_state(None, 5) == "no_target"
+        assert (target_state(0, 0), target_state(0, 1)) == ("within", "over"), "zero target"
+        assert (target_state(1000, 899), target_state(1000, 900)) == ("within", "near_limit")
+        assert (target_state(1000, 1000), target_state(1000, 1001)) == ("near_limit", "over")
+        f = target_figures(None, 5_000, 100_000)
+        assert (f["share_pct"], f["target_left_cents"], f["over_target_cents"],
+                f["used_pct"]) == (None, None, 0, None), "a blank target has no share or left"
+        f = target_figures(0, 0, 100_000)
+        assert (f["state"], f["share_pct"], f["used_pct"], f["target_left_cents"]) == (
+            "within", 0, None, 0), "a 0 target: nothing to divide by"
+        f = target_figures(25_000, 30_000, None)
+        assert (f["state"], f["share_pct"], f["target_left_cents"], f["over_target_cents"],
+                f["used_pct"]) == ("over", None, 0, 5_000, 120), "no total: no share"
+        assert target_figures(1, 0, 300)["share_pct"] == 0
+        assert target_figures(150, 0, 300)["share_pct"] == 50
+        assert target_figures(1, 0, 200)["share_pct"] == 1, "a half percent rounds up"
+        # The whole budget: a blank total is "not set", never $0 or over.
+        d = dashboard_figures(None, 50_000, 40_000, 10_000, ["over", "within"])
+        assert (d["budget_state"], d["left_of_total_cents"], d["over_total_cents"],
+                d["unallocated_cents"], d["allocated_pct"], d["committed_pct"]) == (
+            "not_set", None, None, None, None, None), d
+        assert (d["paid_toward_cost_cents"], d["paid_pct"], d["categories_over"]) == (
+            30_000, 75, 1)
+        d = dashboard_figures(100_000, 120_000, 0, 0, [])
+        assert (d["budget_state"], d["left_of_total_cents"], d["paid_pct"],
+                d["unallocated_cents"], d["over_allocated_cents"], d["allocated_pct"]) == (
+            "within", 100_000, None, 0, 20_000, 120), "nothing committed: no paid share"
+        d = dashboard_figures(100_000, 0, 130_000, 40_000, [])
+        assert (d["budget_state"], d["over_total_cents"], d["left_of_total_cents"],
+                d["committed_pct"]) == ("over", 30_000, 0, 130)
+        assert dashboard_figures(100_000, 0, 95_000, 0, [])["budget_state"] == "near_limit"
+        # Overpaid: paid toward the cost counts each expense up to its cost, so one
+        # vendor overpaid never shows the budget as further along than it is.
+        rows = [_Row(id="a", amount_cents=15_000, paid=True, refundable=False, due_on=None)]
+        over = cost_figures(_Row(final_cents=None, quoted_cents=10_000, estimated_cents=None),
+                            rows, _dt.date(2026, 11, 20))
+        owed = cost_figures(_Row(final_cents=None, quoted_cents=10_000, estimated_cents=None),
+                            [], _dt.date(2026, 11, 20))
+        committed_sum = over.committed_cents + owed.committed_cents
+        remaining_sum = over.remaining_cents + owed.remaining_cents
+        d = dashboard_figures(None, 0, committed_sum, remaining_sum, [])
+        assert (d["paid_toward_cost_cents"], d["paid_pct"]) == (10_000, 50), d
+        print("   * Calculations: blank total, zero targets, near limit at 90%, over, overpaid")
+
+        # Through the API: a category's target, share and status, refundable and
+        # archived money kept out, the counts, and the contingency found by name.
+        assert c.put(f"{b_url}/total", json={"total_cents": 10_000_000},
+                     headers=headers).status_code == 200
+        dash_a = c.post(f"{b_url}/categories", json={"name": "Sample Florals B66",
+                                                    "planned_cents": 1_000_000},
+                        headers=headers).json()["id"]
+        dash_b = c.post(f"{b_url}/categories", json={"name": "Sample Music B66"},
+                        headers=headers).json()["id"]
+        florist = c.post(f"{b_url}/categories/{dash_a}/costs", headers=headers, json={
+            "vendor_name": "Sample Florist", "quoted_cents": 950_000}).json()["id"]
+        c.post(f"{b_url}/costs/{florist}/payments", headers=headers,
+               json={"amount_cents": 100_000, "due_on": "2099-01-01", "refundable": True})
+        old = c.post(f"{b_url}/categories/{dash_a}/costs", headers=headers, json={
+            "vendor_name": "Sample Old Quote", "quoted_cents": 5_000_000}).json()["id"]
+        c.patch(f"{b_url}/costs/{old}", json={"archived": True}, headers=headers)
+
+        def dash():
+            ov = c.get(f"{b_url}/overview", headers=viewer_headers).json()
+            return ov, {k["id"]: k for k in ov["categories"]}
+
+        ov, cats = dash()
+        a = cats[dash_a]
+        assert (a["committed_cents"], a["state"], a["share_pct"], a["target_left_cents"],
+                a["used_pct"], a["expense_count"]) == (
+            950_000, "near_limit", 10, 50_000, 95, 1), "archived and refundable kept out"
+        assert (cats[dash_b]["state"], cats[dash_b]["share_pct"]) == ("no_target", None)
+        assert ov["dashboard"]["contingency_id"] is None
+        t, d = ov["totals"], ov["dashboard"]
+        assert d["left_of_total_cents"] == max(t["total_cents"] - t["committed_cents"], 0)
+        assert d["expense_count"] == sum(k["expense_count"] for k in ov["categories"])
+        assert d["upcoming_count"] + d["overdue_count"] == len(ov["next_due"])
+        assert d["upcoming_count"] >= 1, "the refundable deposit is still coming up"
+        print("   * Categories: target, share of the total, left, status; counts add up")
+
+        # Contingency: found by name (no database change), offered, never made for them.
+        cont = c.post(f"{b_url}/categories", json={"name": "  CONTINGENCY "},
+                      headers=headers).json()["id"]
+        ov, cats = dash()
+        assert ov["dashboard"]["contingency_id"] == cont and cats[cont]["is_contingency"]
+        assert not cats[dash_a]["is_contingency"]
+
+        # Moving money changes the two targets together, never below 0.
+        move = f"{b_url}/move"
+        res = c.post(move, headers=headers, json={"from_category_id": dash_a,
+                                                  "to_category_id": cont,
+                                                  "amount_cents": 40_000})
+        assert res.status_code == 200, res.text
+        moved = {k["id"]: k for k in res.json()["categories"]}
+        assert (moved[dash_a]["planned_cents"], moved[cont]["planned_cents"]) == (
+            960_000, 40_000), "a blank target counts as 0 when money moves in"
+        assert moved[dash_a]["state"] == "near_limit"
+        total_before = res.json()["totals"]["planned_cents"]
+        for body, code in (
+            ({"from_category_id": dash_a, "to_category_id": cont,
+              "amount_cents": 960_001}, 409),
+            ({"from_category_id": dash_b, "to_category_id": cont, "amount_cents": 1}, 409),
+            ({"from_category_id": dash_a, "to_category_id": dash_a, "amount_cents": 1}, 422),
+            ({"from_category_id": dash_a, "to_category_id": cont, "amount_cents": 0}, 422),
+            ({"from_category_id": dash_a, "to_category_id": cont, "amount_cents": -5}, 422),
+            ({"from_category_id": dash_a, "to_category_id": "nope", "amount_cents": 1}, 404),
+        ):
+            assert c.post(move, headers=headers, json=body).status_code == code, body
+        # Atomic: when money can't go in (the target would be too large), none comes out.
+        with Session(sync_engine) as s:
+            from app.db.models import BudgetCategory as _Cat
+            s.get(_Cat, dash_b).planned_cents = 1_000_000_000
+            s.commit()
+        res = c.post(move, headers=headers, json={"from_category_id": dash_a,
+                                                  "to_category_id": dash_b,
+                                                  "amount_cents": 1})
+        assert res.status_code == 422, res.text
+        ov, cats = dash()
+        assert (cats[dash_a]["planned_cents"], cats[dash_b]["planned_cents"]) == (
+            960_000, 1_000_000_000), "a refused move changes neither target"
+        with Session(sync_engine) as s:
+            s.get(_Cat, dash_b).planned_cents = None
+            s.commit()
+        # Moving out all of it leaves 0, and the total target is unchanged by moves.
+        res = c.post(move, headers=headers, json={"from_category_id": cont,
+                                                  "to_category_id": dash_a,
+                                                  "amount_cents": 40_000})
+        moved = {k["id"]: k for k in res.json()["categories"]}
+        assert (moved[cont]["planned_cents"], moved[dash_a]["planned_cents"]) == (0, 1_000_000)
+        assert res.json()["totals"]["planned_cents"] == total_before
+        # Viewers and outsiders can't move money; another wedding's ids aren't found.
+        for h in (viewer_headers, unauth_headers):
+            assert c.post(move, headers=h, json={"from_category_id": dash_a,
+                                                 "to_category_id": cont,
+                                                 "amount_cents": 1}).status_code == 403
+        for k in (dash_a, dash_b, cont):
+            assert c.delete(f"{b_url}/categories/{k}", headers=headers).status_code == 204
+        assert c.put(f"{b_url}/total", json={"total_cents": None},
+                     headers=headers).status_code == 200
+        print("   * Move money: both targets in one step, never below 0, refused moves "
+              "change nothing; contingency by name; viewers read only")
+
         # Another wedding's budget rows can't be read, changed or linked through this
         # wedding's URLs, even with real ids. couple_2 owns the seeded second wedding.
         other_headers = {"Authorization": "Bearer mock-couple_2"}
@@ -977,6 +1122,10 @@ def test_api_suite():
             ("post", f"{b_url}/contributions",
              {"contributor": "Z", "amount_cents": 1, "category_id": o_cat}),
             ("patch", f"{b_url}/contributions/{my_con}", {"category_id": o_cat}),
+            ("post", f"{b_url}/move",
+             {"from_category_id": o_cat, "to_category_id": mine, "amount_cents": 1}),
+            ("post", f"{b_url}/move",
+             {"from_category_id": mine, "to_category_id": o_cat, "amount_cents": 1}),
         ]
         for method, url, body in cross:
             kwargs = {"headers": headers}
@@ -986,6 +1135,7 @@ def test_api_suite():
             assert res.status_code == 404, (method, url, res.status_code)
         theirs = c.get(f"{o_url}/overview", headers=other_headers).json()
         assert [cat["name"] for cat in theirs["categories"]] == ["Their venue"]
+        assert theirs["categories"][0]["planned_cents"] is None, "no money moved in or out"
         their_pay = theirs["categories"][0]["costs"][0]["payments"][0]
         assert (their_pay["amount_cents"], their_pay["paid"]) == (100, False)
         assert [con["amount_cents"] for con in theirs["contributions"]] == [100]

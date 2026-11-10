@@ -4,8 +4,10 @@ import {
   AMOUNT_HINT, centsToInput, committedLabel, formatCents, formatDay, formatInstantDay, parseDollars,
   safeHttpUrl,
 } from "./money";
+import { expenseCost, wouldGoOver } from "./forecast";
+import { Bar, Chip, TargetChip, targetTone } from "./status";
 import type {
-  Category, ContractStatus, Contribution, Cost, DuePayment, ExpenseStatus, Payment, Run, VendorRef,
+  Category, ContractStatus, Contribution, Cost, DuePayment, ExpenseStatus, Payment, Run, Totals, VendorRef,
 } from "./types";
 
 type Req = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
@@ -129,10 +131,14 @@ function Confirm({ text, onYes, onNo, busy }: { text: ReactNode; onYes: () => vo
 
 // ---- Category -----------------------------------------------------------------------
 
+/** What a new or edited expense is measured against, for the "would go over" note. */
+type Limits = { target: number | null; committed: number; total: number | null; totalCommitted: number };
+
 export function CategoryCard({
-  base, category, vendors, canEdit, run, request, busy,
+  base, category, totals, vendors, canEdit, run, request, busy,
 }: {
-  base: string; category: Category; vendors: VendorRef[]; canEdit: boolean; run: Run; request: Req; busy: boolean;
+  base: string; category: Category; totals: Totals; vendors: VendorRef[]; canEdit: boolean; run: Run;
+  request: Req; busy: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(category.name);
@@ -145,8 +151,11 @@ export function CategoryCard({
   const archived = category.costs.filter((c) => c.archived);
 
   const planned_cents = category.planned_cents;
-  const over = planned_cents !== null && category.committed_cents > planned_cents;
-  const pct = planned_cents ? Math.min(100, Math.round((category.committed_cents * 100) / planned_cents)) : 0;
+  const over = category.state === "over";
+  const limits: Limits = {
+    target: planned_cents, committed: category.committed_cents,
+    total: totals.total_cents, totalCommitted: totals.committed_cents,
+  };
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -164,13 +173,17 @@ export function CategoryCard({
       {editing ? (
         <form onSubmit={save} className="flex flex-wrap items-end gap-3 mb-4">
           <TextInput id={`cat-name-${category.id}`} label="Category" value={name} onChange={setName} wide />
-          <MoneyInput id={`cat-plan-${category.id}`} label="Planned" value={planned} onChange={setPlanned} />
+          <MoneyInput id={`cat-plan-${category.id}`} label="Target" value={planned} onChange={setPlanned} />
           <button type="submit" disabled={busy} className={primaryButton}>Save</button>
           <button type="button" onClick={() => setEditing(false)} className={linkButton}>Cancel</button>
         </form>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-          <h3 className="font-headline-sm text-lg text-on-surface">{category.name}</h3>
+          <h3 className="flex flex-wrap items-center gap-2 font-headline-sm text-lg text-on-surface">
+            {category.name}
+            <TargetChip state={category.state} />
+            {category.is_contingency && <Chip tone="neutral">Contingency</Chip>}
+          </h3>
           {canEdit && (
             confirm ? (
               <Confirm
@@ -196,20 +209,55 @@ export function CategoryCard({
       )}
       {error && <p role="alert" className="text-sm text-error mb-3">{error}</p>}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-3">
-        <Stat label="Planned" cents={planned_cents} />
+      {category.is_contingency && (
+        <p className="text-sm text-on-surface-variant mb-3">
+          Money kept aside for costs you didn't plan for. Change its target, or move money in or out of it.
+        </p>
+      )}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-3">
+        <Stat label="Target" cents={planned_cents} />
+        <div>
+          <p className="text-xs text-on-surface-variant">Share of your total</p>
+          <p className="font-button-text text-on-surface">
+            {category.share_pct === null
+              ? "—"
+              : category.share_pct === 0 && (planned_cents ?? 0) > 0 ? "Under 1%" : `${category.share_pct}%`}
+          </p>
+          {category.share_pct === null && (
+            <p className="text-[11px] text-on-surface-variant">
+              {totals.total_cents === null ? "Set your total to see this" : "Needs a target"}
+            </p>
+          )}
+        </div>
         <Stat label={committedLabel(category.committed_basis)} cents={category.committed_cents} tone={over ? "error" : undefined} />
         <Stat label="Paid" cents={category.paid_cents} />
         <Stat label="Still to pay" cents={category.remaining_cents} note={overpaidNote(category.overpaid_cents)} />
+        {over ? (
+          <Stat label="Over target by" cents={category.over_target_cents} tone="error" />
+        ) : (
+          <Stat label="Left of target" cents={category.target_left_cents} />
+        )}
       </div>
-      {planned_cents ? (
-        <div className="w-full bg-surface-container-low h-2 rounded-full mb-2" aria-hidden>
-          <div className={`h-2 rounded-full ${over ? "bg-error" : "bg-primary-container"}`} style={{ width: `${pct}%` }} />
-        </div>
-      ) : null}
+      {planned_cents !== null && (
+        <Bar
+          label={`${category.name}: committed against target`}
+          pct={category.used_pct ?? (category.committed_cents > 0 ? 100 : 0)}
+          tone={targetTone(category.state)}
+          text={category.used_pct === null
+            ? `${formatCents(category.committed_cents)} of a ${formatCents(planned_cents)} target`
+            : `${formatCents(category.committed_cents)} of ${formatCents(planned_cents)} (${category.used_pct}%)`}
+        />
+      )}
       {over && planned_cents !== null && (
-        <p className="text-sm text-error mb-2">
-          What you've committed is {formatCents(category.committed_cents - planned_cents)} over what you planned.
+        <p className="flex items-start gap-1 text-sm text-error mt-2">
+          <Icon name="warning" size={16} className="mt-0.5" />
+          Over target: what you've committed is {formatCents(category.over_target_cents)} more than this category's
+          target. You could raise the target or move money in from another category.
+        </p>
+      )}
+      {category.state === "near_limit" && (
+        <p className="text-sm text-on-surface mt-2">
+          Near the limit: {formatCents(category.target_left_cents ?? 0)} of this target is left.
         </p>
       )}
 
@@ -219,7 +267,7 @@ export function CategoryCard({
       {open && (
         <div className="mt-4 space-y-4">
           {active.map((cost) => (
-            <CostBlock key={cost.id} base={base} cost={cost} vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} />
+            <CostBlock key={cost.id} base={base} cost={cost} limits={limits} vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} />
           ))}
           {active.length === 0 && (
             <p className="text-sm text-on-surface-variant">No vendor costs recorded yet.</p>
@@ -230,11 +278,11 @@ export function CategoryCard({
                 {showArchived ? "Hide archived" : `Show archived (${archived.length}), not counted in totals`}
               </button>
               {showArchived && archived.map((cost) => (
-                <CostBlock key={cost.id} base={base} cost={cost} vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} />
+                <CostBlock key={cost.id} base={base} cost={cost} limits={limits} vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} />
               ))}
             </>
           )}
-          {canEdit && <AddCostForm base={base} categoryId={category.id} vendors={vendors} run={run} request={request} busy={busy} />}
+          {canEdit && <AddCostForm base={base} categoryId={category.id} limits={limits} vendors={vendors} run={run} request={request} busy={busy} />}
         </div>
       )}
     </section>
@@ -256,7 +304,7 @@ export function AddCategoryForm({ base, run, request, busy }: { base: string; ru
   return (
     <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
       <TextInput id="new-cat-name" label="Category name" value={name} onChange={setName} placeholder="For example, Venue" wide />
-      <MoneyInput id="new-cat-plan" label="Planned (optional)" value={planned} onChange={setPlanned} />
+      <MoneyInput id="new-cat-plan" label="Target (optional)" value={planned} onChange={setPlanned} />
       <button type="submit" disabled={busy} className={primaryButton}>Add category</button>
       {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
     </form>
@@ -389,8 +437,8 @@ function costLine(cost: Cost): string {
 }
 
 function CostBlock({
-  base, cost, vendors, canEdit, run, request, busy,
-}: { base: string; cost: Cost; vendors: VendorRef[]; canEdit: boolean; run: Run; request: Req; busy: boolean }) {
+  base, cost, limits, vendors, canEdit, run, request, busy,
+}: { base: string; cost: Cost; limits: Limits; vendors: VendorRef[]; canEdit: boolean; run: Run; request: Req; busy: boolean }) {
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState(false);
 
@@ -398,7 +446,7 @@ function CostBlock({
   return (
     <div className={`border rounded-[1.5rem] p-4 ${cost.archived ? "border-dashed border-outline-variant/40 bg-surface-container-low/40" : "border-outline-variant/30"}`}>
       {editing ? (
-        <CostEditForm base={base} cost={cost} vendors={vendors} run={run} request={request} busy={busy} onDone={() => setEditing(false)} />
+        <CostEditForm base={base} cost={cost} limits={limits} vendors={vendors} run={run} request={request} busy={busy} onDone={() => setEditing(false)} />
       ) : (
         <div className="mb-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -472,8 +520,8 @@ function CostBlock({
 }
 
 function CostEditForm({
-  base, cost, vendors, run, request, busy, onDone,
-}: { base: string; cost: Cost; vendors: VendorRef[]; run: Run; request: Req; busy: boolean; onDone: () => void }) {
+  base, cost, limits, vendors, run, request, busy, onDone,
+}: { base: string; cost: Cost; limits: Limits; vendors: VendorRef[]; run: Run; request: Req; busy: boolean; onDone: () => void }) {
   const [vendor, setVendor] = useState(cost.vendor_name);
   const [vendorId, setVendorId] = useState(cost.vendor?.id ?? "");
   const [estimate, setEstimate] = useState(centsToInput(cost.estimated_cents));
@@ -528,6 +576,13 @@ function CostEditForm({
       <p className="w-full text-xs text-on-surface-variant">
         The budget counts the final cost if you've entered one, otherwise the quote, otherwise the estimate.
       </p>
+      {!cost.archived && (
+        <OverNote
+          limits={limits}
+          before={cost.committed_cents}
+          after={typedCost([final, quote, estimate], cost.scheduled_cents)}
+        />
+      )}
       <button type="submit" disabled={busy} className={primaryButton}>Save</button>
       <button type="button" onClick={onDone} className={linkButton}>Cancel</button>
       {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
@@ -536,8 +591,8 @@ function CostEditForm({
 }
 
 function AddCostForm({
-  base, categoryId, vendors, run, request, busy,
-}: { base: string; categoryId: string; vendors: VendorRef[]; run: Run; request: Req; busy: boolean }) {
+  base, categoryId, limits, vendors, run, request, busy,
+}: { base: string; categoryId: string; limits: Limits; vendors: VendorRef[]; run: Run; request: Req; busy: boolean }) {
   const [vendor, setVendor] = useState("");
   const [vendorId, setVendorId] = useState("");
   const [estimate, setEstimate] = useState("");
@@ -570,8 +625,50 @@ function AddCostForm({
       <MoneyInput id={`new-est-${categoryId}`} label="Estimated (optional)" value={estimate} onChange={setEstimate} />
       <MoneyInput id={`new-quote-${categoryId}`} label="Quoted (optional)" value={quote} onChange={setQuote} />
       <button type="submit" disabled={busy} className={primaryButton}>Add vendor cost</button>
+      <OverNote limits={limits} before={0} after={typedCost([null, quote, estimate], 0)} />
       {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
     </form>
+  );
+}
+
+/**
+ * What the typed boxes (final, quote, estimate; null for a box the form doesn't
+ * have) would make the expense count as, or null while one isn't a valid amount.
+ */
+function typedCost(boxes: (string | null)[], scheduledCents: number): number | null {
+  const parsed = boxes.map((b) => (b === null ? null : parseDollars(b)));
+  if (parsed.some((p) => p === undefined)) return null;
+  const [f, q, e] = parsed as (number | null)[];
+  return expenseCost(f, q, e, scheduledCents);
+}
+
+/** A note, never a block: saving this would take the category or the total over. */
+function OverNote({ limits, before, after }: { limits: Limits; before: number; after: number | null }) {
+  const { categoryOverBy, totalOverBy } =
+    after === null ? { categoryOverBy: 0, totalOverBy: 0 } : wouldGoOver({ ...limits, before, after });
+  const over = [
+    categoryOverBy > 0 && "this category's target",
+    totalOverBy > 0 && "your total budget",
+  ].filter(Boolean);
+  const amounts = [
+    categoryOverBy > 0 && `the category by ${formatCents(categoryOverBy)}`,
+    totalOverBy > 0 && `the total by ${formatCents(totalOverBy)}`,
+  ].filter(Boolean);
+  // The live region always exists and only says which limit is crossed, so a screen
+  // reader hears it when it appears, not on every keystroke. The amounts sit just
+  // after it, outside the live region, still readable.
+  return (
+    <div className="w-full text-sm text-on-surface">
+      <p aria-live="polite" className="flex items-start gap-1">
+        {over.length > 0 && (
+          <>
+            <Icon name="error" size={16} className="mt-0.5 text-status-todo" />
+            Heads up: with this, you'd be over {over.join(" and ")}. You can still save it.
+          </>
+        )}
+      </p>
+      {over.length > 0 && <p className="text-xs text-on-surface-variant pl-5">Over {amounts.join(", ")}.</p>}
+    </div>
   );
 }
 
@@ -797,7 +894,7 @@ function AddPaymentForm({ base, cost, run, request, busy }: { base: string; cost
 
 export function NextDue({ items }: { items: DuePayment[] }) {
   return (
-    <section aria-labelledby="due-heading" className="mb-10">
+    <section id="next-due" tabIndex={-1} aria-labelledby="due-heading" className="mb-10 scroll-mt-24">
       <h2 id="due-heading" className="font-headline-sm text-headline-sm text-on-surface mb-1">Next payments due</h2>
       <p className="text-xs text-on-surface-variant mb-3">
         Shown here only. The app doesn't send reminders or pay anyone.

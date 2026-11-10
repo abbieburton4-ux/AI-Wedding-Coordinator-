@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Icon } from "../../shared/Icon";
 import { SampleDataNotice } from "../../shared/SampleDataNotice";
 import { useApi, USE_FASTAPI_BACKEND } from "../../api";
 import { useActiveWedding } from "../WeddingProvider";
-import { AMOUNT_HINT, centsToInput, committedLabel, formatCents, parseDollars } from "./budget/money";
+import { BudgetDashboard, ContingencyOffer, MoveMoney } from "./budget/Dashboard";
+import { AMOUNT_HINT, centsToInput, formatCents, parseDollars } from "./budget/money";
 import {
-  AddCategoryForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, NextDue, linkButton, overpaidNote,
-  primaryButton,
+  AddCategoryForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, NextDue, linkButton, primaryButton,
 } from "./budget/parts";
 import type { Overview, Run, SplitSuggestion, VendorRef } from "./budget/types";
 import { useReviewedRequest } from "../../api/review";
@@ -83,7 +83,7 @@ export function Budget() {
           Budget
         </h1>
         <p className="text-on-surface-variant">
-          Plan each category, record each vendor's estimated, quoted and final cost, and tick off payments as you make
+          Give each category a target, record each vendor's estimated, quoted and final cost, and tick off payments as you make
           them. Amounts are in US dollars; "overdue" uses today's date in Chicago.
         </p>
         {!canEdit && myLevel && (
@@ -107,7 +107,7 @@ export function Budget() {
         </div>
       ) : (
         <>
-          <Summary overview={overview} />
+          <BudgetDashboard overview={overview} />
           <TotalCard base={base} totalCents={overview.totals.total_cents} canEdit={canEdit} run={run} request={request} busy={busy} />
           {canEdit && overview.totals.total_cents !== null && (
             <SplitPanel base={base} request={request} run={run} busy={busy} />
@@ -124,9 +124,18 @@ export function Budget() {
                   : "No categories yet."}
               </p>
             )}
+            {canEdit && (
+              <MoveMoney base={base} categories={overview.categories} run={run} request={request} busy={busy} />
+            )}
+            {canEdit && overview.dashboard.contingency_id === null && (
+              <ContingencyOffer base={base} run={run} request={request} busy={busy} />
+            )}
             <div className="space-y-6 mb-6">
               {overview.categories.map((cat) => (
-                <CategoryCard key={cat.id} base={base} category={cat} vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} />
+                <CategoryCard
+                  key={cat.id} base={base} category={cat} totals={overview.totals} vendors={vendors}
+                  canEdit={canEdit} run={run} request={request} busy={busy}
+                />
               ))}
             </div>
             {canEdit && <AddCategoryForm base={base} run={run} request={request} busy={busy} />}
@@ -147,81 +156,6 @@ export function Budget() {
         </>
       )}
     </main>
-  );
-}
-
-/** The ring and the headline numbers, from real totals only (B30). */
-function Summary({ overview }: { overview: Overview }) {
-  const t = overview.totals;
-  // Measured against the couple's total when set, otherwise against what they've planned.
-  const against = t.total_cents ?? (t.planned_cents > 0 ? t.planned_cents : null);
-  const againstLabel = t.total_cents !== null ? "of your total budget" : "of what you've planned";
-  const pct = against ? Math.min(100, Math.round((t.paid_cents * 100) / against)) : 0;
-  const overTotal = t.total_cents !== null && t.committed_cents > t.total_cents;
-
-  return (
-    <div className="mb-10">
-      {against !== null && (
-        <div className="flex flex-col items-center mb-6">
-          <div
-            className="chart-donut shadow-sm"
-            style={{ "--ring-pct": `${pct}%` } as CSSProperties}
-            role="img"
-            aria-label={`${pct}% paid ${againstLabel}`}
-          >
-            <div className="absolute flex flex-col items-center justify-center z-10 text-center">
-              <span className="font-body-md text-on-surface-variant text-xs">Paid so far</span>
-              <span className="font-headline-sm text-headline-sm text-on-surface">{formatCents(t.paid_cents)}</span>
-              <span className="text-[11px] text-outline px-6">{againstLabel}, {formatCents(against)}</span>
-            </div>
-          </div>
-        </div>
-      )}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-surface-container-lowest rounded-[2rem] border border-outline-variant/20 p-5">
-        <Figure label="Planned" cents={t.planned_cents} />
-        <Figure label={committedLabel(t.committed_basis)} cents={t.committed_cents} />
-        <Figure label="Paid" cents={t.paid_cents} />
-        <Figure label="Still to pay" cents={t.remaining_cents} note={overpaidNote(t.overpaid_cents)} />
-        {t.total_cents !== null && (t.total_cents >= t.committed_cents ? (
-          <Figure
-            label="Left of your total"
-            cents={t.total_cents - t.committed_cents}
-            note="Your total minus everything committed"
-          />
-        ) : (
-          <Figure
-            label="Over your total by"
-            cents={t.committed_cents - t.total_cents}
-            tone="error"
-            note="Everything committed minus your total"
-          />
-        ))}
-      </div>
-      {t.refundable_cents > 0 && (
-        <p className="text-sm text-on-surface-variant mt-3">
-          Refundable deposits: {formatCents(t.refundable_cents)}, not counted in the figures above
-          {t.refundable_paid_cents > 0 ? `. ${formatCents(t.refundable_paid_cents)} paid so far, to come back to you.` : "."}
-        </p>
-      )}
-      {overTotal && t.total_cents !== null && (
-        <div className="bg-error-container/15 border border-error-container/40 rounded-[2rem] p-4 mt-4 flex items-start gap-3">
-          <Icon name="warning" size={22} className="text-error mt-0.5" />
-          <p className="text-sm text-on-surface">
-            What you've committed to is {formatCents(t.committed_cents - t.total_cents)} more than your total budget.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Figure({ label, cents, note, tone }: { label: string; cents: number; note?: string; tone?: "error" }) {
-  return (
-    <div>
-      <p className="text-xs text-on-surface-variant">{label}</p>
-      <p className={`font-headline-sm text-lg ${tone === "error" ? "text-error" : "text-on-surface"}`}>{formatCents(cents)}</p>
-      {note && <p className="text-[11px] text-on-surface-variant">{note}</p>}
-    </div>
   );
 }
 
@@ -389,7 +323,7 @@ function SplitPanel({
         {!balanced && " Adjust the amounts so they add up to your total to use this split."}
       </p>
       <p className="text-xs text-on-surface-variant mb-4">
-        Using it sets the planned amount for these categories and adds any new ones. Lines you leave out, other
+        Using it sets the target for these categories and adds any new ones. Lines you leave out, other
         categories, vendor costs and payments stay as they are.
       </p>
       {error && <p role="alert" className="text-sm text-error mb-3">{error}</p>}

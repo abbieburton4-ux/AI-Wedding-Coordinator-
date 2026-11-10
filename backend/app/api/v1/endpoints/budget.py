@@ -14,6 +14,8 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
+from sqlalchemy import func, select as sa_select, update as sa_update
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -26,7 +28,10 @@ from app.db.models import (
     BudgetCategory, BudgetContribution, BudgetCost, BudgetPayment, CoupleVendor, User, utcnow,
 )
 from app.db.session import get_db
-from app.utils.budget_math import add_up, basis_of, cost_figures, is_overdue
+from app.utils.budget_math import (
+    CONTINGENCY_NAME, add_up, basis_of, cost_figures, dashboard_figures, is_overdue,
+    target_figures,
+)
 from app.utils.checklist import wedding_today
 
 router = APIRouter()
@@ -144,6 +149,12 @@ class ContributionPatch(BaseModel):
     category_id: Optional[str] = None
 
 
+class MoveIn(BaseModel):
+    from_category_id: str
+    to_category_id: str
+    amount_cents: int = Field(ge=1, le=MAX_CENTS)
+
+
 class SplitLineIn(BaseModel):
     name: str = Name()
     planned_cents: int = Cents(...)
@@ -159,6 +170,7 @@ class ApplySplitIn(BaseModel):
 # payments scheduled so far (none of those recorded), or a mix across expenses.
 Basis = Literal["none", "final", "quote", "estimate", "scheduled", "mixed"]
 Status = Literal["unpaid", "partly_paid", "paid", "overdue"]
+TargetState = Literal["no_target", "within", "near_limit", "over"]
 
 
 class PaymentOut(BaseModel):
@@ -226,6 +238,14 @@ class CategoryOut(BaseModel):
     overpaid_cents: int
     refundable_cents: int
     refundable_paid_cents: int
+    # Against the category's target (planned_cents), worked out on read (B66).
+    is_contingency: bool
+    state: TargetState
+    share_pct: Optional[int]          # of the couple's total; None when either is blank
+    target_left_cents: Optional[int]  # target minus committed, never below 0
+    over_target_cents: int
+    used_pct: Optional[int]           # committed as a share of the target
+    expense_count: int                # not archived
     # Every expense, archived ones included (flagged); the sums leave archived out.
     costs: List[CostOut]
 
@@ -262,8 +282,29 @@ class Totals(BaseModel):
     refundable_paid_cents: int
 
 
+class Dashboard(BaseModel):
+    """The dashboard's figures (B66). None means "not set yet", never 0."""
+    budget_state: Literal["not_set", "within", "near_limit", "over"]
+    left_of_total_cents: Optional[int]
+    over_total_cents: Optional[int]
+    unallocated_cents: Optional[int]
+    over_allocated_cents: Optional[int]
+    allocated_pct: Optional[int]
+    committed_pct: Optional[int]
+    paid_toward_cost_cents: int
+    paid_pct: Optional[int]
+    categories_over: int
+    categories_near_limit: int
+    near_limit_pct: int
+    expense_count: int
+    upcoming_count: int   # unpaid payments not yet overdue, refundable ones included
+    overdue_count: int
+    contingency_id: Optional[str]
+
+
 class Overview(BaseModel):
     totals: Totals
+    dashboard: Dashboard
     categories: List[CategoryOut]
     contributions: List[ContributionOut]
     next_due: List[DueOut]
@@ -422,6 +463,12 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
     for c in costs:
         by_category.setdefault(c.category_id, []).append(c)
 
+    total = wedding.budget_total_cents
+    # The first category named Contingency (older data may hold a look-alike twin).
+    contingency_key = category_key(CONTINGENCY_NAME)
+    contingency_id = next(
+        (c.id for c in categories if category_key(c.name) == contingency_key), None)
+
     names = {}
     out_categories = []
     for cat in categories:
@@ -433,10 +480,13 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
             # so "still to pay" and "overpaid" are worked out per expense, never netted.
             out_costs.append(_cost_out(cost, by_cost.get(cost.id, []), payers, vendors, today))
         counted = [c for c in out_costs if not c.archived]
+        sums = add_up(counted)
         out_categories.append(CategoryOut(
             id=cat.id, name=cat.name, planned_cents=cat.planned_cents,
             committed_basis=basis_of(c.committed_basis for c in counted),
-            costs=out_costs, **add_up(counted),
+            is_contingency=cat.id == contingency_id, expense_count=len(counted),
+            costs=out_costs, **sums,
+            **target_figures(cat.planned_cents, sums["committed_cents"], total),
         ))
 
     # Unpaid payments on expenses still in play, soonest first; undated ones last.
@@ -448,14 +498,25 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
         due_on=p.due_on, overdue=is_overdue(p, today), refundable=p.refundable,
     ) for p in unpaid]
 
+    totals = Totals(
+        total_cents=total,
+        planned_cents=sum(c.planned_cents or 0 for c in categories),
+        committed_basis=basis_of(c.committed_basis for c in out_categories),
+        contributions_cents=sum(c.amount_cents for c in contributions),
+        **add_up(out_categories),
+    )
+    overdue_count = sum(1 for d in next_due if d.overdue)
+    dashboard = Dashboard(
+        **dashboard_figures(total, totals.planned_cents, totals.committed_cents,
+                            totals.remaining_cents, (c.state for c in out_categories)),
+        expense_count=sum(c.expense_count for c in out_categories),
+        upcoming_count=len(next_due) - overdue_count, overdue_count=overdue_count,
+        contingency_id=contingency_id,
+    )
+
     return Overview(
-        totals=Totals(
-            total_cents=wedding.budget_total_cents,
-            planned_cents=sum(c.planned_cents or 0 for c in categories),
-            committed_basis=basis_of(c.committed_basis for c in out_categories),
-            contributions_cents=sum(c.amount_cents for c in contributions),
-            **add_up(out_categories),
-        ),
+        totals=totals,
+        dashboard=dashboard,
         categories=out_categories,
         contributions=[ContributionOut(
             id=c.id, contributor=c.contributor, amount_cents=c.amount_cents,
@@ -808,6 +869,69 @@ async def remove_contribution(
     await db.delete(row)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{wedding_id}/budget/move", response_model=Overview)
+async def move_money(
+    wedding_id: str, payload: MoveIn,
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Moves an amount from one category's target to another's, both or neither.
+
+    Both rows are locked first, always in id order, so two moves in opposite
+    directions at the same moment queue up rather than deadlock. Each target then
+    changes with one conditional UPDATE in the same transaction, so a second click
+    can't take a target below 0, and if either change can't be made, neither is. A
+    blank target counts as 0: there's nothing to move out of it, and moving into it
+    sets it. Only targets change; expenses, payments and the total stay as they are.
+    """
+    wedding = await _editor(db, wedding_id, current_user)
+    if payload.from_category_id == payload.to_category_id:
+        raise HTTPException(status_code=422, detail="Choose two different categories")
+    source = await _row(db, BudgetCategory, payload.from_category_id, wedding_id, "category")
+    target = await _row(db, BudgetCategory, payload.to_category_id, wedding_id, "category")
+    amount = payload.amount_cents
+    source_name = source.name  # read now: a rollback expires the loaded rows
+    now = utcnow()
+    table = BudgetCategory.__table__
+    ids = sorted((payload.from_category_id, payload.to_category_id))
+
+    async def refuse(code: int, detail: str):
+        await db.rollback()
+        raise HTTPException(status_code=code, detail=detail)
+
+    try:
+        locked = (await db.execute(
+            sa_select(table.c.id)
+            .where(table.c.id.in_(ids), table.c.wedding_id == wedding_id)
+            .order_by(table.c.id).with_for_update()
+        )).all()
+        if len(locked) != 2:
+            await refuse(404, "That category isn't in this budget any more")
+        taken = await db.execute(
+            sa_update(table)
+            .where(table.c.id == payload.from_category_id, table.c.wedding_id == wedding_id,
+                   table.c.planned_cents >= amount)
+            .values(planned_cents=table.c.planned_cents - amount, updated_at=now)
+        )
+        if taken.rowcount != 1:
+            await refuse(409, f"{source_name} doesn't have that much in its target to move")
+        given = await db.execute(
+            sa_update(table)
+            .where(table.c.id == payload.to_category_id, table.c.wedding_id == wedding_id,
+                   func.coalesce(table.c.planned_cents, 0) <= MAX_CENTS - amount)
+            .values(planned_cents=func.coalesce(table.c.planned_cents, 0) + amount,
+                    updated_at=now)
+        )
+        if given.rowcount != 1:
+            await refuse(422, "That would make the target too large")
+        await db.commit()
+    except DBAPIError:
+        await refuse(409, "Someone changed the budget at the same moment. Please try again.")
+    # The two rows loaded above are stale after the UPDATEs; the overview reloads them.
+    db.expire(source)
+    db.expire(target)
+    return await _overview(db, wedding)
 
 
 @router.post("/{wedding_id}/budget/suggest-split")
