@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Icon } from "../../../shared/Icon";
 import { filterExpenses, flattenExpenses, sortExpenses } from "./expenses";
 import { formatCents, formatDay } from "./money";
@@ -27,18 +27,36 @@ const STATUS_LABEL: Record<ExpenseStatus, string> = {
 
 const EMPTY = { search: "", categoryId: "", status: "", vendorId: "", due: "", from: "", to: "" };
 
+/** Asks the list to show one category's expenses; n changes on each ask. */
+export type CategoryRequest = { id: string; n: number } | null;
+
 /**
  * Every expense in one list (B67), sortable, filterable and searchable. Works from the
  * overview the screen already has: amounts and statuses are the API's, nothing is
  * worked out here. Choosing an expense opens it in its category.
  */
 export function ExpenseList({
-  categories, today, onOpen,
-}: { categories: Category[]; today: string; onOpen: (costId: string) => void }) {
+  categories, today, onOpen, categoryRequest = null,
+}: { categories: Category[]; today: string; onOpen: (costId: string) => void; categoryRequest?: CategoryRequest }) {
   const [f, setF] = useState(EMPTY);
   const [showArchived, setShowArchived] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("category");
   const [dir, setDir] = useState<Dir>("asc");
+
+  const sectionRef = useRef<HTMLElement>(null);
+
+  // Chosen from a chart: show only that category, with every other filter cleared,
+  // and move there so the list is what the couple see next.
+  useEffect(() => {
+    if (!categoryRequest) return;
+    setF({ ...EMPTY, categoryId: categoryRequest.id });
+    const el = sectionRef.current;
+    if (!el) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    el.focus({ preventScroll: true });
+    // Only a new ask (a new n) filters again; reloads don't.
+  }, [categoryRequest?.n]);
 
   const all = useMemo(() => flattenExpenses(categories), [categories]);
   const archivedCount = all.filter((r) => r.cost.archived).length;
@@ -51,6 +69,7 @@ export function ExpenseList({
   const shown = sortExpenses(filterExpenses(all, { ...f, showArchived }, today), sortKey, dir);
   const total = all.filter((r) => showArchived || !r.cost.archived).length;
   const filtered = Object.values(f).some(Boolean);
+  const onlyCategory = f.categoryId !== "" && Object.entries(f).every(([k, v]) => k === "categoryId" || !v);
 
   if (all.length === 0) return null;
 
@@ -74,7 +93,7 @@ export function ExpenseList({
   );
 
   return (
-    <section aria-labelledby="all-expenses-heading" className="mb-10">
+    <section ref={sectionRef} tabIndex={-1} aria-labelledby="all-expenses-heading" className="mb-10 scroll-mt-24 focus:outline-none">
       <h2 id="all-expenses-heading" className="font-headline-sm text-headline-sm text-on-surface mb-1">All expenses</h2>
       <p className="text-xs text-on-surface-variant mb-3">
         Every expense in one place. Choose one to open it in its category.
@@ -133,6 +152,7 @@ export function ExpenseList({
       )}
       <div className="flex flex-wrap items-center gap-4 mb-3 text-sm">
         <p aria-live="polite" className="text-on-surface-variant">
+          {onlyCategory && `${categories.find((c) => c.id === f.categoryId)?.name ?? "This category"} only: `}
           {shown.length === total ? `${plural(total)}` : `Showing ${shown.length} of ${plural(total)}`}
         </p>
         {filtered && <button type="button" onClick={() => setF(EMPTY)} className={linkButton}>Clear filters</button>}
@@ -146,7 +166,9 @@ export function ExpenseList({
       </div>
 
       {shown.length === 0 ? (
-        <p className="text-sm text-on-surface-variant">No expenses match. Try clearing the filters.</p>
+        <p className="text-sm text-on-surface-variant">
+          {onlyCategory ? "No expenses in this category yet." : "No expenses match. Try clearing the filters."}
+        </p>
       ) : (
         <>
           {/* Wide screens: a table with sortable headings. */}
