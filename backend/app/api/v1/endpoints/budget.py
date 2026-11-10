@@ -848,7 +848,7 @@ async def add_default_categories(
 ):
     """Adds the suggested categories (PD-013 call b) the couple don't have yet, after
     their own, with no target. A category they already have under the same name
-    (case, spaces and "&" or "and" ignored; "Venue" counts as Venue & Catering) is
+    (case, spaces and "&" or "and" ignored; "Venue & Catering" counts as Venue) is
     left exactly as it is, so clicking twice adds nothing more. Left out, the names
     are all the suggestions except any the couple removed (B71); naming a removed
     one adds it back."""

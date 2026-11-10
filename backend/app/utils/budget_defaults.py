@@ -1,7 +1,8 @@
 """The suggested budget categories and their one-tap expense ideas (PD-013 call b).
 
-The ten categories are the nine groups from the owner's brief plus Contingency (the
-brief's "Emergency expenses"). The couple add them with one click; nothing adds them
+The eleven categories are the nine groups from the owner's brief plus Contingency (the
+brief's "Emergency expenses"), with the brief's "Venue & Catering" split into Venue and
+Food & Drink (PD-015). The couple add them with one click; nothing adds them
 automatically, and none comes with a target amount. Each category's items are
 suggestions shown while adding an expense, never rows of their own. This lives in
 code, not the database, so changing a suggestion needs no migration.
@@ -12,9 +13,11 @@ from app.agents.budget_split import category_key
 from app.utils.budget_math import CONTINGENCY_NAME
 
 DEFAULT_CATEGORIES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
-    ("Venue & Catering", (
-        "Ceremony venue", "Reception venue", "Catering", "Bar and beverages",
-        "Wedding cake and desserts", "Rentals", "Tables, chairs and linens")),
+    ("Venue", (
+        "Ceremony venue", "Reception venue", "Rentals", "Tables, chairs and linens")),
+    ("Food & Drink", (
+        "Catering", "Bar and beverages", "Wedding cake and desserts", "Cocktail hour",
+        "Late-night food", "Service charge and gratuity", "Catering rentals")),
     ("Photography & Entertainment", (
         "Photographer", "Videographer", "Photo booth", "DJ", "Live music",
         "Ceremony musicians")),
@@ -44,9 +47,10 @@ DEFAULT_CATEGORIES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
 DEFAULT_NAMES: Tuple[str, ...] = tuple(name for name, _ in DEFAULT_CATEGORIES)
 
 # Names the couple (or migration 0009, for Wildman BT) may already use for the venue
-# category: a category with one of these counts as having Venue & Catering, so the
-# venue's expenses are never split across two look-alike categories.
-_ALIASES = {"venue": "venue and catering", "venues": "venue and catering"}
+# category: a category with one of these counts as having Venue, so the venue's
+# expenses are never split across two look-alike categories. "Venue & Catering" was
+# the suggested name before PD-015, so a removed suggestion may be stored under it too.
+_ALIASES = {"venues": "venue", "venue and catering": "venue"}
 
 
 def default_key(name: Optional[str]) -> str:
@@ -68,7 +72,7 @@ _BY_KEY: Dict[str, str] = {default_key(name): name for name in DEFAULT_NAMES}
 
 
 def default_name(category_name: Optional[str]) -> Optional[str]:
-    """The suggested category a name stands for ("venues" is Venue & Catering), or None."""
+    """The suggested category a name stands for ("Venue & Catering" is Venue), or None."""
     return _BY_KEY.get(default_key(category_name))
 
 

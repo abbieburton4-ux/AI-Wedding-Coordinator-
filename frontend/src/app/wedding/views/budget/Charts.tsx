@@ -1,8 +1,9 @@
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import { formatCents } from "./money";
 import { linkButton } from "./parts";
+import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId } from "./sections";
 import { TargetChip } from "./status";
 import type { Category } from "./types";
 import {
@@ -33,19 +34,15 @@ type OnCategory = (categoryId: string) => void;
  * way in) and can switch to a table; choosing a category opens its expenses.
  */
 export function BudgetCharts({ categories, onCategory }: { categories: Category[]; onCategory: OnCategory }) {
-  const [open, setOpen] = useState(true);
-  const bodyId = useId();
   const animate = !reducedMotion();
 
+  // The section's own fold (PD-015) hides the charts, so there's no second toggle here.
   return (
-    <section aria-labelledby="charts-heading" className="mb-10">
-      <div className="flex flex-wrap items-baseline justify-between gap-3 mb-3">
-        <h2 id="charts-heading" className="font-headline-sm text-headline-sm text-on-surface">Charts</h2>
-        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls={bodyId} className={linkButton}>
-          {open ? "Hide charts" : "Show charts"}
-        </button>
-      </div>
-      <div id={bodyId} hidden={!open}>
+    <section id={sectionId("charts")} tabIndex={-1} aria-labelledby="charts-heading" className={`mb-10 ${SECTION_SCROLL} focus:outline-none`}>
+      <SectionHeading section="charts" id="charts-heading" className="font-headline-sm text-headline-sm text-on-surface mb-3">
+        Charts
+      </SectionHeading>
+      <FoldBody section="charts">
         {categories.length === 0 ? (
           <p className="text-sm text-on-surface-variant">
             Charts appear once the budget has categories and expenses.
@@ -68,7 +65,7 @@ export function BudgetCharts({ categories, onCategory }: { categories: Category[
             </TabsContent>
           </Tabs>
         )}
-      </div>
+      </FoldBody>
     </section>
   );
 }

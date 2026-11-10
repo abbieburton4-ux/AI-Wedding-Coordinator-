@@ -4,7 +4,9 @@ import {
   AMOUNT_HINT, centsToInput, committedLabel, formatCents, formatDay, formatInstantDay, parseDollars,
   safeHttpUrl,
 } from "./money";
+import { venueRename } from "./expenses";
 import { expenseCost, wouldGoOver } from "./forecast";
+import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId } from "./sections";
 import { Bar, Chip, TargetChip, targetTone } from "./status";
 import type {
   Category, ContractStatus, Contribution, Cost, ExpenseStatus, Payment, Run, Totals, VendorRef,
@@ -128,11 +130,16 @@ export type OpenRequest = { id: string; n: number } | null;
 
 export function CategoryCard({
   base, category, categories, totals, vendors, canEdit, run, request, busy, openRequest, onOpened,
+  addRequest = null, onAddHandled,
 }: {
   base: string; category: Category; categories: Category[]; totals: Totals; vendors: VendorRef[];
   canEdit: boolean; run: Run; request: Req; busy: boolean; openRequest: OpenRequest;
   /** Called once the asked-for expense has been scrolled to, so the ask is cleared. */
   onOpened: () => void;
+  /** Asks the category with this id to open its "Add expense" form (the top-level button). */
+  addRequest?: OpenRequest;
+  /** Called once the asked-for form is open, so the ask is cleared. */
+  onAddHandled?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(category.name);
@@ -141,6 +148,35 @@ export function CategoryCard({
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(category.costs.length > 0);
   const [showArchived, setShowArchived] = useState(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  // Each "Add expense" click counts up, so a click on a card that's already open still
+  // moves to the form (setting open to true again wouldn't re-render).
+  const [addTick, setAddTick] = useState(0);
+  const addInputId = `new-cost-${category.id}`;
+  const rename = venueRename(category, categories);
+
+  const startAdding = () => { setOpen(true); setAddTick((t) => t + 1); };
+  useEffect(() => {
+    if (addTick === 0 || !open) return;
+    const input = document.getElementById(addInputId);
+    if (!input) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    input.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+    input.focus({ preventScroll: true });
+    // Only a new click moves focus; other re-renders don't.
+  }, [addTick]);
+  useEffect(() => {
+    if (!addRequest || addRequest.id !== category.id) return;
+    startAdding();
+    onAddHandled?.();
+    // Only a new ask (a new n) opens the form; reloads don't.
+  }, [addRequest?.n]);
+
+  const renameToVenue = async () => {
+    const ok = await run(() => request(`${base}/categories/${category.id}`, json("PATCH", { name: "Venue" })));
+    // The button is gone once renamed, so focus moves to the category's new name.
+    if (ok) headingRef.current?.focus();
+  };
   const active = category.costs.filter((c) => !c.archived);
   const archived = category.costs.filter((c) => c.archived);
   const asked = openRequest ? category.costs.find((c) => c.id === openRequest.id) : undefined;
@@ -185,7 +221,7 @@ export function CategoryCard({
         </form>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-          <h3 className="flex flex-wrap items-center gap-2 font-headline-sm text-lg text-on-surface">
+          <h3 ref={headingRef} tabIndex={-1} className="flex flex-wrap items-center gap-2 font-headline-sm text-lg text-on-surface focus:outline-none">
             {category.name}
             <TargetChip state={category.state} />
             {category.is_contingency && <Chip tone="neutral">Contingency</Chip>}
@@ -197,7 +233,21 @@ export function CategoryCard({
                 onCancel={() => setConfirm(false)}
               />
             ) : (
-              <span className="flex gap-4">
+              <span className="flex flex-wrap items-center gap-4">
+                {rename === "offer" && (
+                  <button
+                    type="button" disabled={busy} onClick={renameToVenue}
+                    className="rounded-full border border-outline-variant/60 px-3 py-1 text-sm text-on-surface hover:border-primary disabled:opacity-60"
+                  >
+                    Rename to Venue
+                  </button>
+                )}
+                {rename === "clash" && (
+                  <span className="text-xs text-on-surface-variant max-w-[22rem]">
+                    You already have a category called Venue, so this one can't be renamed to it. You can move its
+                    expenses there when you remove this one.
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => { setName(category.name); setPlanned(centsToInput(planned_cents)); setEditing(true); }}
@@ -265,9 +315,19 @@ export function CategoryCard({
         </p>
       )}
 
-      <button type="button" onClick={() => setOpen((o) => !o)} className={`${linkButton} mt-2`} aria-expanded={open}>
-        {open ? "Hide expenses" : `Show expenses (${active.length})`}
-      </button>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3">
+        <button type="button" onClick={() => setOpen((o) => !o)} className={linkButton} aria-expanded={open}>
+          {open ? "Hide expenses" : `Show expenses (${active.length})`}
+        </button>
+        {canEdit && (
+          <button
+            type="button" onClick={startAdding}
+            className="inline-flex items-center gap-1 rounded-full border border-primary px-4 py-1.5 text-sm text-primary hover:bg-primary hover:text-on-primary"
+          >
+            <Icon name="add" size={16} /> Add expense<span className="sr-only"> to {category.name}</span>
+          </button>
+        )}
+      </div>
       {open && (
         <div className="mt-4 space-y-4">
           {active.map((cost) => (
@@ -1046,8 +1106,11 @@ export function Contributions({
   };
 
   return (
-    <section aria-labelledby="contrib-heading" className="mb-10">
-      <h2 id="contrib-heading" className="font-headline-sm text-headline-sm text-on-surface mb-1">Who's contributing</h2>
+    <section id={sectionId("contributions")} tabIndex={-1} aria-labelledby="contrib-heading" className={`mb-10 ${SECTION_SCROLL} focus:outline-none`}>
+      <SectionHeading section="contributions" id="contrib-heading" className="font-headline-sm text-headline-sm text-on-surface mb-1">
+        Who's contributing
+      </SectionHeading>
+      <FoldBody section="contributions">
       <p className="text-sm text-on-surface-variant mb-3">
         {totalCents === null
           ? `Contributions so far: ${formatCents(sumCents)}.`
@@ -1092,6 +1155,7 @@ export function Contributions({
           {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
         </form>
       )}
+      </FoldBody>
     </section>
   );
 }

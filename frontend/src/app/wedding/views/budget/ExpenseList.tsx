@@ -3,6 +3,7 @@ import { Icon } from "../../../shared/Icon";
 import { filterExpenses, flattenExpenses, sortExpenses } from "./expenses";
 import { formatCents, formatDay } from "./money";
 import { StatusBadge, inputClass, linkButton } from "./parts";
+import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId, useFolds } from "./sections";
 import type { Category, ExpenseStatus } from "./types";
 
 type SortKey = "name" | "category" | "vendor" | "committed" | "paid" | "remaining" | "next_due";
@@ -44,14 +45,16 @@ export function ExpenseList({
   const [dir, setDir] = useState<Dir>("asc");
 
   const sectionRef = useRef<HTMLElement>(null);
+  const folds = useFolds();
 
   // Chosen from a chart: show only that category, with every other filter cleared,
-  // and move there so the list is what the couple see next.
+  // and move there (unfolding the list if it's folded) so it's what the couple see next.
   useEffect(() => {
     if (!categoryRequest) return;
     setF({ ...EMPTY, categoryId: categoryRequest.id });
     const el = sectionRef.current;
     if (!el) return;
+    if (folds) { folds.jumpTo("expenses", el); return; }
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
     el.focus({ preventScroll: true });
@@ -93,8 +96,14 @@ export function ExpenseList({
   );
 
   return (
-    <section ref={sectionRef} tabIndex={-1} aria-labelledby="all-expenses-heading" className="mb-10 scroll-mt-24 focus:outline-none">
-      <h2 id="all-expenses-heading" className="font-headline-sm text-headline-sm text-on-surface mb-1">All expenses</h2>
+    <section
+      ref={sectionRef} id={sectionId("expenses")} tabIndex={-1} aria-labelledby="all-expenses-heading"
+      className={`mb-10 ${SECTION_SCROLL} focus:outline-none`}
+    >
+      <SectionHeading section="expenses" id="all-expenses-heading" className="font-headline-sm text-headline-sm text-on-surface mb-1">
+        All expenses
+      </SectionHeading>
+      <FoldBody section="expenses">
       <p className="text-xs text-on-surface-variant mb-3">
         Every expense in one place. Choose one to open it in its category.
       </p>
@@ -235,6 +244,7 @@ export function ExpenseList({
           </ul>
         </>
       )}
+      </FoldBody>
     </section>
   );
 }

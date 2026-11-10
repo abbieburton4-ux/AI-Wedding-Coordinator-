@@ -4,6 +4,7 @@ import { Icon } from "../../../shared/Icon";
 import { API_BASE_URL } from "../../../api";
 import { useAuth } from "../../../auth/AuthProvider";
 import { linkButton, primaryButton } from "./parts";
+import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId } from "./sections";
 
 /**
  * Download the budget as a CSV, or open the print page to save it as a PDF (PD-013
@@ -53,8 +54,14 @@ export function BudgetExport({ weddingId, today }: { weddingId: string; today: s
   };
 
   return (
-    <section aria-labelledby="export-heading" className="mb-10 bg-surface-container-lowest border border-outline-variant/20 rounded-[2rem] p-5">
-      <h2 id="export-heading" className="font-headline-sm text-headline-sm text-on-surface mb-1">Export</h2>
+    <section
+      id={sectionId("export")} tabIndex={-1} aria-labelledby="export-heading"
+      className={`mb-10 bg-surface-container-lowest border border-outline-variant/20 rounded-[2rem] p-5 ${SECTION_SCROLL} focus:outline-none`}
+    >
+      <SectionHeading section="export" id="export-heading" className="font-headline-sm text-headline-sm text-on-surface mb-1">
+        Export
+      </SectionHeading>
+      <FoldBody section="export">
       <p className="text-sm text-on-surface-variant mb-4">
         Download the budget as a spreadsheet file (CSV) that opens in Google Sheets or Excel, or open a page to
         print or save as a PDF. The file goes to this device only; nothing is sent to anyone.
@@ -86,6 +93,7 @@ export function BudgetExport({ weddingId, today }: { weddingId: string; today: s
         </Link>
       </div>
       {error && <p role="alert" className="text-sm text-error mt-3">{error}</p>}
+      </FoldBody>
     </section>
   );
 }
