@@ -142,7 +142,9 @@ class TipIn(BaseModel):
 
 
 class TipPatch(BaseModel):
-    """Changes a tip's percentage or amount (switching between them), or its notes."""
+    """Changes a tip's name, its percentage or amount (switching between them), or its
+    notes."""
+    vendor_name: Optional[str] = Name(None)
     percent_basis_points: Optional[int] = Field(default=None, ge=1, le=10000)
     amount_cents: Optional[int] = Field(default=None, ge=1, le=MAX_CENTS)
     notes: Optional[str] = Notes()
@@ -869,6 +871,35 @@ async def _settle_tips(db: AsyncSession, cost: BudgetCost, choice: Optional[str]
     await db.flush()
 
 
+def _in_step_payment(tip: BudgetCost, pays: list,
+                     before: Optional[int]) -> Optional[BudgetPayment]:
+    """The payment that follows a percentage tip (PD-018), or None.
+
+    It follows only when it's the tip's one payment, unpaid and not refundable, and is
+    for exactly what the tip came to just before this change (``before``), to the cent.
+    Several payments, a part payment, or one that already didn't match stay as typed.
+    A dollar tip's payments never follow."""
+    if tip.tip_basis_points is None or not before or len(pays) != 1:
+        return None
+    pay = pays[0]
+    if pay.paid or pay.refundable or pay.amount_cents != before:
+        return None
+    return pay
+
+
+def _follow_tip(db: AsyncSession, tip: BudgetCost, linked: Optional[BudgetCost], pays: list,
+                before: Optional[int]) -> None:
+    """Moves a percentage tip's one in-step unpaid payment to the tip's new amount, in
+    the same transaction as the change that moved the tip. A tip now waiting for a
+    cost ($0) leaves its payment as typed, since a payment is never $0."""
+    pay = _in_step_payment(tip, pays, before)
+    after = tip_cents_now(tip, linked, pays) if tip.tip_basis_points is not None else None
+    if pay is None or not after or after == before:
+        return
+    pay.amount_cents = after
+    db.add(pay)
+
+
 async def _refreeze(db: AsyncSession, payment: BudgetPayment, now_paid: bool) -> None:
     """A percentage tip stops following its expense's cost while any payment on it is
     ticked paid (PD-017): ticking the first one saves its amount at that moment, and
@@ -1227,6 +1258,15 @@ async def edit_cost(
                 status_code=422,
                 detail=f"{linked.vendor_name} is archived. Restore it first, then its tip.")
     old_name, was_archived = row.vendor_name, row.archived
+    # What each percentage tip on this expense comes to before the cost changes, so an
+    # in-step unpaid payment can follow it (PD-018).
+    tips_before = []
+    if row.tip_for_cost_id is None and any(
+            f in updates for f in ("quoted_cents", "estimated_cents", "final_cents")):
+        for tip in await _tips_for(db, row.id):
+            if tip.tip_basis_points is not None:
+                pays = await _payments_of(db, tip.id)
+                tips_before.append((tip, pays, tip_cents_now(tip, row, pays)))
     if "vendor_name" in updates:
         row.vendor_name = _clean(updates["vendor_name"] or "")
     for field in ("quoted_cents", "estimated_cents", "final_cents"):
@@ -1258,6 +1298,11 @@ async def edit_cost(
             tip.category_id = row.category_id
             tip.updated_at = row.updated_at
             db.add(tip)
+        # An archived tip is out of the totals and its payments out of those due, so
+        # its payments stay as they were.
+        for tip, pays, before in tips_before:
+            if not tip.archived:
+                _follow_tip(db, tip, row, pays, before)
     await db.commit()
     await db.refresh(row)
     return row
@@ -1378,25 +1423,35 @@ async def edit_tip(
     wedding_id: str, tip_id: str, payload: TipPatch,
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
-    """Changes a tip's percentage or amount, switching between them, or its notes.
+    """Changes a tip's name, its percentage or amount (switching between them), or its
+    notes.
 
     A new percentage on a tip with a paid payment is fixed at what it comes to now,
-    since a paid tip doesn't follow the cost."""
+    since a paid tip doesn't follow the cost. A new percentage on a percentage tip
+    moves its one in-step unpaid payment too (PD-018); a switch to or from dollars
+    leaves payments as typed."""
     await _editor(db, wedding_id, current_user)
     row = await _row(db, BudgetCost, tip_id, wedding_id, "tip")
     if row.tip_for_cost_id is None:
         raise HTTPException(status_code=422, detail="That expense isn't a tip")
     updates = payload.model_dump(exclude_unset=True)
+    if "vendor_name" in updates:
+        row.vendor_name = _clean(updates["vendor_name"] or "")
     if "percent_basis_points" in updates or "amount_cents" in updates:
         percent, amount = updates.get("percent_basis_points"), updates.get("amount_cents")
         _one_way(percent, amount)
         if amount is not None:
             row.tip_basis_points, row.final_cents = None, amount
         else:
-            row.tip_basis_points = percent
-            paid = any(p.paid for p in await _payments_of(db, row.id))
+            pays = await _payments_of(db, row.id)
             linked = await db.get(BudgetCost, row.tip_for_cost_id)
+            was_percent = row.tip_basis_points is not None
+            before = tip_cents_now(row, linked, pays) if was_percent else None
+            row.tip_basis_points = percent
+            paid = any(p.paid for p in pays)
             row.final_cents = (_percent_now(linked, percent) or 0) if paid else None
+            if was_percent:
+                _follow_tip(db, row, linked, pays, before)
     if "notes" in updates:
         row.notes = _notes(updates["notes"])
     row.updated_at = utcnow()

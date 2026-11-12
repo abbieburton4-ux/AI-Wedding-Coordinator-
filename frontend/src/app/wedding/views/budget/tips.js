@@ -72,3 +72,40 @@ export function tipBase(cost) {
 export function tipTargets(costs) {
   return costs.filter((c) => !c.archived && !c.tip_state);
 }
+
+/**
+ * A tip whose non-refundable payments don't add up to the tip (PD-018), for the note
+ * "Payments come to $1,600; the tip is now $1,800". Null for a plain expense, a tip
+ * with no payments yet, or one whose payments match it.
+ * @param {{ tip_state: string | null, scheduled_cents: number, committed_cents: number }} cost
+ * @returns {{ paymentsCents: number, tipCents: number } | null}
+ */
+export function tipPaymentsGap(cost) {
+  if (!cost.tip_state || cost.scheduled_cents <= 0) return null;
+  if (cost.scheduled_cents === cost.committed_cents) return null;
+  return { paymentsCents: cost.scheduled_cents, tipCents: cost.committed_cents };
+}
+
+/**
+ * How an expense's percentage tips would move if its cost became newBase (null for no
+ * cost), for the "would go over" note while that cost is edited. Only tips that follow
+ * the cost count: not archived, a percentage, and not fixed by a paid payment. before
+ * and after are those tips' totals now and once saved, in whole cents.
+ * @param {{ archived: boolean, tip_state: string | null, tip_basis_points: number | null,
+ *   committed_cents: number }[]} tips
+ * @param {number | null} newBase
+ * @returns {{ before: number, after: number, count: number }}
+ */
+export function tipsMove(tips, newBase) {
+  let before = 0;
+  let after = 0;
+  let count = 0;
+  for (const t of tips) {
+    if (t.archived || t.tip_basis_points === null || t.tip_basis_points === undefined) continue;
+    if (t.tip_state !== "following" && t.tip_state !== "waiting") continue;
+    before += t.committed_cents;
+    after += newBase === null ? 0 : percentOf(newBase, t.tip_basis_points);
+    count += 1;
+  }
+  return { before, after, count };
+}

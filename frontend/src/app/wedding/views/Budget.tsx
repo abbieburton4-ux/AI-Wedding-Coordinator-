@@ -12,14 +12,14 @@ import { BudgetExport } from "./budget/Export";
 import { Payers } from "./budget/Payers";
 import { AMOUNT_HINT, centsToInput, formatCents, parseDollars } from "./budget/money";
 import {
-  AddCategoryForm, AddTipForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, fieldClass, inputClass, linkButton,
-  primaryButton, type OpenRequest, type Req,
+  AddCategoryForm, AddTipForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, fieldClass, inputClass, limitsFor,
+  linkButton, primaryButton, type OpenRequest, type Req,
 } from "./budget/parts";
 import { tipTargets } from "./budget/tips";
 import {
   FoldBody, FoldProvider, JumpBar, SECTIONS, SECTION_SCROLL, SectionHeading, scrollToElement, sectionId, useFolds,
 } from "./budget/sections";
-import type { Category, Overview, Payer, Run, SplitSuggestion, VendorRef } from "./budget/types";
+import type { Category, Overview, Payer, Run, SplitSuggestion, Totals, VendorRef } from "./budget/types";
 import { useReviewedRequest } from "../../api/review";
 
 const SUGGESTIONS_ID = "budget-suggestions";
@@ -149,7 +149,8 @@ function BudgetScreen() {
         )}
         {canEdit && overview && overview.categories.some((c) => c.costs.length > 0) && (
           <AddTipStart
-            base={base} categories={overview.categories} payers={overview.payers} run={run} request={request} busy={busy}
+            base={base} categories={overview.categories} totals={overview.totals} payers={overview.payers}
+            run={run} request={request} busy={busy}
           />
         )}
       </div>
@@ -526,10 +527,12 @@ function AddExpenseStart({
  * then a percentage or an amount. Each expense also has its own Add tip.
  */
 function AddTipStart({
-  base, categories, payers, run, request, busy,
-}: { base: string; categories: Category[]; payers: Payer[]; run: Run; request: Req; busy: boolean }) {
+  base, categories, totals, payers, run, request, busy,
+}: { base: string; categories: Category[]; totals: Totals; payers: Payer[]; run: Run; request: Req; busy: boolean }) {
   const [open, setOpen] = useState(false);
-  const targets = categories.flatMap((cat) => tipTargets(cat.costs).map((cost) => ({ cost, categoryName: cat.name })));
+  const targets = categories.flatMap((cat) => tipTargets(cat.costs).map((cost) => ({
+    cost, categoryName: cat.name, limits: limitsFor(cat, totals),
+  })));
   return (
     <div className="mt-3">
       <button
