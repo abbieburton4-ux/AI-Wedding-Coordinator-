@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from "react";
 import { formatCents, formatDay } from "./money";
 import { linkButton } from "./parts";
-import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId } from "./sections";
+import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId, tapArea } from "./sections";
 import { Chip } from "./status";
 import type { Category } from "./types";
 import { daysUntil, upcomingPayments, type Group, type PaymentTag, type UpcomingItem } from "./figures";
@@ -108,7 +108,7 @@ function GroupList({
                 <button
                   type="button"
                   onClick={() => onOpen(item.costId)}
-                  className={`text-left py-1 text-on-surface hover:text-primary underline underline-offset-4 decoration-outline-variant hover:decoration-primary ${FOCUS}`}
+                  className={`text-left py-1 text-on-surface hover:text-primary underline underline-offset-4 decoration-outline-variant hover:decoration-primary ${FOCUS} ${tapArea}`}
                   aria-label={`${item.expenseName}: open this expense`}
                 >
                   {item.expenseName}

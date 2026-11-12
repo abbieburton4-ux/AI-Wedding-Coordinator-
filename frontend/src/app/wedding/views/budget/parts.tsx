@@ -6,7 +6,7 @@ import {
 } from "./money";
 import { venueRename } from "./expenses";
 import { costBox, expenseCost, wouldGoOver } from "./forecast";
-import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId, useFolds } from "./sections";
+import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId, tapArea, useFolds } from "./sections";
 import { Bar, Chip, TargetChip, targetTone } from "./status";
 import type {
   Category, ContractStatus, Contribution, Cost, ExpenseStatus, Payer, Payment, Run, Totals, VendorRef,
@@ -14,14 +14,20 @@ import type {
 
 export type Req = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
 
-export const inputClass =
-  "bg-surface-container-low border border-outline-variant/40 rounded-full px-4 py-2 text-sm text-on-surface focus:border-primary focus:outline-none";
+// On a phone (below the sm breakpoint) fields take the full width and every control is
+// at least 44px tall, so nothing runs off the screen and taps land (B78). From sm up the
+// layout is as before.
+const inputBase =
+  "bg-surface-container-low border border-outline-variant/40 rounded-full px-4 py-2 text-sm text-on-surface focus:border-primary focus:outline-none max-w-full min-h-11 sm:min-h-0";
+export const inputClass = `${inputBase} w-full sm:w-auto`;
+/** The label-over-box wrapper every form field uses. */
+export const fieldClass = "flex flex-col gap-1 w-full sm:w-auto min-w-0";
 export const primaryButton =
-  "bg-primary text-on-primary rounded-full px-5 py-2 font-button-text text-sm disabled:opacity-60";
+  "bg-primary text-on-primary rounded-full px-5 py-2 font-button-text text-sm disabled:opacity-60 min-h-11 sm:min-h-0";
 export const linkButton =
-  "text-sm text-on-surface-variant hover:text-primary underline-offset-4 hover:underline disabled:opacity-60";
+  `text-sm text-on-surface-variant hover:text-primary underline-offset-4 hover:underline disabled:opacity-60 ${tapArea}`;
 export const dangerLink =
-  "text-sm text-on-surface-variant hover:text-error underline-offset-4 hover:underline disabled:opacity-60";
+  `text-sm text-on-surface-variant hover:text-error underline-offset-4 hover:underline disabled:opacity-60 ${tapArea}`;
 
 export const json = (method: string, body?: unknown): RequestInit => ({
   method,
@@ -36,7 +42,7 @@ export function MoneyInput({
   placeholder?: string; required?: boolean;
 }) {
   return (
-    <span className="flex flex-col gap-1">
+    <span className={fieldClass}>
       <label htmlFor={id} className="text-xs text-on-surface-variant">{label}</label>
       <span className="relative">
         <span aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-on-surface-variant">$</span>
@@ -48,7 +54,7 @@ export function MoneyInput({
           placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={`${inputClass} pl-7 w-36`}
+          className={`${inputBase} pl-7 w-full sm:w-36`}
         />
       </span>
     </span>
@@ -62,7 +68,7 @@ export function TextInput({
   placeholder?: string; required?: boolean; wide?: boolean;
 }) {
   return (
-    <span className={`flex flex-col gap-1 ${wide ? "flex-grow min-w-[12rem]" : ""}`}>
+    <span className={`${fieldClass} ${wide ? "flex-grow sm:min-w-[12rem]" : ""}`}>
       <label htmlFor={id} className="text-xs text-on-surface-variant">{label}</label>
       <input
         id={id}
@@ -112,7 +118,7 @@ export function Confirm({
   return (
     <span className="flex flex-wrap items-center gap-2 text-sm">
       <span>{text}</span>
-      <button type="button" disabled={busy} onClick={onYes} className="text-error font-bold underline-offset-4 hover:underline">
+      <button type="button" disabled={busy} onClick={onYes} className={`text-error font-bold underline-offset-4 hover:underline ${tapArea}`}>
         {yesLabel}
       </button>
       <button type="button" disabled={busy} onClick={onNo} className={linkButton}>Cancel</button>
@@ -237,7 +243,7 @@ export function CategoryCard({
                 {rename === "offer" && (
                   <button
                     type="button" disabled={busy} onClick={renameToVenue}
-                    className="rounded-full border border-outline-variant/60 px-3 py-1 text-sm text-on-surface hover:border-primary disabled:opacity-60"
+                    className="rounded-full border border-outline-variant/60 px-3 py-2.5 sm:py-1 text-sm text-on-surface hover:border-primary disabled:opacity-60"
                   >
                     Rename to Venue
                   </button>
@@ -322,7 +328,7 @@ export function CategoryCard({
         {canEdit && (
           <button
             type="button" onClick={startAdding}
-            className="inline-flex items-center gap-1 rounded-full border border-primary px-4 py-1.5 text-sm text-primary hover:bg-primary hover:text-on-primary"
+            className="inline-flex items-center gap-1 rounded-full border border-primary px-4 py-2.5 sm:py-1.5 text-sm text-primary hover:bg-primary hover:text-on-primary"
           >
             <Icon name="add" size={16} /> Add expense<span className="sr-only"> to {category.name}</span>
           </button>
@@ -405,14 +411,14 @@ function RemoveCategory({
       <span className="w-full">
         {category.name} has {what}. They aren't removed: choose where they move, with their payments and ticks. {kept}
       </span>
-      <span className="flex flex-col gap-1">
+      <span className={fieldClass}>
         <label htmlFor={selectId} className="text-xs text-on-surface-variant">Move them to</label>
         <select id={selectId} value={target} onChange={(e) => setTarget(e.target.value)} className={inputClass}>
           {others.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </span>
       <button type="button" disabled={busy || !target} onClick={() => remove(target)}
-        className="text-error font-bold underline-offset-4 hover:underline pb-2">
+        className={`text-error font-bold underline-offset-4 hover:underline pb-2 ${tapArea}`}>
         Move them and remove {category.name}
       </button>
       <button type="button" disabled={busy} onClick={onCancel} className={`${linkButton} pb-2`}>Cancel</button>
@@ -493,7 +499,7 @@ function OpenLink({ url, label }: { url: string | null; label: string }) {
 
 function LinkInput({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
   return (
-    <span className="flex flex-col gap-1 flex-grow min-w-[14rem]">
+    <span className={`${fieldClass} flex-grow sm:min-w-[14rem]`}>
       <label htmlFor={id} className="text-xs text-on-surface-variant">Link (optional), for example to the file in your Google Drive</label>
       <input
         id={id}
@@ -530,7 +536,7 @@ function NotesInput({
 
 function SelectInput({ id, label, value, onChange, children }: { id: string; label: string; value: string; onChange: (v: string) => void; children: ReactNode }) {
   return (
-    <span className="flex flex-col gap-1">
+    <span className={fieldClass}>
       <label htmlFor={id} className="text-xs text-on-surface-variant">{label}</label>
       <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={inputClass}>
         {children}
@@ -778,7 +784,7 @@ function CostEditForm({
         <option value="sent">Sent</option>
         <option value="signed">Signed</option>
       </SelectInput>
-      <span className="flex flex-col gap-1">
+      <span className={fieldClass}>
         <label htmlFor={`cost-method-${id}`} className="text-xs text-on-surface-variant">How you'll pay (optional)</label>
         <input id={`cost-method-${id}`} list="budget-method-suggestions" autoComplete="off" maxLength={120}
           value={method} onChange={(e) => setMethod(e.target.value)} className={inputClass} />
@@ -881,7 +887,7 @@ function AddCostForm({
                 type="button"
                 aria-pressed={vendor === idea}
                 onClick={() => setVendor(idea)}
-                className={`rounded-full border px-3 py-1 text-xs ${vendor === idea ? "bg-primary text-on-primary border-primary" : "border-outline-variant/50 text-on-surface hover:border-primary"}`}
+                className={`rounded-full border px-3 py-3 sm:py-1 text-xs ${vendor === idea ? "bg-primary text-on-primary border-primary" : "border-outline-variant/50 text-on-surface hover:border-primary"}`}
               >
                 {idea}
               </button>
@@ -902,7 +908,7 @@ function AddCostForm({
         id={`new-amount-${categoryId}`} label="Amount of this payment" value={amount}
         onChange={(v) => setTypedAmount(v)} placeholder="None yet"
       />
-      <span className="flex flex-col gap-1">
+      <span className={fieldClass}>
         <label htmlFor={`new-due-${categoryId}`} className="text-xs text-on-surface-variant">Due date (optional)</label>
         <input id={`new-due-${categoryId}`} type="date" value={due} onChange={(e) => setDue(e.target.value)} className={inputClass} />
       </span>
@@ -1069,14 +1075,14 @@ function PaymentRow({
                 Ticking this makes what you've paid {cost.vendor_name} {formatCents(payment.would_overpay_cents)} more
                 than the cost ({formatCents(cost.committed_cents)}). Tick it anyway?
               </span>
-              <button type="button" disabled={busy} className="text-error font-bold underline-offset-4 hover:underline"
+              <button type="button" disabled={busy} className={`text-error font-bold underline-offset-4 hover:underline ${tapArea}`}
                 onClick={async () => { setConfirmOverpay(false); await run(() => request(paidUrl, json("PUT", { paid: true }))); }}>
                 Yes, tick it
               </button>
               <button type="button" disabled={busy} onClick={() => setConfirmOverpay(false)} className={linkButton}>Cancel</button>
             </span>
           ) : (
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label className="flex items-center gap-2 cursor-pointer min-h-11 sm:min-h-0">
               <input
                 type="checkbox"
                 checked={payment.paid}
@@ -1143,24 +1149,24 @@ function PaymentEditForm({
         <option value="payment">Payment</option>
       </SelectInput>
       <MoneyInput id={`edit-amount-${id}`} label="Amount" value={amount} onChange={setAmount} required />
-      <span className="flex flex-col gap-1">
+      <span className={fieldClass}>
         <label htmlFor={`edit-due-${id}`} className="text-xs text-on-surface-variant">Due date (optional)</label>
         <input id={`edit-due-${id}`} type="date" value={dueOn} onChange={(e) => setDueOn(e.target.value)} className={inputClass} />
       </span>
       {payment.paid && (
-        <span className="flex flex-col gap-1">
+        <span className={fieldClass}>
           <label htmlFor={`edit-paidon-${id}`} className="text-xs text-on-surface-variant">Date paid (optional)</label>
           <input id={`edit-paidon-${id}`} type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} className={inputClass} />
         </span>
       )}
       <PayerSelect id={`edit-payer-${id}`} payers={payers} value={payer} onChange={setPayer} />
-      <span className="flex flex-col gap-1">
+      <span className={fieldClass}>
         <label htmlFor={`edit-method-${id}`} className="text-xs text-on-surface-variant">How it was paid (optional)</label>
         <input id={`edit-method-${id}`} list="budget-method-suggestions" autoComplete="off" maxLength={120}
           value={method} onChange={(e) => setMethod(e.target.value)} className={inputClass} />
       </span>
       <TextInput id={`edit-ref-${id}`} label="Reference, like a check number (optional)" value={reference} onChange={setReference} required={false} />
-      <label className="flex items-center gap-2 text-sm cursor-pointer pb-2">
+      <label className="flex items-center gap-2 text-sm cursor-pointer pb-2 min-h-11 sm:min-h-0">
         <input type="checkbox" checked={refundable} onChange={(e) => setRefundable(e.target.checked)} className="h-4 w-4 accent-primary" />
         Refundable security deposit (not part of the cost)
       </label>
@@ -1214,11 +1220,11 @@ function AddPaymentForm({
         <option value="payment">Payment</option>
       </SelectInput>
       <MoneyInput id={`pay-amount-${costId}`} label="Amount" value={amount} onChange={setAmount} required />
-      <span className="flex flex-col gap-1">
+      <span className={fieldClass}>
         <label htmlFor={`pay-due-${costId}`} className="text-xs text-on-surface-variant">Due date (optional)</label>
         <input id={`pay-due-${costId}`} type="date" value={due} onChange={(e) => setDue(e.target.value)} className={inputClass} />
       </span>
-      <label className="flex items-center gap-2 text-sm cursor-pointer pb-2">
+      <label className="flex items-center gap-2 text-sm cursor-pointer pb-2 min-h-11 sm:min-h-0">
         <input type="checkbox" checked={refundable} onChange={(e) => setRefundable(e.target.checked)} className="h-4 w-4 accent-primary" />
         Refundable security deposit
       </label>
@@ -1304,7 +1310,7 @@ export function Contributions({
         <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
           <TextInput id="contrib-who" label="Who" value={who} onChange={setWho} placeholder="For example, Groom's parents" wide />
           <MoneyInput id="contrib-amount" label="Amount" value={amount} onChange={setAmount} required />
-          <span className="flex flex-col gap-1">
+          <span className={fieldClass}>
             <label htmlFor="contrib-cat" className="text-xs text-on-surface-variant">Towards (optional)</label>
             <select id="contrib-cat" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
               <option value="">The whole budget</option>

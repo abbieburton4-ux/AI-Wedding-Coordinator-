@@ -198,6 +198,8 @@ export interface SplitSuggestion {
   total_cents: number;
   lines: SplitLine[];
   rationale_summary: string;
+  /** How many of the AI's reasons were left out because they mentioned money (rule 2). */
+  reasons_removed?: number;
 }
 
 /** Runs a change against the API, then reloads the budget. Resolves true on success. */

@@ -12,7 +12,7 @@ import { BudgetExport } from "./budget/Export";
 import { Payers } from "./budget/Payers";
 import { AMOUNT_HINT, centsToInput, formatCents, parseDollars } from "./budget/money";
 import {
-  AddCategoryForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, inputClass, linkButton, primaryButton,
+  AddCategoryForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, fieldClass, inputClass, linkButton, primaryButton,
   type OpenRequest,
 } from "./budget/parts";
 import {
@@ -388,6 +388,13 @@ function SplitPanel({
       {suggestion.rationale_summary && (
         <p className="text-sm text-on-surface-variant mb-4">{suggestion.rationale_summary}</p>
       )}
+      {!!suggestion.reasons_removed && (
+        <p className="text-sm text-on-surface-variant mb-4">
+          {suggestion.reasons_removed === 1 ? "One of the AI's reasons was" : "Some of the AI's reasons were"} left
+          out because {suggestion.reasons_removed === 1 ? "it" : "they"} seemed to mention an amount of money. The
+          amounts here come only from your own total.
+        </p>
+      )}
       <ul className="space-y-3 mb-4">
         {suggestion.lines.map((line, i) =>
           left[i] ? (
@@ -493,7 +500,7 @@ function AddExpenseStart({
       }}
     >
       {start}
-      <span className="flex flex-col gap-1">
+      <span className={fieldClass}>
         <label htmlFor="add-expense-category" className="text-xs text-on-surface-variant">Which category is it for?</label>
         <select
           id="add-expense-category" value={target} onChange={(e) => setPicked(e.target.value)}

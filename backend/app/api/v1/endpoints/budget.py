@@ -813,7 +813,10 @@ async def edit_category(
     updates = payload.model_dump(exclude_unset=True)
     if "name" in updates:
         name = _clean(updates["name"] or "")
-        await _check_unique_name(db, wedding_id, name, except_id=row.id)
+        # Only a real rename is checked, so editing the amount of one of two look-alike
+        # categories (possible via two adds at the same moment) still works.
+        if default_key(name) != default_key(row.name):
+            await _check_unique_name(db, wedding_id, name, except_id=row.id)
         # Renaming a suggested category away doesn't count as removing it: with no
         # category of that name left, it's offered again (B71).
         await _undecline(db, wedding, name)
@@ -1457,7 +1460,8 @@ async def suggest_split(
         raise HTTPException(status_code=422,
                             detail="The suggestion didn't pass our checks. Please try again.")
     return {"total_cents": out["total_cents"], "lines": out["lines"],
-            "rationale_summary": out.get("rationale_summary", "")}
+            "rationale_summary": out.get("rationale_summary", ""),
+            "reasons_removed": out.get("reasons_removed", 0)}
 
 
 @router.post("/{wedding_id}/budget/apply-split", response_model=Overview)

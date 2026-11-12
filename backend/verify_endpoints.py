@@ -531,6 +531,21 @@ def test_api_suite():
                        headers=headers).status_code == 200, "renaming to itself is fine"
         assert c.patch(f"{b_url}/categories/{flowers_cat}", json={"name": "Florals"},
                        headers=headers).status_code == 200
+        # Two look-alikes can only exist via two adds at the same moment (B43); either
+        # one's amount can still be edited, sent with its unchanged name.
+        from app.db.models import BudgetCategory as _BudgetCategory
+        with Session(sync_engine) as s:
+            twin = _BudgetCategory(wedding_id=wedding_id, name="FLORALS")
+            s.add(twin)
+            s.commit()
+            twin_id = twin.id
+        for cat_id, cat_name in ((flowers_cat, "Florals"), (twin_id, "FLORALS")):
+            res = c.patch(f"{b_url}/categories/{cat_id}",
+                          json={"name": cat_name, "planned_cents": 250_000}, headers=headers)
+            assert res.status_code == 200, res.text
+        assert c.patch(f"{b_url}/categories/{twin_id}", json={"name": " Venue "},
+                       headers=headers).status_code == 409, "a real rename is still checked"
+        assert c.delete(f"{b_url}/categories/{twin_id}", headers=headers).status_code == 204
         print("   * Categories: add, rename and plan; bad names, duplicates and non-cent "
               "amounts refused")
 
@@ -700,6 +715,7 @@ def test_api_suite():
             assert calls == [], "nothing is asked of the AI before the couple's click"
             res = c.post(f"{b_url}/suggest-split", headers=headers, json=approve)
             assert res.status_code == 200 and len(res.json()["lines"]) == 2, res.text
+            assert res.json()["reasons_removed"] == 0, "no reason was removed"
             assert calls[0]["total_cents"] == 4_000_000
             assert calls[0]["approved_prompt"] == approve["approved_prompt"]
             assert sorted(calls[0]["category_names"]) == ["Florals", "Venue"]

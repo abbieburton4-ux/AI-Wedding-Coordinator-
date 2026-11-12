@@ -67,11 +67,11 @@ export function BudgetExport({ weddingId, today }: { weddingId: string; today: s
         print or save as a PDF. The file goes to this device only; nothing is sent to anyone.
       </p>
       <div className="space-y-2 mb-4">
-        <label className="flex items-start gap-2 text-sm text-on-surface">
+        <label className="flex items-start gap-2 text-sm text-on-surface min-h-11 sm:min-h-0">
           <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} className="mt-1" />
           <span>Include archived expenses (they're listed, but never added to the totals)</span>
         </label>
-        <label className="flex items-start gap-2 text-sm text-on-surface">
+        <label className="flex items-start gap-2 text-sm text-on-surface min-h-11 sm:min-h-0">
           <input type="checkbox" checked={contacts} onChange={(e) => setContacts(e.target.checked)} className="mt-1" />
           <span>
             Include vendor contact details (contact name, email and phone)

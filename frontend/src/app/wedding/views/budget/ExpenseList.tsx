@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Icon } from "../../../shared/Icon";
 import { filterExpenses, flattenExpenses, sortExpenses } from "./expenses";
 import { formatCents, formatDay } from "./money";
-import { StatusBadge, inputClass, linkButton } from "./parts";
+import { StatusBadge, fieldClass, inputClass, linkButton } from "./parts";
 import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId, useFolds } from "./sections";
 import type { Category, ExpenseStatus } from "./types";
 
@@ -109,7 +109,7 @@ export function ExpenseList({
       </p>
 
       <div className="flex flex-wrap items-end gap-3 mb-3">
-        <span className="flex flex-col gap-1 flex-grow min-w-[12rem]">
+        <span className={`${fieldClass} flex-grow sm:min-w-[12rem]`}>
           <label htmlFor="exp-search" className="text-xs text-on-surface-variant">Search by expense or vendor</label>
           <input id="exp-search" type="search" autoComplete="off" value={f.search}
             onChange={(e) => set("search")(e.target.value)} className={inputClass} />
@@ -139,7 +139,7 @@ export function ExpenseList({
             <DateBox id="exp-to" label="To" value={f.to} onChange={set("to")} />
           </>
         )}
-        <span className="flex flex-col gap-1 md:hidden">
+        <span className={`${fieldClass} md:hidden`}>
           <label htmlFor="exp-sort" className="text-xs text-on-surface-variant">Sort by</label>
           <span className="flex items-center gap-2">
             <select id="exp-sort" value={sortKey} className={inputClass}
@@ -166,7 +166,7 @@ export function ExpenseList({
         </p>
         {filtered && <button type="button" onClick={() => setF(EMPTY)} className={linkButton}>Clear filters</button>}
         {archivedCount > 0 && (
-          <label className="flex items-center gap-2 cursor-pointer text-on-surface-variant">
+          <label className="flex items-center gap-2 cursor-pointer text-on-surface-variant min-h-11 sm:min-h-0">
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)}
               className="h-4 w-4 accent-primary" />
             Show archived ({archivedCount}), not counted in totals
@@ -257,7 +257,7 @@ function Select({
   id, label, value, onChange, children,
 }: { id: string; label: string; value: string; onChange: (v: string) => void; children: ReactNode }) {
   return (
-    <span className="flex flex-col gap-1">
+    <span className={fieldClass}>
       <label htmlFor={id} className="text-xs text-on-surface-variant">{label}</label>
       <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={inputClass}>{children}</select>
     </span>
@@ -266,7 +266,7 @@ function Select({
 
 function DateBox({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (v: string) => void }) {
   return (
-    <span className="flex flex-col gap-1">
+    <span className={fieldClass}>
       <label htmlFor={id} className="text-xs text-on-surface-variant">{label}</label>
       <input id={id} type="date" value={value} onChange={(e) => onChange(e.target.value)} className={inputClass} />
     </span>

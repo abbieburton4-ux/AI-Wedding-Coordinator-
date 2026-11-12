@@ -1,8 +1,8 @@
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Icon } from "../../../shared/Icon";
 import { AMOUNT_HINT, committedLabel, formatCents, parseDollars } from "./money";
-import { MoneyInput, inputClass, linkButton, overpaidNote, primaryButton } from "./parts";
-import { FoldBody, SECTION_SCROLL, SectionHeading, scrollToElement, sectionId, useFolds } from "./sections";
+import { MoneyInput, fieldClass, inputClass, linkButton, overpaidNote, primaryButton } from "./parts";
+import { FoldBody, SECTION_SCROLL, SectionHeading, scrollToElement, sectionId, tapArea, useFolds } from "./sections";
 import { Bar, Chip, type Tone } from "./status";
 import type { Category, Overview, Run } from "./types";
 
@@ -19,7 +19,7 @@ export function Explain({ children }: { children: ReactNode }) {
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1 text-xs text-on-surface-variant hover:text-primary underline-offset-4 hover:underline mt-2"
+        className={`inline-flex items-center gap-1 text-xs text-on-surface-variant hover:text-primary underline-offset-4 hover:underline mt-2 ${tapArea}`}
       >
         <Icon name="help" size={14} /> {open ? "Hide" : "What's this?"}
       </button>
@@ -192,11 +192,6 @@ export function BudgetDashboard({ overview, children }: { overview: Overview; ch
         </p>
       )}
 
-      {d.budget_state === "over" && (
-        <Warning>
-          What you've committed is {formatCents(d.over_total_cents ?? 0)} more than your total budget.
-        </Warning>
-      )}
       {d.categories_over > 0 && (
         <Warning>
           {d.categories_over === 1 ? "1 category is" : `${d.categories_over} categories are`} over target.
@@ -280,7 +275,7 @@ export function MoveMoney({
       ) : (
         <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
           <MoneyInput id="move-amount" label="Move" value={amount} onChange={(v) => { setAmount(v); setDone(null); }} required />
-          <span className="flex flex-col gap-1">
+          <span className={fieldClass}>
             <label htmlFor="move-from" className="text-xs text-on-surface-variant">From</label>
             <select id="move-from" value={from} onChange={(e) => { setFrom(e.target.value); setDone(null); }} className={inputClass} required>
               <option value="">Choose a category</option>
@@ -289,7 +284,7 @@ export function MoveMoney({
               ))}
             </select>
           </span>
-          <span className="flex flex-col gap-1">
+          <span className={fieldClass}>
             <label htmlFor="move-to" className="text-xs text-on-surface-variant">To</label>
             <select id="move-to" value={to} onChange={(e) => setTo(e.target.value)} className={inputClass} required>
               <option value="">Choose a category</option>
