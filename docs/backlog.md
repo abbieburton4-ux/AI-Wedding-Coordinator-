@@ -12,7 +12,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B86** — Publish offered to delete the who-paid details (third time); stop it happening, not just warn. `merged` (#105); close after the owner's first publish passes
-2. **B87** — faded grey text under the reading standard (phone menu, Overview, sign-in footer). `in progress`
+2. **B87** — faded grey text under the reading standard (phone menu, Overview, sign-in footer). `in review` (#108)
 3. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
 4. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
 5. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
