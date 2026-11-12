@@ -14,9 +14,10 @@
   --popover: #FDFBF7;
   --popover-foreground: #22201E;
 
-  /* Muted gold / bronze */
+  /* Muted gold / bronze. Text on it is dark, as in dark mode: white on this gold
+     is 2.7:1, #22201E is 5.9:1 (B72). */
   --primary: #B49870;
-  --primary-foreground: #FFFFFF;
+  --primary-foreground: #22201E;
 
   /* Blush / soft warm */
   --secondary: #F2ECE6;
