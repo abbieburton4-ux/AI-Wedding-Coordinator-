@@ -338,3 +338,20 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - (c) **"Who paid" and the existing "Who's contributing" section.** **Answer: recommended.** *Recommended:* keep both. Contributing is what someone has promised; who paid is what actually happened. The new chart shows paid only. Alternative: the chart also shows each family's promise next to what they've paid (needs the contribution names to match the payer names).
 **Decision:** all three recommendations, plus type as a dropdown. The couple type the five payer names into the app themselves; existing payments start with no payer and a "Who paid?" prompt; "Who's contributing" stays separate and the chart shows payments only.
 **Out of scope:** emails or reminders to anyone about payments (rule 1); splitting one payment between two payers (the joint option covers that).
+
+## PD-017 — Tips as their own expense lines, by percentage or amount
+
+**Date:** 2026-11-12 · **Status:** ratified (by the owner, one of the couple, 2026-11-12: "1. keep the tip in teh same category as the expense / 2. when the cost changes, the tip would also change if there is a % associated with it / 3. sounds good about asking to remove it")
+**Context:** Backlog B79. The owner, 2026-11-12: "I want to add a tip expense line item. so you can choose what line item it is for, then put in the % or you can just type the amount in. and it will show up as a new line item". Today a tip can only be typed in as an ordinary expense, with no link to what it's for and no percentage. (Food & Drink's "Service charge and gratuity" idea is a contracted charge, a separate thing.)
+**Proposed:**
+1. An **Add tip** action: pick the expense it's for (for example the caterer), then type a percentage (for example 20%) or an amount in dollars.
+2. The tip saves as **its own expense line**, named "Tip: <expense name>", marked as a tip and linked to that expense. It counts in every total, and can have payments, a due date, who paid and comments like any other expense (PD-016).
+3. With a percentage, the line shows "20% of $8,000 = $1,600". Amounts are worked out in whole cents, rounded to the nearest cent.
+4. The All expenses list can filter to tips only, and the Overview shows the total of all tips.
+**Technical choices settled by the team:** a small database change that only adds things (a link to the expense, and the percentage if one is used). Nothing is sent to anyone (rule 1) and nothing is marked paid (rule 4).
+**Couple's calls:**
+- (a) **Which category the tip goes in.** **Answer: same category.** *Recommended:* the same category as the expense it's for (a caterer's tip sits under Food & Drink), so each category shows its full cost. Alternative: a separate "Tips" category, so all tips sit together, but each category then looks cheaper than it really is.
+- (b) **When the expense's cost changes** (say the quote becomes a higher actual cost). **Answer: a percentage tip changes with the cost.** *Recommended:* a tip entered as a percentage updates by itself and shows the new figure. A tip typed in dollars stays as typed. Once a payment on the tip is ticked paid, the tip amount stops changing, so a paid figure never moves. Alternative: a percentage tip is worked out once and never changes.
+- (c) **Deleting or archiving the expense a tip is for.** **Answer: ask.** *Recommended:* the app asks whether to remove the tip as well, or keep it as a plain line. Alternative: the tip always goes with it.
+**Decision:** (a) the tip sits in the same category as its expense; (b) a percentage tip follows the expense's cost, a dollar tip stays as typed; (c) the app asks whether to remove the tip or keep it as a plain line. *(decided-by-agent, reversible:* once a payment on the tip is ticked paid, the tip amount stops following the cost, so a paid figure never moves by itself. The owner's answer to (b) didn't mention this; she can overturn it.)
+**Out of scope:** reminders to tip on the day (rule 1); splitting one tip between several vendors (add one tip per vendor).
