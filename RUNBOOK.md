@@ -16,10 +16,14 @@ Set `ACCESS_BOOTSTRAP_EMAILS` privately for the couple's first sign-ins.
 AI actions run within the request; no worker secret or task emulator is needed.
 Every start of that script brings its own environment's database to the latest
 Alembic migration (`backend/db_status.py upgrade`) and stops before serving if it
-can't (rule 6). Pulling new code doesn't restart a running app, so stop and Run
-again before publishing: Publish makes production's schema match the development
+can't (rule 6). Publish makes production's schema match the development
 database, and a development database left behind offers to undo a migration
-(B59). `python db_status.py check` (from `backend/`) says whether it's up to date.
+(B59, B70, B86). So the workspace app re-runs that upgrade when a Pull changes the
+migration files, `python db_status.py upgrade` (from `backend/`) brings it up to
+date and confirms it in one step, and the publish build
+(`scripts/replit-publish-build.sh`) refuses to build, which stops Replit before it
+changes production, unless the workspace last recorded its database at the
+latest migration (`backend/publish_guard.py`).
 Never approve a DROP on the publish screen. Replit offers no way to skip its own
 schema step, so additions listed in replit.md for the release may be approved;
 migrations after `0006` cope with that (B60). Full configuration, publishing steps

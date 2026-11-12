@@ -9,7 +9,8 @@ real Firebase access backed by Replit PostgreSQL, leaving demo SQLite untouched.
 - **Start application** runs `bash scripts/replit-production.sh`.
 - Rebuild the frontend after editing it or changing Firebase web configuration:
   `bash scripts/replit-build.sh`.
-- Production build: `bash scripts/replit-build.sh`.
+- Production build (Publish): `bash scripts/replit-publish-build.sh`, which checks
+  the workspace database is up to date (B86) and then runs `scripts/replit-build.sh`.
 - Production run: `bash scripts/replit-production.sh`.
 - One Uvicorn process serves the built SPA and API on `0.0.0.0:5000` (or `PORT`).
   It does not run Vite in production. Browser API requests stay same-origin.
@@ -72,14 +73,48 @@ change already made), or if `SYNC_DATABASE_URL` points at a different database f
 the app derives it). Don't fix any of these by editing the database by hand; ask
 the team.
 
-**Pulling code doesn't update the database.** A running app keeps its old code and
-leaves the development database where it was until the app starts again. In B59
-the workspace had migration `0006` in its code but its database was still at
-`0005`, while the published app had applied `0006` when it started. Publish then
-offered to delete the new column from production to match. [ASSUMPTION] The
-likeliest cause is that the workspace app was never restarted after the Pull. A
-`backend/.env` copied from `.env.example` would also do it, by sending the
-workspace's migrations to a local SQLite file; the run script now refuses that.
+**Pulling code doesn't update the database by itself.** Publish compares the
+workspace's development database with production, but until B86 only pressing Run
+moved the development database forward, while the published app moves production
+forward every time it starts. So whenever a publish went out without a Run after
+the Pull, Publish listed nothing for the new migration (as in B65), the published
+app applied it on start, and production was then one migration ahead. The next
+publish offered to delete it again to match: B59 (`0006`), B70 (`0007`'s tables)
+and B86 (`0012`'s `budget_payers`, with the workspace database at `0011` while
+production was at `0012`).
+
+Three safeguards now cover that (B86):
+- **Run** still brings the development database up to date before serving.
+- **While the app runs in the workspace**, it watches the migration files and
+  brings the development database up to date within about ten seconds of a Pull
+  that changes them. It doesn't do this in the published app.
+- **The publish build checks it.** Each time `db_status.py` checks or upgrades the
+  workspace database, it records the migration it found in
+  `backend/workspace_db_revision.txt` (Git-ignored). Publish builds through
+  `scripts/replit-publish-build.sh`, which runs `backend/publish_guard.py` first
+  and refuses to build unless that file shows the code's latest migration. Replit
+  applies its database changes to production only after the build succeeds
+  ([How Publish updates your production database](https://docs.replit.com/features/data-and-storage/publish-database-changes),
+  "Approve and publish", checked 2026-11-12), so a refused build stops the publish
+  before production changes, even if a DROP was approved by mistake. The check
+  can't run any earlier: Replit shows its SQL before the build starts. If the
+  watcher caught up by itself in the last 15 minutes, the build refuses too,
+  because Replit may have compared the databases just before; running
+  `python db_status.py upgrade` by hand confirms it and clears that. A crashed
+  check records "unknown" rather than leaving an older result.
+  [ASSUMPTION] that Replit's build sees this Git-ignored file from the workspace.
+  If it doesn't, every publish stops with "hasn't recorded where its database is"
+  even after the fix below; tell the team, who can point `[deployment] build` in
+  `.replit` back at `scripts/replit-build.sh`.
+
+A `backend/.env` copied from `.env.example` would also leave the workspace behind,
+by sending its migrations to a local SQLite file; the run script refuses that.
+The check reads what `db_status.py` last recorded, so it can't catch a workspace
+whose *code* is older than the published app's (for example after rolling the
+workspace back to an earlier checkpoint, which restores its files and database
+together), or a workspace database changed afterwards by something other than the
+migrations (by hand, or by Replit's Agent). Always Pull first, and run step 2 just
+before Publish.
 
 **A publish that brings a new migration will list additions.** Run puts the
 development database at the new migration while production is still one behind,
@@ -219,21 +254,21 @@ publish should list **no** database changes.
 
 **When you publish** (plain steps for the owner):
 
-> **Never approve a line that says DROP.** On 2026-11-09 Publish listed
-> `DROP TABLE "couple_vendors" CASCADE;` and `DROP TABLE "couple_vendor_quotes"
-> CASCADE;` because the workspace database was behind the code (B70). Approving
-> would have deleted the couple's vendors. If you see any **DROP**, choose
-> **Cancel**, then do step 2 and step 3 again before trying once more.
+> **Never approve a line that says DROP.** Publish has offered to delete real data
+> three times because the workspace database was behind the code: a new column
+> (B59) and the couple's vendors (B70) on 2026-11-09, and the "People who pay"
+> list on 2026-11-12
+> (`DROP TABLE "budget_payers" CASCADE;`, B86). If you see any **DROP**, choose
+> **Cancel**, then do step 2 again before trying once more.
 
 1. In the workspace, **Pull** the latest code.
-2. If the app is running, press **Stop**. Then press **Run** and wait for the app to
-   load. The console shows `Database is up to date (migration ...)`. If it says the
-   database is behind, or anything else, or the app doesn't load, stop and tell
-   the team.
-3. To double-check, open the **Shell** and type
-   `cd backend && python db_status.py check`. It must say
-   `Database is up to date`.
-4. Press **Publish**. Replit compares the development database with production and
+2. Open a new **Shell** tab and type `cd backend && python db_status.py upgrade`.
+   This one command brings the workspace database up to date and confirms it. It
+   must say `Database is up to date (migration ...)`. If it says anything else,
+   stop and tell the team. Do this just before pressing Publish. You don't need
+   to Stop and Run to publish; do it only if you want the workspace preview to
+   show the new code.
+3. Press **Publish**. Replit compares the development database with production and
    may list changes it will make to production. Read every line of the SQL it
    shows, even if the pane isn't orange.
    - **You may approve** when every change is an addition (`CREATE TABLE`,
@@ -242,11 +277,8 @@ publish should list **no** database changes.
      required column, index or constraint; that's expected when the list says so.
      Choose **Approve and publish**. The published app then finishes the job when
      it starts.
-   - If any line says **DROP**, choose **Cancel** (don't approve), then: the development
-     database may be behind. In the Shell, type `cd backend && alembic current`
-     to see where it is, then `python db_status.py upgrade` (the same as
-     `alembic upgrade head`, with the run script's safety checks), and run the
-     check in step 3 again. Then press Publish again.
+   - If any line says **DROP**, choose **Cancel** (don't approve). Do step 2
+     again, then press Publish again.
    - **Stop and tell the team** if anything else appears, or still appears: any
      line with **DROP** or **RENAME**, any `ALTER COLUMN`, a question asking
      whether something was renamed, a question about a unique constraint offering
@@ -254,9 +286,15 @@ publish should list **no** database changes.
      validation**. Choose **Cancel**. Never choose **Copy your development
      database schema & data to production**, and don't ask Replit's Agent to fix
      it.
+4. **If Publish fails** and its log says `Publish stopped: the workspace database
+   is behind` or `hasn't recorded where its database is`, nothing in the
+   published app has changed: Replit stopped before applying any database
+   change. Do step 2, then press Publish again. If it says anything else, or the
+   same message comes back after step 2 said `Database is up to date`, tell the
+   team.
 5. Once published, open the app. If it shows an error page instead of sign-in,
    tell the team. The app stops before changing anything itself, but anything
-   Replit applied in step 4 has already happened.
+   Replit applied in step 3 has already happened.
 
 The Shell always reaches the **development** database (`DATABASE_URL`), never the
 published app's production one.

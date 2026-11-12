@@ -38,7 +38,7 @@ externalPort = 80
 [deployment]
 deploymentTarget = "autoscale"
 run = ["bash", "scripts/replit-production.sh"]
-build = ["bash", "scripts/replit-build.sh"]
+build = ["bash", "scripts/replit-publish-build.sh"]
 
 [userenv]
 
