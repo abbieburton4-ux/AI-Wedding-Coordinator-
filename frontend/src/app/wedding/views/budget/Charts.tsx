@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import { formatCents } from "./money";
@@ -99,10 +99,39 @@ function CategoryName({ name, hasExpenses, id, onCategory }: { name: string; has
       type="button"
       onClick={() => onCategory(id)}
       aria-label={`${name}: show its expenses`}
-      className={`text-left py-1 ${FOCUS} text-on-surface hover:text-primary underline underline-offset-4 decoration-outline-variant hover:decoration-primary`}
+      className={`text-left py-2.5 sm:py-1 ${FOCUS} text-on-surface hover:text-primary underline underline-offset-4 decoration-outline-variant hover:decoration-primary`}
     >
       {name}
     </button>
+  );
+}
+
+/**
+ * A table that's wider than a phone scrolls sideways in its own box, never the page
+ * (B78). While it doesn't fit, a short note says so and the box can be focused, so it
+ * scrolls by keyboard too.
+ */
+function TableBox({ label, children }: { label: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setWide(el.scrollWidth > el.clientWidth + 1);
+    check();
+    const watcher = new ResizeObserver(check);
+    watcher.observe(el);
+    // The table itself can widen (a longer name) while the box stays the same size.
+    if (el.firstElementChild) watcher.observe(el.firstElementChild);
+    return () => watcher.disconnect();
+  }, []);
+  return (
+    <>
+      {wide && <p className="text-xs text-on-surface-variant mb-1">Swipe the table sideways to see every column.</p>}
+      <div ref={ref} role="region" aria-label={label} tabIndex={wide ? 0 : undefined} className={`overflow-x-auto rounded-md ${FOCUS}`}>
+        {children}
+      </div>
+    </>
   );
 }
 
@@ -155,7 +184,7 @@ function SpendingChart({ categories, onCategory, animate }: { categories: Catego
               type="button"
               aria-pressed={measure === m}
               onClick={() => setMeasure(m)}
-              className={`rounded-full px-3 py-1 ${FOCUS} ${measure === m ? "bg-on-surface text-surface-container-lowest font-bold" : "text-on-surface-variant hover:text-primary"}`}
+              className={`rounded-full px-3 py-2.5 sm:py-1 ${FOCUS} ${measure === m ? "bg-on-surface text-surface-container-lowest font-bold" : "text-on-surface-variant hover:text-primary"}`}
             >
               {m === "committed" ? "Committed" : "Paid"}
             </button>
@@ -176,7 +205,7 @@ function SpendingChart({ categories, onCategory, animate }: { categories: Catego
             : "Nothing paid yet. When you tick a payment as paid, it shows here."}
         </p>
       ) : table ? (
-        <div className="overflow-x-auto"><table className="w-full text-sm min-w-[22rem]">
+        <TableBox label={`${word} by category`}><table className="w-full text-sm min-w-[22rem]">
           <caption className="sr-only">{word} by category</caption>
           <thead className="border-b border-outline-variant/40">
             <tr>
@@ -196,7 +225,7 @@ function SpendingChart({ categories, onCategory, animate }: { categories: Catego
               </tr>
             ))}
           </tbody>
-        </table></div>
+        </table></TableBox>
       ) : (
         <div className="grid gap-6 md:grid-cols-[260px_1fr] items-center">
           <div
@@ -285,7 +314,7 @@ function TargetChart({ categories, onCategory, animate }: { categories: Category
           Give your categories a target, or add expenses, to compare them here.
         </p>
       ) : table ? (
-        <div className="overflow-x-auto"><table className="w-full text-sm min-w-[22rem]">
+        <TableBox label="Target and committed by category"><table className="w-full text-sm min-w-[22rem]">
           <caption className="sr-only">Target and committed by category</caption>
           <thead className="border-b border-outline-variant/40">
             <tr>
@@ -307,7 +336,7 @@ function TargetChart({ categories, onCategory, animate }: { categories: Category
               </tr>
             ))}
           </tbody>
-        </table></div>
+        </table></TableBox>
       ) : (
         <>
           <Legend items={[{ colour: "var(--chart-target)", label: "Target" }, { colour: "var(--chart-1)", label: "Committed" }]} />
@@ -388,7 +417,7 @@ function PaymentsChart({ categories, onCategory, animate }: { categories: Catego
             {pct && ` (${pct})`}; {formatCents(committed - paid)} still to pay.
           </p>
           {table ? (
-            <div className="overflow-x-auto"><table className="w-full text-sm min-w-[22rem]">
+            <TableBox label="Paid and still to pay by category"><table className="w-full text-sm min-w-[22rem]">
               <caption className="sr-only">Paid and still to pay by category</caption>
               <thead className="border-b border-outline-variant/40">
                 <tr>
@@ -410,7 +439,7 @@ function PaymentsChart({ categories, onCategory, animate }: { categories: Catego
                   </tr>
                 ))}
               </tbody>
-            </table></div>
+            </table></TableBox>
           ) : (
             <>
               <Legend items={[{ colour: "var(--chart-paid)", label: "Paid" }, { colour: "var(--chart-owed)", label: "Still to pay" }]} />
@@ -476,7 +505,7 @@ function WhoPaidChart({ categories, payers, animate }: { categories: Category[];
       ) : (
         <>
           {table ? (
-            <div className="overflow-x-auto"><table className="w-full text-sm min-w-[22rem]">
+            <TableBox label="Paid and still to come by who paid"><table className="w-full text-sm min-w-[22rem]">
               <caption className="sr-only">Paid and still to come by who paid</caption>
               <thead className="border-b border-outline-variant/40">
                 <tr>
@@ -496,7 +525,7 @@ function WhoPaidChart({ categories, payers, animate }: { categories: Category[];
                   </tr>
                 ))}
               </tbody>
-            </table></div>
+            </table></TableBox>
           ) : (
             <>
               <Legend items={[{ colour: "var(--chart-paid)", label: "Paid" }, { colour: "var(--chart-owed)", label: "Still to come" }]} />

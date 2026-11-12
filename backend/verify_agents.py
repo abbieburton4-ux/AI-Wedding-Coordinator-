@@ -736,6 +736,36 @@ async def run_async_verification():
             log = (await split_logs())[0]
             assert "$" not in json.dumps(log.output_payload), "no price reaches the log"
             print("   * Prices in the model's prose are removed; percentages and counts kept")
+            assert out["reasons_removed"] == len(priced) + 1, "the screen is told how many"
+
+            print("\nTEST 10c: Budget Splitter strips bare-number prices (B43)...")
+            bare = ["Around 12,000 for the venue.", "Allow 1.5 million overall.",
+                    "Roughly twelve thousand dollars.", "Plan on 8000 here.",
+                    "About 2.5m in total.", "Expect 12.000 for this.",
+                    "A few thousand on top.", "Fifty dollars a head.",
+                    "Around 12 000 for the venue.", "Allow euro 500 here.",
+                    "Fifteen hundred on flowers."]
+            clean = ["Usually the largest share, around 40%.", "Scales with 150 guests.",
+                     "About 12.5% of the total."]
+            names = ["venue", "catering", "florals", "music", "cake", "transport", "dj",
+                     "officiant", "photography", "videography", "stationery", "hair_makeup",
+                     "other", "Chuppah flowers"]
+            share = 100 / len(names)
+            lines = [{"category": c, "percent": share, "rationale": r}
+                     for c, r in zip(names, bare + clean)]
+            body = json.dumps({"lines": lines, "rationale_summary": "A first draft."})
+
+            async def _bare(*args, **kwargs):
+                return MockResponse(body, prompt_tokens=1, output_tokens=1)
+            mock_models.generate_content = _bare
+            with patch("app.agents.budget_split.get_client", return_value=mock_client):
+                out = await approved(run_budget_splitter, db, "wedding_intake_test", **split_kwargs)
+            assert out.get("status") != "blocked", out
+            reasons = [line["rationale"] for line in out["lines"]]
+            assert reasons == [""] * len(bare) + clean, reasons
+            assert out["rationale_summary"] == "A first draft."
+            assert out["reasons_removed"] == len(bare)
+            print("   * Bare amounts, thousands and millions removed; percentages and counts kept")
 
             print("\nTEST 11: Running Budget Splitter (No Usage Reported)...")
             mock_models.generate_content = split_reply(

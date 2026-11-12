@@ -1,9 +1,15 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { FoldChevron, scrollToElement, useRememberedFolds, type Folds as BaseFolds } from "../folds";
 
+/**
+ * On a phone, an invisible margin round a small text button makes it about 44px to tap,
+ * without moving anything (B78). Hidden from the sm breakpoint up.
+ */
+export const tapArea = "relative before:absolute before:-inset-x-1 before:-inset-y-3 sm:before:hidden";
+
 // The same look as parts.tsx's linkButton; not imported, since parts.tsx imports this file.
 const linkButton =
-  "text-sm text-on-surface-variant hover:text-primary underline-offset-4 hover:underline disabled:opacity-60";
+  `text-sm text-on-surface-variant hover:text-primary underline-offset-4 hover:underline disabled:opacity-60 ${tapArea}`;
 
 /**
  * The Budget screen's sections (PD-015 steps 3 and 4): a jump-to bar at the top and
@@ -85,7 +91,7 @@ export function SectionHeading({
         aria-expanded={!isFolded}
         aria-controls={bodyId(section)}
         onClick={() => folds.toggle(section)}
-        className="inline-flex items-center gap-2 text-left hover:text-primary rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+        className="inline-flex items-center gap-2 text-left hover:text-primary rounded-md min-h-11 sm:min-h-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
       >
         {children}
         <FoldChevron folded={isFolded} />
@@ -161,7 +167,7 @@ export function JumpBar({ present }: { present: SectionKey[] }) {
                   setCurrent(s.key);
                   folds.jumpTo(s.key);
                 }}
-                className={`block whitespace-nowrap rounded-full border px-4 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+                className={`block whitespace-nowrap rounded-full border px-4 py-2.5 sm:py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
                   current === s.key
                     ? "bg-primary text-on-primary border-primary"
                     : "border-outline-variant/50 text-on-surface hover:border-primary"

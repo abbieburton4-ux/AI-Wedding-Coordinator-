@@ -27,14 +27,28 @@ AGENT_ID = "budget_splitter"
 # the exact total. Further off than this means the model didn't produce a real split.
 SHARE_TOLERANCE_BP = 100  # basis points (1%)
 
-# Money amounts in the model's prose: a currency sign or code next to digits, or "15k".
+_NUMBER_WORD = (
+    r"(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen"
+    r"|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty"
+    r"|seventy|eighty|ninety|hundred|a\s+few|several)"
+)
+
+# Money amounts in the model's prose: a currency sign, code or word next to digits,
+# "15k", "1.5m", a number with thousands separators ("12,000", "12 000") or of four or
+# more digits, any "thousand" or "million", "fifteen hundred", and a number word before
+# a currency ("twelve dollars"). It errs on the safe side: a year ("2027") also counts.
 # Percentages and plain counts ("40%", "150 guests") are fine (rule 2: no invented prices).
 PRICE_TEXT = re.compile(
     r"[$€£¥]\s*\d"
     r"|\d\s*[$€£¥]"
-    r"|\b(?:usd|eur|gbp|cad|aud)\s*\d"
+    r"|\b(?:usd|eur|gbp|cad|aud|dollars?|euros?|pounds?)\s*\d"
     r"|\d[\d,.]*\s*(?:usd|eur|gbp|cad|aud|dollars?|euros?|pounds?|bucks|grand)\b"
-    r"|\b\d+(?:[.,]\d+)?\s?k\b",
+    r"|\b\d+(?:[.,]\d+)?\s?(?:k|m|mn|bn)\b"
+    r"|\b\d{1,3}(?:[,. \u00a0]\d{3})+\b"
+    r"|\b\d{4,}\b"
+    r"|\b(?:thousand|million|billion)s?\b"
+    rf"|\b{_NUMBER_WORD}[\s-]+hundred\b"
+    rf"|\b{_NUMBER_WORD}[\s-]+(?:dollars?|euros?|pounds?|bucks|grand)\b",
     re.IGNORECASE,
 )
 
@@ -223,4 +237,6 @@ async def run_budget_splitter(
     }
     if warnings:
         result["warnings"] = warnings
+        # Only a count reaches the couple: the screen says some reasons were left out.
+        result["reasons_removed"] = len(warnings)
     return done(result)
