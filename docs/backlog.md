@@ -11,22 +11,21 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-12 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B76** — more detail on each expense: type, due date, who paid (dropdown), one estimate-or-quote box, actual cost later, comments; and a "who paid" chart (PD-016, ratified). `in review` (#89; Publish will show additions only: one new table, one optional column)
-2. **B19** — guest planning: list, food, seating (must-have 3), after the budget enhancements. `needs-owner: guest-planning scope PD, to be proposed`
-3. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
-4. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
-5. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-6. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-7. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
-8. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
-9. **B34** — database-level guard against the same email being added twice. `ready`
-10. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
-11. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
-12. **B8** — record missing token counts as empty, not 0. `ready`
-13. **B17** — stop tracking the test database files. `ready`
-14. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
-15. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
-16. **B77** — an older test fails by chance (looks for "555" among random IDs). `ready`
+1. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
+2. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
+3. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
+4. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+5. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
+6. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
+7. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+8. **B34** — database-level guard against the same email being added twice. `ready`
+9. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+10. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
+11. **B8** — record missing token counts as empty, not 0. `ready`
+12. **B17** — stop tracking the test database files. `ready`
+13. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
+14. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
+15. **B77** — an older test fails by chance (looks for "555" among random IDs). `ready`
 
 ## Open
 
@@ -62,7 +61,6 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B58 — The RUNBOOK backup step doesn't work on Replit.** Found while writing the B53 steps (2026-11-09): the RUNBOOK's checklist-import backup uses `SYNC_DATABASE_URL`, which Replit's Shell doesn't set; there `DATABASE_URL` works, and the Shell always reaches the development database, not the published app's production one. *Fix:* update RUNBOOK for Replit. *Also for B14:* when the app is published, Replit offers to copy development data into production; that is when the imported checklist would carry over, and the publishing plan should cover it. If the wedding is already in production, the Shell can't reach it without pasting a secret, so a safe import route is needed first. *Depends on:* nothing. *#58 (B59):* the backup command now works in Replit's Shell; the publishing note remains.
 
-- **B76 — More detail on each expense, and a "who paid" chart.** Owner, 2026-11-12: "when adding an expense, we need do include additional information. type: deposit, payment. line item name. due date. who paid (dropdown …), estimated/quoted can be combined. actual costs to be updated later. comments (optional). also add a graph for who paid". Today the Add expense form asks only for a name, an estimate and a quote; type, due date and comments live on the payments and edit forms, and nothing records who paid. *Fix:* PD-016. Small database change (who paid on each payment, and the couple's list of payers, kept in the app, not in git: rule 3). *Depends on:* PD-016 (ratified 2026-11-12).
 - **B77 — An older test fails by chance.** Found while building B76 (#89): a check looks for the text "555" in output that is full of random IDs, so now and then a random ID contains "555" and the run fails. The test was left as it is (rule 8). *Fix:* make the check look for the number where it's meant to be, not anywhere in the output. *Depends on:* nothing; small.
 - **B72 — White text on the gold buttons is hard to read.** Found in #78 (B68) by the accessibility review: the app's primary gold buttons with white text fall below the contrast standard. Affects the whole app, not just the budget. *Fix:* darken the button colour or use dark text, in the theme tokens. *Depends on:* nothing; small.
 
@@ -103,6 +101,7 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-12 | **B76** — Add expense takes type, payment amount, due date, who paid and comments in one step; one estimate-or-quote box; "Actual cost"; a "People who pay" list kept in the app; who paid on every payment; a "Who paid" chart; payer in export and print (PD-016). Publish adds one table and one optional column | #89 |
 | 2026-11-12 | **B70** — a "DROP means Cancel" warning at the top of the Replit publish steps; the run-script and `db_status.py` checks already existed | #87 |
 | 2026-11-10 | **B75** — fold and unfold the seven Vendors sections, Expand all / Collapse all, remembered per device (PD-015 follow-up). No database change | #85 |
 | 2026-11-10 | **B74** — Budget page (PD-015): Food & Drink suggested category (Venue & Catering becomes Venue; one-click "Rename to Venue"), Add expense on every category and at the top, sticky jump bar, fold and unfold every section. No database change | #83 |
