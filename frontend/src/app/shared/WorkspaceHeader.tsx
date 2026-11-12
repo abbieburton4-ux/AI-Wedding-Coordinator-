@@ -116,7 +116,7 @@ export function WorkspaceHeader({
           <input
             type="text"
             placeholder={searchPlaceholder}
-            className="bg-transparent border-none focus:ring-0 focus:outline-none text-body-md w-full placeholder:text-on-surface-variant/60 p-0 text-on-surface"
+            className="bg-transparent border-none focus:ring-0 focus:outline-none text-body-md w-full placeholder:text-on-surface-variant/80 p-0 text-on-surface"
           />
         </div>
         <button type="button" aria-label="Notifications" className="relative text-on-surface-variant hover:text-on-surface transition-colors">

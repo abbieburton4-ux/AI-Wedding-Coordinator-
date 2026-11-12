@@ -28,7 +28,10 @@
 
   /* Beige block background */
   --muted: #F7F2EB;
-  --muted-foreground: #8A8580;
+  /* Grey for secondary text (B87): #8A8580 was 3.5:1 on this ivory, this deeper
+     grey of the same hue is 5.5:1 (5.1:1 on the beige block, 4.8:1 on blush).
+     The chart's "Other" slice keeps #8A8580; it's a fill, not text. */
+  --muted-foreground: #6B6661;
 
   --accent: #F2ECE6;
   --accent-foreground: #22201E;
@@ -179,6 +182,13 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+
+  /* Without this, placeholders are half the input's text colour (about 3:1).
+     The grey above is 5:1 or more on every input background, still well
+     short of typed text (16:1), so a hint never reads as an answer (B87). */
+  ::placeholder {
+    color: var(--muted-foreground);
   }
 
   body {

@@ -26,7 +26,7 @@ const GUESTS: Guest[] = [
 const STATS = [
   { label: "Attending", value: 142, icon: "check_circle", valueClass: "text-primary-text", iconOpacity: "opacity-10 group-hover:opacity-20", iconClass: "text-primary-text" },
   { label: "Pending", value: 28, icon: "hourglass_empty", valueClass: "text-secondary", iconOpacity: "opacity-10 group-hover:opacity-20", iconClass: "text-secondary" },
-  { label: "Declined", value: 15, icon: "cancel", valueClass: "text-on-surface-variant/60", iconOpacity: "opacity-5 group-hover:opacity-10", iconClass: "text-on-surface-variant" },
+  { label: "Declined", value: 15, icon: "cancel", valueClass: "text-on-surface-variant/80", iconOpacity: "opacity-5 group-hover:opacity-10", iconClass: "text-on-surface-variant" },
 ];
 
 const FILTERS = ["All Guests", "Needs Seat", "Dietary"] as const;
@@ -118,7 +118,7 @@ export function Guests() {
         <div className="xl:col-span-2 space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-wedding-white p-4 rounded-[2rem] shadow-[0px_4px_20px_rgba(142,103,73,0.03)] border border-outline/10">
             <div className="relative w-full sm:w-64">
-              <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50" />
+              <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/80" />
               <input
                 value={query}
                 onChange={(e) => {
@@ -126,7 +126,7 @@ export function Guests() {
                   setPage(0);
                 }}
                 placeholder="Search guests..."
-                className="w-full bg-surface-container-low border-none rounded-full py-2 pl-10 pr-4 font-body-md text-body-md text-on-surface focus:ring-1 focus:ring-primary/30 outline-none placeholder:text-on-surface-variant/50"
+                className="w-full bg-surface-container-low border-none rounded-full py-2 pl-10 pr-4 font-body-md text-body-md text-on-surface focus:ring-1 focus:ring-primary/30 outline-none placeholder:text-on-surface-variant/80"
                 type="text"
               />
             </div>
@@ -168,7 +168,7 @@ export function Guests() {
                     key={g.id}
                     className={cn(
                       "grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 p-4 items-center hover:bg-surface-container-lowest transition-colors cursor-pointer group",
-                      declined && "opacity-60",
+                      declined && "opacity-85",
                     )}
                   >
                     <div className="col-span-1 md:col-span-4 flex items-center gap-4 md:pl-4">
@@ -204,7 +204,7 @@ export function Guests() {
                           {g.head && " (Head)"}
                         </span>
                       ) : declined ? (
-                        <span className="font-body-md text-body-md text-on-surface-variant/50">—</span>
+                        <span className="font-body-md text-body-md text-on-surface-variant">—</span>
                       ) : (
                         <span className="font-body-md text-body-md text-error flex items-center">
                           <Icon name="warning" size={14} className="mr-1" /> Unassigned
@@ -220,7 +220,7 @@ export function Guests() {
                           </span>
                         ))
                       ) : (
-                        <span className="text-on-surface-variant/50 font-body-md text-body-md">—</span>
+                        <span className={cn("font-body-md text-body-md", declined ? "text-on-surface-variant" : "text-on-surface-variant/80")}>—</span>
                       )}
                     </div>
                   </div>
@@ -304,7 +304,7 @@ export function Guests() {
                   <Icon name="auto_fix_high" />
                   Generate Seating Plan
                 </Link>
-                <p className="text-center font-body-md text-[11px] text-on-surface-variant/60 mt-3">
+                <p className="text-center font-body-md text-[11px] text-on-surface-variant/80 mt-3">
                   This will create a draft. Your current layout will be saved as a version.
                 </p>
               </div>

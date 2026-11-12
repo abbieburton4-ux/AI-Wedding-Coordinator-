@@ -24,10 +24,10 @@ const CEREMONY_TYPES = [
 ];
 
 const inputClass =
-  "w-full rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-on-surface placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-none transition-colors";
+  "w-full rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-3 text-on-surface placeholder:text-on-surface-variant/80 focus:border-primary focus:outline-none transition-colors";
 const labelClass = "block font-button-text text-button-text text-on-surface-variant mb-2";
 const hintClass = "mt-2 text-sm text-on-surface-variant";
-const optional = <span className="text-on-surface-variant/60">(optional)</span>;
+const optional = <span className="text-on-surface-variant/80">(optional)</span>;
 
 export function Intake() {
   const { request, loading, error } = useApi();
