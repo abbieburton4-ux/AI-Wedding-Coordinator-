@@ -181,6 +181,13 @@ publish should list **no** database changes.
   screen hasn't been seen for it.
 
 **When you publish** (plain steps for the owner):
+
+> **Never approve a line that says DROP.** On 2026-11-09 Publish listed
+> `DROP TABLE "couple_vendors" CASCADE;` and `DROP TABLE "couple_vendor_quotes"
+> CASCADE;` because the workspace database was behind the code (B70). Approving
+> would have deleted the couple's vendors. If you see any **DROP**, choose
+> **Cancel**, then do step 2 and step 3 again before trying once more.
+
 1. In the workspace, **Pull** the latest code.
 2. If the app is running, press **Stop**. Then press **Run** and wait for the app to
    load. The console shows `Database is up to date (migration ...)`. If it says the
@@ -198,7 +205,7 @@ publish should list **no** database changes.
      required column, index or constraint; that's expected when the list says so.
      Choose **Approve and publish**. The published app then finishes the job when
      it starts.
-   - If any line says **DROP**, first close the publish screen: the development
+   - If any line says **DROP**, choose **Cancel** (don't approve), then: the development
      database may be behind. In the Shell, type `cd backend && alembic current`
      to see where it is, then `python db_status.py upgrade` (the same as
      `alembic upgrade head`, with the run script's safety checks), and run the
