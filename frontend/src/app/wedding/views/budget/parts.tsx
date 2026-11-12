@@ -5,6 +5,7 @@ import {
   safeHttpUrl,
 } from "./money";
 import { venueRename } from "./expenses";
+import { PERCENT_HINT, parsePercent, percentOf, percentText, tipBase } from "./tips";
 import { costBox, expenseCost, wouldGoOver } from "./forecast";
 import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId, tapArea, useFolds } from "./sections";
 import { Bar, Chip, TargetChip, targetTone } from "./status";
@@ -337,7 +338,7 @@ export function CategoryCard({
       {open && (
         <div className="mt-4 space-y-4">
           {active.map((cost) => (
-            <CostBlock key={cost.id} base={base} cost={cost} limits={limits} vendors={vendors} payers={payers} canEdit={canEdit} run={run} request={request} busy={busy} focus={focusFor(cost)} onOpened={onOpened} />
+            <CostBlock key={cost.id} base={base} cost={cost} siblings={category.costs} categoryName={category.name} limits={limits} vendors={vendors} payers={payers} canEdit={canEdit} run={run} request={request} busy={busy} focus={focusFor(cost)} onOpened={onOpened} />
           ))}
           {active.length === 0 && (
             <p className="text-sm text-on-surface-variant">No expenses yet.</p>
@@ -348,7 +349,7 @@ export function CategoryCard({
                 {showArchived ? "Hide archived" : `Show archived (${archived.length}), not counted in totals`}
               </button>
               {showArchived && archived.map((cost) => (
-                <CostBlock key={cost.id} base={base} cost={cost} limits={limits} vendors={vendors} payers={payers} canEdit={canEdit} run={run} request={request} busy={busy} focus={focusFor(cost)} onOpened={onOpened} />
+                <CostBlock key={cost.id} base={base} cost={cost} siblings={category.costs} categoryName={category.name} limits={limits} vendors={vendors} payers={payers} canEdit={canEdit} run={run} request={request} busy={busy} focus={focusFor(cost)} onOpened={onOpened} />
               ))}
             </>
           )}
@@ -568,6 +569,7 @@ function VendorSelect({ id, vendors, value, onChange }: { id: string; vendors: V
 
 /** "Actual cost $12,000", "Estimate or quote $11,000" or "No cost recorded". */
 function costLine(cost: Cost): string {
+  if (cost.tip_state) return tipWorking(cost);
   if (cost.final_cents !== null) return `Actual cost ${formatCents(cost.final_cents)}`;
   const box = costBox(cost.quoted_cents, cost.estimated_cents);
   if (box.cents !== null) return `Estimate or quote ${formatCents(box.cents)}`;
@@ -619,9 +621,12 @@ function NoPayersHint() {
 export const PAYERS_INPUT_ID = "new-payer-name";
 
 function CostBlock({
-  base, cost, limits, vendors, payers, canEdit, run, request, busy, focus, onOpened,
+  base, cost, siblings, categoryName, limits, vendors, payers, canEdit, run, request, busy, focus, onOpened,
 }: {
-  base: string; cost: Cost; limits: Limits; vendors: VendorRef[]; payers: Payer[]; canEdit: boolean; run: Run; request: Req; busy: boolean;
+  base: string; cost: Cost;
+  /** Every expense in its category, where its tips are too. */
+  siblings: Cost[]; categoryName: string;
+  limits: Limits; vendors: VendorRef[]; payers: Payer[]; canEdit: boolean; run: Run; request: Req; busy: boolean;
   /** Non-zero when the list of all expenses asked to open this one; a new number each time. */
   focus: number;
   onOpened: () => void;
@@ -629,7 +634,16 @@ function CostBlock({
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [confirmCopy, setConfirmCopy] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [addingTip, setAddingTip] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const isTip = cost.tip_state !== null;
+  const tips = siblings.filter((c) => cost.tip_ids.includes(c.id));
+  const activeTips = tips.filter((c) => !c.archived);
+  const archive = (choice?: "remove" | "keep") =>
+    run(() => request(`${base}/costs/${cost.id}${choice ? `?tips=${choice}` : ""}`, json("PATCH", { archived: !cost.archived })));
+  const remove = (choice?: "remove" | "keep") =>
+    run(() => request(`${base}/costs/${cost.id}${choice ? `?tips=${choice}` : ""}`, json("DELETE")));
 
   useEffect(() => {
     if (!focus || !box.current) return;
@@ -648,12 +662,17 @@ function CostBlock({
       className={`border rounded-[1.5rem] p-4 scroll-mt-24 focus:outline-none focus:ring-2 focus:ring-primary/40 ${cost.archived ? "border-dashed border-outline-variant/40 bg-surface-container-low/40" : "border-outline-variant/30"}`}
     >
       {editing ? (
-        <CostEditForm base={base} cost={cost} limits={limits} vendors={vendors} run={run} request={request} busy={busy} onDone={() => setEditing(false)} />
+        isTip ? (
+          <TipEditForm base={base} cost={cost} run={run} request={request} busy={busy} onDone={() => setEditing(false)} />
+        ) : (
+          <CostEditForm base={base} cost={cost} limits={limits} vendors={vendors} run={run} request={request} busy={busy} onDone={() => setEditing(false)} />
+        )
       ) : (
         <div className="mb-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="flex flex-wrap items-center gap-2 text-on-surface">
               <span className="font-button-text">{cost.vendor_name}</span>
+              {isTip && <TipChip />}
               {counted && <StatusBadge status={cost.status} />}
               {cost.archived && (
                 <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-surface-container-high text-on-surface-variant">
@@ -662,14 +681,26 @@ function CostBlock({
               )}
             </p>
             {canEdit && (confirm ? (
-              <Confirm busy={busy} text={`Remove ${cost.vendor_name} and its payments?`}
-                onYes={() => run(() => request(`${base}/costs/${cost.id}`, json("DELETE")))}
-                onNo={() => setConfirm(false)} />
+              tips.length > 0 ? (
+                <TipsQuestion cost={cost} tips={tips} archiving={false} busy={busy} onChoose={remove} onNo={() => setConfirm(false)} />
+              ) : (
+                <Confirm busy={busy} text={`Remove ${cost.vendor_name} and its payments?`}
+                  onYes={() => remove()}
+                  onNo={() => setConfirm(false)} />
+              )
+            ) : confirmArchive ? (
+              <TipsQuestion
+                cost={cost} tips={activeTips} archiving busy={busy}
+                onChoose={async (choice) => { if (await archive(choice)) setConfirmArchive(false); }}
+                onNo={() => setConfirmArchive(false)}
+              />
             ) : confirmCopy ? (
               <Confirm
                 busy={busy}
                 yesLabel="Yes, make a copy"
-                text={`Make a copy of ${cost.vendor_name}? It copies the costs, payment method, notes, link and vendor. It starts with no payments and no contract, and counts in your totals straight away.`}
+                text={isTip
+                  ? `Make a copy of ${cost.vendor_name}? It's another tip for ${cost.tip_for_name ?? "the same expense"}, with the same percentage or amount and notes. It starts with no payments and counts in your totals straight away.`
+                  : `Make a copy of ${cost.vendor_name}? It copies the costs, payment method, notes, link and vendor. It starts with no payments and no contract, and counts in your totals straight away.`}
                 onYes={async () => {
                   const ok = await run(() => request(`${base}/costs/${cost.id}/duplicate`, json("POST")));
                   if (ok) setConfirmCopy(false);
@@ -680,10 +711,18 @@ function CostBlock({
               <span className="flex flex-wrap gap-4">
                 <button type="button" onClick={() => setEditing(true)} className={linkButton}>Edit</button>
                 <button type="button" onClick={() => setConfirmCopy(true)} className={linkButton}>Duplicate</button>
+                {!isTip && !cost.archived && (
+                  <button
+                    type="button" onClick={() => setAddingTip((a) => !a)} aria-expanded={addingTip}
+                    className={linkButton}
+                  >
+                    Add tip<span className="sr-only"> for {cost.vendor_name}</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => run(() => request(`${base}/costs/${cost.id}`, json("PATCH", { archived: !cost.archived })))}
+                  onClick={() => (!cost.archived && activeTips.length > 0 ? setConfirmArchive(true) : archive())}
                   className={linkButton}
                 >
                   {cost.archived ? "Restore" : "Archive"}
@@ -692,12 +731,49 @@ function CostBlock({
               </span>
             ))}
           </div>
+          {isTip && (
+            <p className="text-xs text-on-surface-variant mt-1">
+              {cost.tip_for_name ? `Tip for ${cost.tip_for_name}` : "Tip"}
+              {cost.tip_state === "following" && `, changes with ${cost.tip_for_name ? `${cost.tip_for_name}'s` : "its"} cost`}
+            </p>
+          )}
           <p className="text-on-surface-variant text-sm mt-1">
             {costLine(cost)}
             {" · "}Paid {formatCents(cost.paid_cents)}
             {" · "}Still to pay {formatCents(cost.remaining_cents)}
             {cost.overpaid_cents > 0 && <>{" · "}{overpaidNote(cost.overpaid_cents)}</>}
           </p>
+          {cost.tip_state === "frozen" && (
+            <p className="flex items-start gap-1 text-sm text-on-surface mt-1">
+              <Icon name="lock" size={16} className="mt-0.5" />
+              A payment on this tip is ticked paid, so it stays at {formatCents(cost.committed_cents)} even if{" "}
+              {cost.tip_for_name ?? "the expense"}'s cost changes. Untick it to have the tip follow the cost again.
+            </p>
+          )}
+          {cost.tip_state === "waiting" && (
+            <p className="text-sm text-on-surface mt-1">
+              Waiting for a cost: once {cost.tip_for_name ?? "the expense"} has an estimate, quote or actual cost, this
+              tip works itself out. Until then it counts as $0.
+            </p>
+          )}
+          {tips.length > 0 && (
+            <p className="text-xs text-on-surface-variant mt-1">
+              {tips.length === 1 ? "Has a tip" : `Has ${tips.length} tips`}:{" "}
+              {tips.map((t) => `${t.vendor_name} ${formatCents(t.committed_cents)}${t.archived ? " (archived, not counted)" : ""}`).join(", ")}
+            </p>
+          )}
+          {canEdit && !cost.archived && tips.length > activeTips.length && (
+            <button
+              type="button" disabled={busy} className={`${linkButton} mt-1`}
+              onClick={() => run(async () => {
+                for (const t of tips.filter((x) => x.archived)) {
+                  await request(`${base}/costs/${t.id}`, json("PATCH", { archived: false }));
+                }
+              })}
+            >
+              Restore its archived {tips.length - activeTips.length === 1 ? "tip" : "tips"} too
+            </button>
+          )}
           {cost.refundable_cents > 0 && (
             <p className="text-on-surface-variant text-sm">
               Refundable deposit {formatCents(cost.refundable_cents)}, not part of the cost
@@ -705,7 +781,7 @@ function CostBlock({
             </p>
           )}
           <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-on-surface-variant mt-1">
-            <span>{CONTRACT_LABEL[cost.contract_status]}</span>
+            {!isTip && <span>{CONTRACT_LABEL[cost.contract_status]}</span>}
             {cost.payment_method && <span>Paying by {cost.payment_method}</span>}
             {cost.vendor && <span>Linked to {cost.vendor.name} on your Vendors page</span>}
             <OpenLink url={cost.link_url} label="Open link" />
@@ -721,6 +797,15 @@ function CostBlock({
         </div>
       )}
 
+      {canEdit && addingTip && !isTip && !cost.archived && (
+        <div className="border-t border-outline-variant/20 pt-3 mb-3">
+          <AddTipForm
+            base={base} targets={[{ cost, categoryName }]} fixedId={cost.id} payers={payers}
+            run={run} request={request} busy={busy} idPrefix={`tip-${cost.id}`} onDone={() => setAddingTip(false)}
+          />
+        </div>
+      )}
+
       {cost.payments.length > 0 && (
         <ul className="divide-y divide-outline-variant/20 mb-2">
           {cost.payments.map((p) => (
@@ -730,6 +815,295 @@ function CostBlock({
       )}
       {canEdit && !cost.archived && <AddPaymentForm base={base} cost={cost} payers={payers} run={run} request={request} busy={busy} />}
     </div>
+  );
+}
+
+// ---- Tips (PD-017) ------------------------------------------------------------------
+
+function TipChip() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-surface-container-high text-on-surface">
+      <Icon name="volunteer_activism" size={14} /> Tip
+    </span>
+  );
+}
+
+/** "20% of $8,000 = $1,600", or what a tip's amount is doing instead. */
+export function tipWorking(cost: Cost): string {
+  const pct = `${percentText(cost.tip_basis_points)}%`;
+  switch (cost.tip_state) {
+    case "following":
+      return `${pct} of ${formatCents(cost.tip_base_cents ?? 0)} = ${formatCents(cost.committed_cents)}`;
+    case "frozen":
+      return `${pct}, fixed at ${formatCents(cost.committed_cents)}`;
+    case "waiting":
+      return `${pct} of a cost not entered yet = $0 for now`;
+    default:
+      return `Tip of ${formatCents(cost.committed_cents)}`;
+  }
+}
+
+/**
+ * Removing or archiving an expense that has tips (PD-017 call c): remove the tips too,
+ * or keep them as plain lines. Says how many payments would go, so none is deleted
+ * without the couple seeing it.
+ */
+function TipsQuestion({
+  cost, tips, archiving, busy, onChoose, onNo,
+}: {
+  cost: Cost; tips: Cost[]; archiving: boolean; busy: boolean;
+  onChoose: (choice: "remove" | "keep") => void; onNo: () => void;
+}) {
+  const one = tips.length === 1;
+  const them = one ? "it" : "them";
+  const payments = tips.reduce((n, t) => n + t.payments.length, 0);
+  const paid = tips.reduce((n, t) => n + t.payments.filter((p) => p.paid).length, 0);
+  const names = tips.map((t) => t.vendor_name).join(", ");
+  const pays = payments ? ` with ${plural(payments, "payment")}${paid ? ` (${paid} ticked paid)` : ""}` : "";
+  const text = archiving
+    ? `${cost.vendor_name} has ${plural(tips.length, "tip")} (${names}). Archive ${them} too, or keep ${them} in your totals as ${one ? "a plain line" : "plain lines"}?`
+    : `Remove ${cost.vendor_name} and its payments? It has ${plural(tips.length, "tip")} (${names})${pays}.`;
+  const btn = `font-bold underline-offset-4 hover:underline text-left ${tapArea}`;
+  return (
+    <span role="group" aria-label={archiving ? "Archive with tips" : "Remove with tips"} className="flex flex-wrap items-center gap-x-4 gap-y-3 text-sm w-full">
+      <span className="w-full">{text}</span>
+      <button type="button" disabled={busy} onClick={() => onChoose("remove")} className={`${btn} ${archiving ? "text-on-surface" : "text-error"}`}>
+        {archiving
+          ? `Archive ${one ? "the tip" : "the tips"} too`
+          : `Remove ${one ? "the tip" : "the tips"}${payments ? ` and ${plural(payments, "payment")}` : ""} too`}
+      </button>
+      <button type="button" disabled={busy} onClick={() => onChoose("keep")} className={`${btn} text-primary`}>
+        Keep {one ? "the tip as a plain line" : "the tips as plain lines"}
+      </button>
+      <button type="button" disabled={busy} onClick={onNo} className={linkButton}>Cancel</button>
+      <span className="w-full text-xs text-on-surface-variant">
+        A kept tip stays in your totals at the amount it is now, with its payments, but is no longer linked
+        {archiving ? ` to ${cost.vendor_name}` : ""} or worked out from a percentage.
+      </span>
+    </span>
+  );
+}
+
+type TipMode = "percent" | "amount";
+
+/** "A percentage" or "An amount in dollars": one or the other, never both. */
+function TipModePicker({ name, mode, onChange }: { name: string; mode: TipMode; onChange: (m: TipMode) => void }) {
+  const option = (value: TipMode, label: string) => (
+    <label className="flex items-center gap-2 text-sm cursor-pointer min-h-11 sm:min-h-0">
+      <input type="radio" name={name} value={value} checked={mode === value} onChange={() => onChange(value)} className="h-4 w-4 accent-primary" />
+      {label}
+    </label>
+  );
+  return (
+    <fieldset className="w-full">
+      <legend className="text-xs text-on-surface-variant mb-1">Tip as</legend>
+      <span className="flex flex-wrap gap-x-6">
+        {option("percent", "A percentage")}
+        {option("amount", "An amount in dollars")}
+      </span>
+    </fieldset>
+  );
+}
+
+function PercentInput({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <span className={fieldClass}>
+      <label htmlFor={id} className="text-xs text-on-surface-variant">Percentage</label>
+      <span className="relative">
+        <input
+          id={id} inputMode="decimal" autoComplete="off" required placeholder="20" value={value}
+          onChange={(e) => onChange(e.target.value)} className={`${inputBase} pr-8 w-full sm:w-28`}
+        />
+        <span aria-hidden className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-on-surface-variant">%</span>
+      </span>
+    </span>
+  );
+}
+
+/** What a typed tip comes to, shown before saving. */
+function tipPreview(target: Cost | undefined, mode: TipMode, percent: string, amount: string): string | null {
+  if (!target) return null;
+  if (mode === "amount") {
+    const cents = parseDollars(amount);
+    return typeof cents === "number" && cents > 0 ? `A tip of ${formatCents(cents)} for ${target.vendor_name}.` : null;
+  }
+  const bp = parsePercent(percent);
+  if (typeof bp !== "number") return null;
+  const base = tipBase(target);
+  if (base === null) {
+    return `${target.vendor_name} has no cost yet, so this tip will wait for one and count as $0 until then.`;
+  }
+  return `${percentText(bp)}% of ${formatCents(base)} = ${formatCents(percentOf(base, bp))}`;
+}
+
+/** Reads the percentage or amount box; null (with an error set) if it isn't valid. */
+function tipValue(mode: TipMode, percent: string, amount: string, setError: (e: string | null) => void) {
+  if (mode === "percent") {
+    const bp = parsePercent(percent);
+    if (typeof bp !== "number") { setError(PERCENT_HINT); return null; }
+    return { percent_basis_points: bp };
+  }
+  const cents = amountOrError(amount, setError);
+  if (cents === undefined) return null;
+  if (!cents) { setError("Please enter how much the tip is."); return null; }
+  return { amount_cents: cents };
+}
+
+/**
+ * Adding a tip (PD-017): which expense it's for (unless already chosen), a percentage
+ * or a dollar amount, and optionally a due date, who pays and comments, as the Add
+ * expense form has. It saves as its own line, "Tip: <expense>", in the same category.
+ * A due date or who pays adds one payment for the tip, not ticked as paid (rule 4).
+ */
+export function AddTipForm({
+  base, targets, fixedId, payers, run, request, busy, idPrefix, onDone,
+}: {
+  base: string;
+  /** The expenses a tip can be for, with their category's name. */
+  targets: { cost: Cost; categoryName: string }[];
+  /** Set when the form opens from one expense, so it doesn't ask which. */
+  fixedId?: string;
+  payers: Payer[]; run: Run; request: Req; busy: boolean; idPrefix: string; onDone: () => void;
+}) {
+  const [picked, setPicked] = useState("");
+  const [mode, setMode] = useState<TipMode>("percent");
+  const [percent, setPercent] = useState("");
+  const [amount, setAmount] = useState("");
+  const [due, setDue] = useState("");
+  const [payer, setPayer] = useState("");
+  const [notes, setNotes] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  // The list can reload while this is open; never send an expense that's gone.
+  const targetId = fixedId ?? (targets.some((t) => t.cost.id === picked) ? picked : targets[0]?.cost.id ?? "");
+  const target = targets.find((t) => t.cost.id === targetId)?.cost;
+  const preview = tipPreview(target, mode, percent, amount);
+  const groups = targets.reduce<{ name: string; items: Cost[] }[]>((acc, t) => {
+    const last = acc[acc.length - 1];
+    if (last && last.name === t.categoryName) last.items.push(t.cost);
+    else acc.push({ name: t.categoryName, items: [t.cost] });
+    return acc;
+  }, []);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!target) { setError("Choose the expense the tip is for."); return; }
+    const value = tipValue(mode, percent, amount, setError);
+    if (!value) return;
+    const payerId = payerOrNull(payers, payer);
+    if (mode === "percent" && tipBase(target) === null && (due || payerId)) {
+      setError(`${target.vendor_name} has no cost yet, so the tip is $0 for now. Leave the due date and who pays empty, or add its cost first.`);
+      return;
+    }
+    const ok = await run(() =>
+      request(`${base}/costs/${target.id}/tips`, json("POST", {
+        ...value, due_on: due || null, payer_id: payerId, notes: notes || null,
+      })),
+    );
+    if (ok) {
+      setPercent(""); setAmount(""); setDue(""); setPayer(""); setNotes("");
+      onDone();
+    }
+  };
+
+  if (targets.length === 0) {
+    return (
+      <p className="text-sm text-on-surface-variant">
+        A tip goes with an expense, like the caterer. Add the expense first, then add its tip.
+      </p>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-wrap items-end gap-3" aria-label={target && fixedId ? `Add a tip for ${target.vendor_name}` : "Add a tip"}>
+      {!fixedId && (
+        <span className={`${fieldClass} sm:min-w-[14rem]`}>
+          <label htmlFor={`${idPrefix}-for`} className="text-xs text-on-surface-variant">Which expense is the tip for?</label>
+          <select id={`${idPrefix}-for`} value={targetId} onChange={(e) => setPicked(e.target.value)} className={inputClass}>
+            {groups.map((g) => (
+              <optgroup key={g.name} label={g.name}>
+                {g.items.map((c) => <option key={c.id} value={c.id}>{c.vendor_name}</option>)}
+              </optgroup>
+            ))}
+          </select>
+        </span>
+      )}
+      <TipModePicker name={`${idPrefix}-mode`} mode={mode} onChange={setMode} />
+      {mode === "percent" ? (
+        <PercentInput id={`${idPrefix}-percent`} value={percent} onChange={setPercent} />
+      ) : (
+        <MoneyInput id={`${idPrefix}-amount`} label="Amount" value={amount} onChange={setAmount} required />
+      )}
+      <span className={fieldClass}>
+        <label htmlFor={`${idPrefix}-due`} className="text-xs text-on-surface-variant">Due date (optional)</label>
+        <input id={`${idPrefix}-due`} type="date" value={due} onChange={(e) => setDue(e.target.value)} className={inputClass} />
+      </span>
+      <PayerSelect id={`${idPrefix}-payer`} payers={payers} value={payer} onChange={setPayer} />
+      {payers.length === 0 && <NoPayersHint />}
+      <NotesInput id={`${idPrefix}-notes`} value={notes} onChange={setNotes} label="Comments (optional)" />
+      {preview && <p aria-live="polite" className="w-full text-sm font-button-text text-on-surface">{preview}</p>}
+      <p className="w-full text-xs text-on-surface-variant">
+        The tip is added as its own line{target ? `, "Tip: ${target.vendor_name}",` : ""} in the same category, and counts in
+        your totals. A percentage tip changes when {target ? `${target.vendor_name}'s` : "the expense's"} cost changes, until
+        a payment on the tip is ticked paid. A tip in dollars stays as you typed it. A due date or who pays adds a payment
+        for the tip, not ticked as paid.
+      </p>
+      <button type="submit" disabled={busy} className={primaryButton}>Add tip</button>
+      <button type="button" onClick={onDone} className={linkButton}>Cancel</button>
+      {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
+    </form>
+  );
+}
+
+/** Editing a tip: switch between a percentage and an amount, change it, or its comments. */
+function TipEditForm({
+  base, cost, run, request, busy, onDone,
+}: { base: string; cost: Cost; run: Run; request: Req; busy: boolean; onDone: () => void }) {
+  const [mode, setMode] = useState<TipMode>(cost.tip_basis_points !== null ? "percent" : "amount");
+  const [percent, setPercent] = useState(percentText(cost.tip_basis_points));
+  const [amount, setAmount] = useState(cost.tip_basis_points === null ? centsToInput(cost.committed_cents) : "");
+  const [notes, setNotes] = useState(cost.notes ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const id = `tip-edit-${cost.id}`;
+  const paid = cost.payments.some((p) => p.paid);
+  const base_cents = cost.tip_base_cents ?? null;
+  const bp = parsePercent(percent);
+  const preview = mode === "percent" && typeof bp === "number" && base_cents !== null && cost.tip_state === "following"
+    ? `${percentText(bp)}% of ${formatCents(base_cents)} = ${formatCents(percentOf(base_cents, bp))}`
+    : null;
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const value = tipValue(mode, percent, amount, setError);
+    if (!value) return;
+    const ok = await run(() => request(`${base}/tips/${cost.id}`, json("PATCH", { ...value, notes: notes || null })));
+    if (ok) onDone();
+  };
+
+  return (
+    <form onSubmit={save} className="flex flex-wrap items-end gap-3 mb-3" aria-label={`Edit ${cost.vendor_name}`}>
+      <p className="w-full text-sm text-on-surface">
+        <span className="font-button-text">{cost.vendor_name}</span>
+        {cost.tip_for_name ? `, a tip for ${cost.tip_for_name}` : ""}
+      </p>
+      <TipModePicker name={`${id}-mode`} mode={mode} onChange={setMode} />
+      {mode === "percent" ? (
+        <PercentInput id={`${id}-percent`} value={percent} onChange={setPercent} />
+      ) : (
+        <MoneyInput id={`${id}-amount`} label="Amount" value={amount} onChange={setAmount} required />
+      )}
+      <NotesInput id={`${id}-notes`} value={notes} onChange={setNotes} label="Comments (optional)" />
+      {preview && <p aria-live="polite" className="w-full text-sm font-button-text text-on-surface">{preview}</p>}
+      {mode === "percent" && paid && (
+        <p className="w-full text-xs text-on-surface-variant">
+          A payment on this tip is ticked paid, so a new percentage is worked out once, now, and then stays fixed.
+        </p>
+      )}
+      <button type="submit" disabled={busy} className={primaryButton}>Save</button>
+      <button type="button" onClick={onDone} className={linkButton}>Cancel</button>
+      {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
+    </form>
   );
 }
 

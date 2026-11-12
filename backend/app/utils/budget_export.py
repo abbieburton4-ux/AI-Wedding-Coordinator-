@@ -65,6 +65,14 @@ def dollars(cents: Optional[int]) -> str:
     return f"{sign}{cents // 100}.{cents % 100:02d}"
 
 
+def percent_text(basis_points: Optional[int]) -> str:
+    """Hundredths of a percent as a plain number (2000 is "20", 1850 is "18.5")."""
+    if basis_points is None:
+        return ""
+    whole, part = divmod(basis_points, 100)
+    return f"{whole}.{part:02d}".rstrip("0") if part else str(whole)
+
+
 def _day(value: Optional[datetime.date]) -> str:
     return value.isoformat() if value else ""
 
@@ -113,6 +121,7 @@ def build_csv(overview, vendors: dict, include_archived: bool = False,
         ("Refundable deposits (USD, not part of the cost)", dollars(t.refundable_cents)),
         ("Refundable deposits paid (USD)", dollars(t.refundable_paid_cents)),
         ("Contributions (USD)", dollars(t.contributions_cents)),
+        ("Tips (USD, already part of committed)", dollars(d.tips_cents)),
         ("Budget status", BUDGET_LABELS.get(d.budget_state, d.budget_state)),
         ("Categories over target", d.categories_over),
         ("Expenses counted", d.expense_count),
@@ -144,7 +153,8 @@ def build_csv(overview, vendors: dict, include_archived: bool = False,
                  *contact_heads, "Estimated (USD)", "Quoted (USD)", "Actual (USD)",
                  "Cost (USD)", "Cost based on", "Paid (USD)", "Still to pay (USD)",
                  "Overpaid (USD)", "Refundable deposits (USD)", "Status", "Next due",
-                 "Contract", "Payment method", "Link", "Notes", "Archived"])
+                 "Contract", "Payment method", "Link", "Notes", "Archived", "Tip for",
+                 "Tip (%)"])
     shown = []
     for cat in overview.categories:
         for cost in cat.costs:
@@ -165,6 +175,7 @@ def build_csv(overview, vendors: dict, include_archived: bool = False,
                 STATUS_LABELS.get(cost.status, cost.status), _day(cost.next_due_on),
                 CONTRACT_LABELS.get(cost.contract_status, cost.contract_status),
                 cost.payment_method, cost.link_url, cost.notes, _yes(cost.archived),
+                cost.tip_for_name, percent_text(cost.tip_basis_points),
             ])
     rows.append([])
 

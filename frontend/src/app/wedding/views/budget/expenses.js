@@ -38,9 +38,10 @@ export function hasUnpaidDue(cost, from, to) {
 
 /**
  * @param {Row[]} rows
- * @param {{ showArchived?: boolean, categoryId?: string, status?: string, vendorId?: string,
+ * @param {{ showArchived?: boolean, categoryId?: string, tips?: string, status?: string, vendorId?: string,
  *   due?: string, from?: string, to?: string, search?: string }} f
  *   vendorId: "" for any, "none" for expenses not linked to a vendor, else a vendor id.
+ *   tips: "" for every line, "only" for tips only (PD-017).
  *   due: "" for any, "7" or "30" for an unpaid payment due from today to that many days
  *   ahead, "range" for one due between from and to.
  * @param {string} today Chicago's date from the API.
@@ -50,6 +51,7 @@ export function filterExpenses(rows, f, today) {
   return rows.filter(({ cost, categoryId }) => {
     if (cost.archived && !f.showArchived) return false;
     if (f.categoryId && categoryId !== f.categoryId) return false;
+    if (f.tips === "only" && !cost.tip_state) return false;
     if (f.status && cost.status !== f.status) return false;
     if (f.vendorId === "none" && cost.vendor) return false;
     if (f.vendorId && f.vendorId !== "none" && cost.vendor?.id !== f.vendorId) return false;

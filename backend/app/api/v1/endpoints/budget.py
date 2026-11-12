@@ -1,5 +1,5 @@
-"""The couple's budget (PD-004, PD-013, PD-016): total, categories, expenses, payments,
-contributions, and the people who pay.
+"""The couple's budget (PD-004, PD-013, PD-016, PD-017): total, categories, expenses,
+tips, payments, contributions, and the people who pay.
 
 Every amount is whole US cents and every sum here is integer arithmetic (rule 4); the
 figures are worked out on read by ``utils/budget_math.py``.
@@ -37,8 +37,8 @@ from app.utils.budget_defaults import (
 from app.utils.budget_export import build_csv as budget_export_csv
 from app.utils.budget_export import filename as export_filename
 from app.utils.budget_math import (
-    CONTINGENCY_NAME, add_up, basis_of, cost_figures, dashboard_figures, is_overdue,
-    target_figures,
+    CONTINGENCY_NAME, add_up, basis_of, counted_cost, dashboard_figures, expense_figures,
+    is_overdue, percent_of, target_figures, tip_cents_now,
 )
 from app.utils.checklist import wedding_today
 
@@ -129,6 +129,31 @@ class CostPatch(BaseModel):
     category_id: Optional[str] = None
 
 
+class TipIn(BaseModel):
+    """A tip on an expense (PD-017): a percentage or a dollar amount, not both.
+
+    ``percent_basis_points`` is hundredths of a percent (2000 is 20%). A due date or
+    who pays adds the tip's first payment, unpaid, for the tip's amount now."""
+    percent_basis_points: Optional[int] = Field(default=None, ge=1, le=10000)
+    amount_cents: Optional[int] = Field(default=None, ge=1, le=MAX_CENTS)
+    due_on: Optional[datetime.date] = None
+    payer_id: Optional[str] = None
+    notes: Optional[str] = Notes()
+
+
+class TipPatch(BaseModel):
+    """Changes a tip's percentage or amount (switching between them), or its notes."""
+    percent_basis_points: Optional[int] = Field(default=None, ge=1, le=10000)
+    amount_cents: Optional[int] = Field(default=None, ge=1, le=MAX_CENTS)
+    notes: Optional[str] = Notes()
+
+
+# What to do with an expense's tips when it's removed or archived (PD-017 call c):
+# remove them too (archived with it, or deleted with their payments), or keep them as
+# plain lines.
+TipChoice = Literal["remove", "keep"]
+
+
 class PaymentIn(BaseModel):
     kind: Literal["deposit", "payment"] = "payment"
     amount_cents: int = Field(ge=1, le=MAX_CENTS)
@@ -213,6 +238,7 @@ class ApplySplitIn(BaseModel):
 # payments scheduled so far (none of those recorded), or a mix across expenses.
 Basis = Literal["none", "final", "quote", "estimate", "scheduled", "mixed"]
 Status = Literal["unpaid", "partly_paid", "paid", "overdue"]
+TipState = Literal["amount", "following", "frozen", "waiting"]
 TargetState = Literal["no_target", "within", "near_limit", "over"]
 
 
@@ -277,6 +303,16 @@ class CostOut(BaseModel):
     # The payer of its most recently added payment, which a new payment starts with
     # (PD-016 step 1); None when that payment has none, or there are no payments.
     last_payer_id: Optional[str]
+    # A tip (PD-017): the expense it's for, and how its amount is worked out. None
+    # (and tip_state None) for an expense that isn't a tip.
+    tip_for_cost_id: Optional[str]
+    tip_for_name: Optional[str]
+    tip_basis_points: Optional[int]
+    tip_state: Optional[TipState]
+    # The linked expense's cost a following percentage tip is worked out from.
+    tip_base_cents: Optional[int]
+    # The tips on this expense, archived ones too, oldest first.
+    tip_ids: List[str]
     payments: List[PaymentOut]
 
 
@@ -362,6 +398,10 @@ class Dashboard(BaseModel):
     upcoming_count: int   # unpaid payments not yet overdue, refundable ones included
     overdue_count: int
     contingency_id: Optional[str]
+    # What the tips that count come to (PD-017), and how many there are; already part
+    # of committed, not on top of it.
+    tips_cents: int
+    tip_count: int
 
 
 class Overview(BaseModel):
@@ -574,9 +614,17 @@ def _last_payer(pays: list) -> Optional[str]:
     return max(pays, key=lambda p: (p.created_at, p.id)).payer_id
 
 
+def _figures(cost: BudgetCost, linked: Optional[BudgetCost], pays: list,
+             today: datetime.date):
+    """(cost figures, tip figures or None): a tip counts its tip amount."""
+    return expense_figures(cost, linked, pays, today)
+
+
 def _cost_out(cost: BudgetCost, pays: list, tickers: dict, vendors: dict,
-              today: datetime.date, payer_names: dict) -> CostOut:
-    f = cost_figures(cost, pays, today)
+              today: datetime.date, payer_names: dict, costs_by_id: dict,
+              tips_of: dict) -> CostOut:
+    linked = costs_by_id.get(cost.tip_for_cost_id)
+    f, tip = _figures(cost, linked, pays, today)
     v = vendors.get(cost.couple_vendor_id)
     due_days = [p.due_on for p in pays if not p.paid and p.due_on is not None]
     return CostOut(
@@ -593,6 +641,12 @@ def _cost_out(cost: BudgetCost, pays: list, tickers: dict, vendors: dict,
         refundable_paid_cents=f.refundable_paid_cents,
         next_due_on=min(due_days) if due_days else None,
         last_payer_id=_last_payer(pays),
+        tip_for_cost_id=cost.tip_for_cost_id if tip else None,
+        tip_for_name=linked.vendor_name if tip and linked else None,
+        tip_basis_points=cost.tip_basis_points if tip else None,
+        tip_state=tip.state if tip else None,
+        tip_base_cents=tip.base_cents if tip else None,
+        tip_ids=tips_of.get(cost.id, []),
         payments=[_payment_out(p, tickers.get(p.paid_by_user_id), f, today, payer_names)
                   for p in pays],
     )
@@ -638,6 +692,11 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
     by_category: dict = {}
     for c in costs:
         by_category.setdefault(c.category_id, []).append(c)
+    costs_by_id = {c.id: c for c in costs}
+    tips_of: dict = {}
+    for c in costs:
+        if c.tip_for_cost_id:
+            tips_of.setdefault(c.tip_for_cost_id, []).append(c.id)
 
     total = wedding.budget_total_cents
     # The first category named Contingency (older data may hold a look-alike twin).
@@ -655,7 +714,7 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
             # Paying one vendor more than agreed doesn't reduce what's owed to another,
             # so "still to pay" and "overpaid" are worked out per expense, never netted.
             out_costs.append(_cost_out(cost, by_cost.get(cost.id, []), tickers, vendors, today,
-                                       payer_names))
+                                       payer_names, costs_by_id, tips_of))
         counted = [c for c in out_costs if not c.archived]
         sums = add_up(counted)
         out_categories.append(CategoryOut(
@@ -675,6 +734,8 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
         due_on=p.due_on, overdue=is_overdue(p, today), refundable=p.refundable,
     ) for p in unpaid]
 
+    tips = [k for cat in out_categories for k in cat.costs
+            if k.tip_state is not None and not k.archived]
     totals = Totals(
         total_cents=total,
         planned_cents=sum(c.planned_cents or 0 for c in categories),
@@ -689,6 +750,7 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
         expense_count=sum(c.expense_count for c in out_categories),
         upcoming_count=len(next_due) - overdue_count, overdue_count=overdue_count,
         contingency_id=contingency_id,
+        tips_cents=sum(k.committed_cents for k in tips), tip_count=len(tips),
     )
 
     return Overview(
@@ -715,6 +777,7 @@ async def _payment_response(db: AsyncSession, row: BudgetPayment) -> PaymentOut:
     cost = await db.get(BudgetCost, row.cost_id)
     pays = (await db.exec(select(BudgetPayment).where(
         BudgetPayment.cost_id == row.cost_id))).all()
+    linked = await db.get(BudgetCost, cost.tip_for_cost_id) if cost.tip_for_cost_id else None
     today = _today()
     ticker = None
     if row.paid and row.paid_by_user_id:
@@ -724,7 +787,105 @@ async def _payment_response(db: AsyncSession, row: BudgetPayment) -> PaymentOut:
     if row.payer_id:
         payer = await db.get(BudgetPayer, row.payer_id)
         payer_names = {payer.id: payer.name} if payer else {}
-    return _payment_out(row, ticker, cost_figures(cost, list(pays), today), today, payer_names)
+    figures, _ = _figures(cost, linked, list(pays), today)
+    return _payment_out(row, ticker, figures, today, payer_names)
+
+
+# --- Tips (PD-017) --------------------------------------------------------------------
+
+TIP_PREFIX = "Tip: "
+
+
+def _tip_name(expense_name: str) -> str:
+    return (TIP_PREFIX + expense_name)[:120].rstrip()
+
+
+async def _payments_of(db: AsyncSession, cost_id: str) -> list:
+    return list((await db.exec(select(BudgetPayment).where(
+        BudgetPayment.cost_id == cost_id))).all())
+
+
+async def _tips_for(db: AsyncSession, cost_id: str) -> list:
+    """The tips linked to an expense, archived ones too, oldest first."""
+    return list((await db.exec(
+        select(BudgetCost).where(BudgetCost.tip_for_cost_id == cost_id)
+        .order_by(BudgetCost.created_at, BudgetCost.id)
+    )).all())
+
+
+def _percent_now(linked: Optional[BudgetCost], basis_points: int) -> Optional[int]:
+    """A percentage of the linked expense's cost right now; None while it has none."""
+    base = counted_cost(linked) if linked is not None else None
+    return percent_of(base[0], basis_points) if base else None
+
+
+async def _keep_as_plain(db: AsyncSession, tip: BudgetCost) -> None:
+    """Turns a tip into a plain line: the link goes, and a percentage tip keeps the
+    dollar figure it has now (none while its expense had no cost)."""
+    if tip.tip_basis_points is not None:
+        linked = await db.get(BudgetCost, tip.tip_for_cost_id) if tip.tip_for_cost_id else None
+        tip.final_cents = tip_cents_now(tip, linked, await _payments_of(db, tip.id))
+    tip.tip_for_cost_id = None
+    tip.tip_basis_points = None
+    tip.updated_at = utcnow()
+    db.add(tip)
+
+
+def _ask_about_tips(name: str, tips: list, archiving: bool) -> HTTPException:
+    n = len(tips)
+    them = "it" if n == 1 else "them"
+    verb = "archive" if archiving else "remove"
+    return HTTPException(
+        status_code=409,
+        detail=(f"{name} has {n} tip{'' if n == 1 else 's'}. Choose whether to {verb} "
+                f"{them} too, or keep {them} as plain lines."))
+
+
+async def _settle_tips(db: AsyncSession, cost: BudgetCost, choice: Optional[str],
+                       archiving: bool) -> None:
+    """What happens to an expense's tips when it's archived or removed (PD-017 c).
+
+    With no choice given and tips to ask about, nothing changes and the couple are
+    asked. "remove" archives them with it, or deletes them and their payments when
+    it's removed; "keep" turns them into plain lines."""
+    tips = await _tips_for(db, cost.id)
+    if archiving:
+        tips = [t for t in tips if not t.archived]
+    if not tips:
+        return
+    if choice is None:
+        raise _ask_about_tips(cost.vendor_name, tips, archiving)
+    if choice == "keep":
+        for tip in tips:
+            await _keep_as_plain(db, tip)
+    elif archiving:
+        now = utcnow()
+        for tip in tips:
+            tip.archived = True
+            tip.updated_at = now
+            db.add(tip)
+    else:
+        await _delete_costs(db, tips)
+    await db.flush()
+
+
+async def _refreeze(db: AsyncSession, payment: BudgetPayment, now_paid: bool) -> None:
+    """A percentage tip stops following its expense's cost while any payment on it is
+    ticked paid (PD-017): ticking the first one saves its amount at that moment, and
+    unticking (or removing) the last one lets it follow the cost again."""
+    tip = await db.get(BudgetCost, payment.cost_id)
+    if tip is None or tip.tip_for_cost_id is None or tip.tip_basis_points is None:
+        return
+    others = [p for p in await _payments_of(db, tip.id) if p.id != payment.id and p.paid]
+    if others:
+        return
+    if now_paid:
+        linked = await db.get(BudgetCost, tip.tip_for_cost_id)
+        tip.final_cents = _percent_now(linked, tip.tip_basis_points) or 0
+    else:
+        tip.final_cents = None
+    tip.updated_at = utcnow()
+    db.add(tip)
 
 
 # --- Routes ---------------------------------------------------------------------------
@@ -1038,13 +1199,34 @@ async def add_cost(
 @router.patch("/{wedding_id}/budget/costs/{cost_id}", response_model=BudgetCost)
 async def edit_cost(
     wedding_id: str, cost_id: str, payload: CostPatch,
+    tips: Optional[TipChoice] = Query(
+        default=None, description="When archiving an expense that has tips: remove or keep"),
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
     """Changes an expense. A field left out stays as it is; null clears an optional one.
-    ``archived`` keeps the expense and its payments but leaves them out of the totals."""
+    ``archived`` keeps the expense and its payments but leaves them out of the totals.
+
+    A tip's amount changes through PATCH .../tips/{id}, and it stays in its expense's
+    category. Moving or renaming an expense takes its tips along; archiving one with
+    tips asks first (``tips``)."""
     await _editor(db, wedding_id, current_user)
     row = await _row(db, BudgetCost, cost_id, wedding_id, "vendor cost")
     updates = payload.model_dump(exclude_unset=True)
+    if row.tip_for_cost_id is not None:
+        if any(f in updates for f in ("quoted_cents", "estimated_cents", "final_cents")):
+            raise HTTPException(status_code=422,
+                                detail="Change the tip's percentage or amount instead")
+        if updates.get("category_id") and updates["category_id"] != row.category_id:
+            raise HTTPException(
+                status_code=422,
+                detail="A tip stays in the same category as the expense it's for")
+    if row.tip_for_cost_id is not None and updates.get("archived") is False and row.archived:
+        linked = await db.get(BudgetCost, row.tip_for_cost_id)
+        if linked is not None and linked.archived:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{linked.vendor_name} is archived. Restore it first, then its tip.")
+    old_name, was_archived = row.vendor_name, row.archived
     if "vendor_name" in updates:
         row.vendor_name = _clean(updates["vendor_name"] or "")
     for field in ("quoted_cents", "estimated_cents", "final_cents"):
@@ -1067,6 +1249,15 @@ async def edit_cost(
         row.category_id = updates["category_id"]
     row.updated_at = utcnow()
     db.add(row)
+    if row.tip_for_cost_id is None:
+        if row.archived and not was_archived:
+            await _settle_tips(db, row, tips, archiving=True)
+        for tip in await _tips_for(db, row.id):
+            if tip.vendor_name == _tip_name(old_name):
+                tip.vendor_name = _tip_name(row.vendor_name)
+            tip.category_id = row.category_id
+            tip.updated_at = row.updated_at
+            db.add(tip)
     await db.commit()
     await db.refresh(row)
     return row
@@ -1087,6 +1278,12 @@ async def duplicate_cost(
     archived, so it counts in the totals straight away."""
     await _editor(db, wedding_id, current_user)
     src = await _row(db, BudgetCost, cost_id, wedding_id, "vendor cost")
+    if src.tip_for_cost_id is not None:
+        linked = await db.get(BudgetCost, src.tip_for_cost_id)
+        if linked is not None and linked.archived:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{linked.vendor_name} is archived. Restore it to add another tip.")
     suffix = " (copy)"
     row = BudgetCost(
         wedding_id=wedding_id, category_id=src.category_id,
@@ -1095,7 +1292,12 @@ async def duplicate_cost(
         final_cents=src.final_cents, contract_status="none",
         payment_method=src.payment_method, notes=src.notes, link_url=src.link_url,
         couple_vendor_id=src.couple_vendor_id, archived=False,
+        # A copy of a tip is a tip on the same expense. A percentage one follows the
+        # cost, since the copy has no paid payment to fix its amount.
+        tip_for_cost_id=src.tip_for_cost_id, tip_basis_points=src.tip_basis_points,
     )
+    if src.tip_basis_points is not None:
+        row.final_cents = None
     db.add(row)
     await db.commit()
     await db.refresh(row)
@@ -1105,13 +1307,103 @@ async def duplicate_cost(
 @router.delete("/{wedding_id}/budget/costs/{cost_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_cost(
     wedding_id: str, cost_id: str,
+    tips: Optional[TipChoice] = Query(
+        default=None, description="When the expense has tips: remove them too, or keep them"),
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
+    """Removes an expense and its payments. One with tips is refused until the couple
+    choose (``tips``): remove the tips and their payments too, or keep them as plain
+    lines (PD-017 call c)."""
     await _editor(db, wedding_id, current_user)
     row = await _row(db, BudgetCost, cost_id, wedding_id, "vendor cost")
+    await _settle_tips(db, row, tips, archiving=False)
     await _delete_costs(db, [row])
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _one_way(percent: Optional[int], amount: Optional[int]) -> None:
+    if (percent is None) == (amount is None):
+        raise HTTPException(status_code=422,
+                            detail="Give the tip as a percentage or as an amount, not both")
+
+
+@router.post("/{wedding_id}/budget/costs/{cost_id}/tips",
+             status_code=status.HTTP_201_CREATED, response_model=BudgetCost)
+async def add_tip(
+    wedding_id: str, cost_id: str, payload: TipIn,
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Adds a tip on an expense as its own line, "Tip: <expense>", in the same category
+    (PD-017). A percentage tip follows the expense's cost; a dollar tip stays as typed.
+    A due date or who pays adds its first payment, unpaid (rule 4), in the same save."""
+    await _editor(db, wedding_id, current_user)
+    target = await _row(db, BudgetCost, cost_id, wedding_id, "expense")
+    if target.tip_for_cost_id is not None:
+        raise HTTPException(status_code=422,
+                            detail="A tip can't have its own tip. Add it to the expense it's for.")
+    if target.archived:
+        raise HTTPException(status_code=422,
+                            detail="That expense is archived. Restore it to add a tip.")
+    _one_way(payload.percent_basis_points, payload.amount_cents)
+    payer = await _payer(db, payload.payer_id, wedding_id)
+    row = BudgetCost(
+        wedding_id=wedding_id, category_id=target.category_id,
+        vendor_name=_tip_name(target.vendor_name), tip_for_cost_id=target.id,
+        tip_basis_points=payload.percent_basis_points, final_cents=payload.amount_cents,
+        notes=_notes(payload.notes),
+    )
+    db.add(row)
+    if payload.due_on is not None or payer is not None:
+        amount = payload.amount_cents
+        if amount is None:
+            amount = _percent_now(target, payload.percent_basis_points)
+        if not amount:
+            why = ("has no cost yet, so the tip is $0 for now"
+                   if counted_cost(target) is None else "comes to a $0 tip at that percentage")
+            raise HTTPException(
+                status_code=422,
+                detail=(f"{target.vendor_name} {why}. Leave the due date and who pays "
+                        "empty, or change the cost or percentage first."))
+        await db.flush()
+        db.add(BudgetPayment(wedding_id=wedding_id, cost_id=row.id, kind="payment",
+                             amount_cents=amount, due_on=payload.due_on, payer_id=payer))
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
+@router.patch("/{wedding_id}/budget/tips/{tip_id}", response_model=BudgetCost)
+async def edit_tip(
+    wedding_id: str, tip_id: str, payload: TipPatch,
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Changes a tip's percentage or amount, switching between them, or its notes.
+
+    A new percentage on a tip with a paid payment is fixed at what it comes to now,
+    since a paid tip doesn't follow the cost."""
+    await _editor(db, wedding_id, current_user)
+    row = await _row(db, BudgetCost, tip_id, wedding_id, "tip")
+    if row.tip_for_cost_id is None:
+        raise HTTPException(status_code=422, detail="That expense isn't a tip")
+    updates = payload.model_dump(exclude_unset=True)
+    if "percent_basis_points" in updates or "amount_cents" in updates:
+        percent, amount = updates.get("percent_basis_points"), updates.get("amount_cents")
+        _one_way(percent, amount)
+        if amount is not None:
+            row.tip_basis_points, row.final_cents = None, amount
+        else:
+            row.tip_basis_points = percent
+            paid = any(p.paid for p in await _payments_of(db, row.id))
+            linked = await db.get(BudgetCost, row.tip_for_cost_id)
+            row.final_cents = (_percent_now(linked, percent) or 0) if paid else None
+    if "notes" in updates:
+        row.notes = _notes(updates["notes"])
+    row.updated_at = utcnow()
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return row
 
 
 @router.post("/{wedding_id}/budget/costs/{cost_id}/payments",
@@ -1198,6 +1490,7 @@ async def mark_paid(
         raise HTTPException(status_code=422, detail="An unpaid payment has no date paid")
     changed = False
     if payload.paid != row.paid:
+        await _refreeze(db, row, payload.paid)
         row.paid = payload.paid
         row.paid_at = utcnow() if payload.paid else None
         row.paid_by_user_id = current_user.id if payload.paid else None
@@ -1221,6 +1514,8 @@ async def remove_payment(
 ):
     await _editor(db, wedding_id, current_user)
     row = await _row(db, BudgetPayment, payment_id, wedding_id, "payment")
+    if row.paid:
+        await _refreeze(db, row, False)
     await db.delete(row)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

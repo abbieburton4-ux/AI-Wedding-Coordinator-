@@ -19,6 +19,12 @@ The rules, in full:
   don't affect paid or partly paid, so the status never contradicts "Paid".
 - Archived expenses keep their figures and status but are left out of every
   category and budget total, and out of the payments due.
+- A tip (PD-017) is an expense linked to the one it's for. A tip typed in dollars
+  costs what was typed. A percentage tip costs that share of the linked expense's
+  counted cost (actual, else quote, else estimate; never its payments), rounded
+  half up to the whole cent, and follows that cost when it changes. Once any
+  payment on the tip is ticked paid, it costs the amount saved at that moment
+  instead. While the linked expense has no cost, a percentage tip costs 0.
 """
 import datetime
 from dataclasses import dataclass, field
@@ -40,6 +46,73 @@ def committed(cost, payments: Iterable) -> tuple:
             return cents, basis
     scheduled = sum(p.amount_cents for p in payments if not p.refundable)
     return (scheduled, "scheduled") if scheduled else (0, "none")
+
+
+def counted_cost(cost) -> Optional[tuple]:
+    """(cents, basis) from what the couple typed: actual, else quote, else estimate;
+    None when none is set. A percentage tip is worked out from this."""
+    for cents, basis in ((cost.final_cents, "final"), (cost.quoted_cents, "quote"),
+                         (cost.estimated_cents, "estimate")):
+        if cents is not None:
+            return cents, basis
+    return None
+
+
+def percent_of(cents: int, basis_points: int) -> int:
+    """basis_points hundredths of a percent of cents, rounded half up to the cent.
+    Integers only: 2000 (20%) of 800000 is 160000."""
+    return (cents * basis_points + 5000) // 10000
+
+
+# What a tip's amount is doing: typed in dollars; a percentage following its
+# expense's cost; a percentage fixed because a payment on it is paid; or a
+# percentage waiting for its expense to have a cost.
+TIP_STATES = ("amount", "following", "frozen", "waiting")
+
+
+@dataclass
+class TipFigures:
+    state: str
+    # The linked expense's counted cost the percentage is of; None unless following.
+    base_cents: Optional[int]
+    # (cents, basis) the tip counts as, or None to count it like any expense.
+    committed: Optional[tuple]
+
+
+def tip_figures(tip, linked, payments: Iterable) -> Optional[TipFigures]:
+    """How a tip counts, or None for an expense that isn't a tip."""
+    if tip.tip_for_cost_id is None:
+        return None
+    if tip.tip_basis_points is None:
+        return TipFigures("amount", None, None)
+    if any(p.paid for p in payments):
+        # Fixed when its first payment was ticked; a tip still waiting for a cost then
+        # was fixed at 0.
+        return TipFigures("frozen", None, (tip.final_cents or 0, "final"))
+    base = counted_cost(linked) if linked is not None else None
+    if base is None:
+        return TipFigures("waiting", None, (0, "none"))
+    cents, basis = base
+    return TipFigures("following", cents, (percent_of(cents, tip.tip_basis_points), basis))
+
+
+def expense_figures(cost, linked, payments: List, today: datetime.date) -> tuple:
+    """(CostFigures, TipFigures or None) for any expense; a tip counts its tip amount.
+    ``linked`` is the expense a tip is for (None for a plain expense)."""
+    tip = tip_figures(cost, linked, payments)
+    return cost_figures(cost, payments, today, tip.committed if tip else None), tip
+
+
+def tip_cents_now(tip, linked, payments: Iterable) -> Optional[int]:
+    """What a percentage tip comes to right now (None while waiting for a cost)."""
+    if tip.tip_basis_points is None:
+        return tip.final_cents
+    figures = tip_figures(tip, linked, payments)
+    if figures is None or figures.state == "frozen":
+        return tip.final_cents
+    if figures.state == "waiting":
+        return None
+    return figures.committed[0]
 
 
 def basis_of(parts: Iterable[str]) -> str:
@@ -73,8 +146,10 @@ class CostFigures:
     would_overpay: dict = field(default_factory=dict)
 
 
-def cost_figures(cost, payments: List, today: datetime.date) -> CostFigures:
-    total, basis = committed(cost, payments)
+def cost_figures(cost, payments: List, today: datetime.date,
+                 override: Optional[tuple] = None) -> CostFigures:
+    """``override`` is (cents, basis) for a percentage tip (``tip_figures``)."""
+    total, basis = override if override is not None else committed(cost, payments)
     owed = [p for p in payments if not p.refundable]
     held = [p for p in payments if p.refundable]
     scheduled = sum(p.amount_cents for p in owed)

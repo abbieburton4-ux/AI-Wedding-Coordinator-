@@ -199,6 +199,23 @@ publish should list **no** database changes.
   later, never by Publish.
   [ASSUMPTION] This is what Alembic's PostgreSQL SQL looks like; Replit's own
   screen hasn't been seen for it.
+- `0013` (B79, tips as their own expense lines): two new columns on an existing
+  table, all additions. Expect these lines:
+  - `ADD COLUMN tip_for_cost_id` on `budget_costs`, optional (no `NOT NULL`, no
+    default);
+  - `ADD COLUMN tip_basis_points` on `budget_costs`, an optional whole number
+    (`INTEGER`, no `NOT NULL`, no default);
+  - `CREATE INDEX ix_budget_costs_tip_for_cost_id`;
+  - `ADD CONSTRAINT fk_budget_costs_tip_for_cost_id_budget_costs` (a link from one
+    expense to another in the same table, `ON DELETE SET NULL`).
+
+  Both columns are optional, so the pane shouldn't turn orange. If `0012` goes out
+  in the same publish, its lines are listed too. There should be no `DROP`, no
+  `ALTER COLUMN`, no `DROP CONSTRAINT` and no new table. Every expense and payment
+  already entered keeps its amounts, dates and paid ticks, and none of them
+  becomes a tip; tips are added in the app later.
+  [ASSUMPTION] This is what Alembic's PostgreSQL SQL looks like; Replit's own
+  screen hasn't been seen for it.
 
 **When you publish** (plain steps for the owner):
 

@@ -104,3 +104,17 @@ test("Rename to Venue shows only for a category still called Venue & Catering (P
   assert.equal(venueRename(old, [old, cat("b", "Food & Drink")]), "offer");
   assert.equal(categoryKey("  Flowers   &Decor "), "flowers and decor");
 });
+
+test("the list can show tips only (PD-017)", () => {
+  const withTips = flattenExpenses([
+    { id: "food", name: "Food", costs: [
+      cost("Caterer", { tip_state: null }),
+      cost("Tip: Caterer", { tip_state: "following" }),
+      cost("Old tip", { tip_state: "amount", archived: true }),
+    ] },
+  ]);
+  assert.deepEqual(names(filterExpenses(withTips, { tips: "only" }, today)), ["Tip: Caterer"]);
+  assert.deepEqual(names(filterExpenses(withTips, { tips: "only", showArchived: true }, today)),
+    ["Tip: Caterer", "Old tip"]);
+  assert.equal(filterExpenses(withTips, { tips: "" }, today).length, 2);
+});

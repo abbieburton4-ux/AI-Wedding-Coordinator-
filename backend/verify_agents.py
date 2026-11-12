@@ -848,6 +848,22 @@ async def run_async_verification():
             print("   * Concierge: planned, committed, paid and payments due; archived, notes, "
                   "links, methods and references left out")
 
+            # A 20% tip on the hall (PD-017) counts at 20% of its quote, as on the Budget screen.
+            db.add(_Cost(id="cost_c_tip", wedding_id="wedding_intake_test",
+                         category_id="cat_c_venue", vendor_name="Tip: Placeholder Hall",
+                         tip_for_cost_id="cost_c_hall", tip_basis_points=2000))
+            await db.commit()
+            concierge_module.wedding_today = lambda: _dt0.date(2026, 12, 1)
+            try:
+                context = await _build_context(db, w_ctx)
+            finally:
+                concierge_module.wedding_today = real_today
+            assert "    - Tip: Placeholder Hall: $2,400 (quoted), $0 paid, unpaid" in context, context
+            assert "  - Venue: $15,000 planned / $14,400 committed / $6,000 paid" in context
+            await db.delete(await db.get(_Cost, "cost_c_tip"))
+            await db.commit()
+            print("   * Concierge: a percentage tip counts at its share of the expense's cost")
+
             w_ctx.budget_total_cents = 5_000_000
             db.add(w_ctx)
             await db.commit()
