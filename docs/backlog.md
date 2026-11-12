@@ -11,20 +11,22 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-12 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B85** — clay-pink text is hard to read (savings card, diet tags). `in progress`
-2. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
-3. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
-4. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-5. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-6. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
-7. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
-8. **B34** — database-level guard against the same email being added twice. `ready`
-9. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
-10. **B8** — record missing token counts as empty, not 0. `ready`
-11. **B17** — stop tracking the test database files. `ready`
-12. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44); and a frontend-traps line: gold text uses the darker text token from #102, never `--primary` (B83). `needs-owner: guardrail files need a session the owner runs`
-13. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
-14. **B77** — an older test fails by chance (looks for "555" among random IDs). `ready`
+1. **B86** — Publish offered to delete the who-paid details (third time); stop it happening, not just warn. `ready` (urgent)
+2. **B85** — clay-pink text is hard to read (savings card, diet tags). `in review` (#104)
+3. **B87** — faded grey text under the reading standard (phone menu, Overview, sign-in footer). `ready`
+4. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
+5. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
+6. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+7. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
+8. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
+9. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+10. **B34** — database-level guard against the same email being added twice. `ready`
+11. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+12. **B8** — record missing token counts as empty, not 0. `ready`
+13. **B17** — stop tracking the test database files. `ready`
+14. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44); and a frontend-traps line: gold text uses the darker text token from #102, never `--primary` (B83), and clay text uses `text-soft-clay-text` (B85, #104). `needs-owner: guardrail files need a session the owner runs`
+15. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
+16. **B77** — an older test fails by chance (looks for "555" among random IDs). `ready`
 
 ## Open
 
@@ -60,7 +62,9 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 - **B58 — The RUNBOOK backup step doesn't work on Replit.** Found while writing the B53 steps (2026-11-09): the RUNBOOK's checklist-import backup uses `SYNC_DATABASE_URL`, which Replit's Shell doesn't set; there `DATABASE_URL` works, and the Shell always reaches the development database, not the published app's production one. *Fix:* update RUNBOOK for Replit. *Also for B14:* when the app is published, Replit offers to copy development data into production; that is when the imported checklist would carry over, and the publishing plan should cover it. If the wedding is already in production, the Shell can't reach it without pasting a secret, so a safe import route is needed first. *Depends on:* nothing. *#58 (B59):* the backup command now works in Replit's Shell; the publishing note remains.
 
 - **B77 — An older test fails by chance.** Found while building B76 (#89): a check looks for the text "555" in output that is full of random IDs, so now and then a random ID contains "555" and the run fails. The test was left as it is (rule 8). *Fix:* make the check look for the number where it's meant to be, not anywhere in the output. *Depends on:* nothing; small.
-- **B85 — Clay-pink text is hard to read.** Found while building B83 (#102): the clay-pink text colour is about 2.6:1 on cream (the standard is 4.5:1), on the Overview's savings card and the diet tags on the Seating and Concierge screens. *Fix:* a deeper shade for text only, as B83 did for gold, with before and after screenshots. Reversible styling; the same kind of change the owner approved for gold. *Depends on:* nothing; small.
+- **B86 — Publish offered to delete the who-paid details from the live app (third time).** 2026-11-12, publishing after #94–#102, Replit listed `DROP TABLE "budget_payers" CASCADE;`, `ALTER TABLE "budget_payments" DROP COLUMN "payer_id";` and the matching index and constraint drops. Same pattern as B59 and B70: production was at a newer migration than the workspace database. The product lane told the owner to Cancel, then Pull, Stop, Run, check, and publish again. B70 only added a warning; it keeps happening. *Fix:* the engineer finds why the workspace falls behind (for example, Publish uses a workspace that wasn't restarted after Pull) and makes it impossible or automatic, not just warned about. For example, the Run step always upgrades first, or a check fails the publish build when the workspace database is behind. Recommend the approach. *Depends on:* nothing. Urgent: a wrong click deletes real data.
+- **B87 — Faded grey text under the reading standard.** Found while building B85 (#104): inactive labels in the phone menu (4.27:1), the 70%, 60% and 50% faded grey text on Overview, Intake and Guests, and the grey sign-in footer (3.47:1). The standard is 4.5:1. *Fix:* deepen those greys for text, the same way as B83 and B85. *Depends on:* nothing; small.
+- **B85 — Clay-pink text is hard to read.** Found while building B83 (#102): the clay-pink text colour is about 2.6:1 on cream (the standard is 4.5:1), on the Overview's "budget may fall short" card, the diet tag on Seating, and the Concierge suggestion chips. *Fix:* a deeper shade for text only, as B83 did for gold, with before and after screenshots. Reversible styling; the same kind of change the owner approved for gold. *Depends on:* nothing; small.
 
 - **B73 — A test fails now and then.** Found in #78 (B68): one existing check fails at random when a generated id contains "555" (it looks like a phone number to the privacy filter). Not caused by #78. *Fix:* make the test ids fixed, or teach the check to ignore ids. *Depends on:* nothing; small.
 
