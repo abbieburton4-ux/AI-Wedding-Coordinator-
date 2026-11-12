@@ -365,3 +365,15 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - B: payments always stay as typed.
 **Decision:** A. Paid payments never change (rule 4), and a dollar tip's payments never change.
 **Rejected because:** B leaves the couple to spot and fix the mismatch by hand.
+
+## PD-019 — A proper Excel download for the budget, with tabs
+
+**Date:** 2026-11-12 · **Status:** ratified (by the owner, one of the couple, 2026-11-12: "a for now and maybe c later")
+**Context:** Backlog B88. The owner, 2026-11-12: "lets next work on the excel export". Today the Budget page's Export section has "Download CSV" (B69, PD-013 step 5): one plain sheet with the summary, categories, expenses, payments and what's due stacked one after another, and no formatting. Archived expenses and vendor contacts are included only if ticked.
+**Options:**
+- A: a real Excel file (.xlsx) with tabs (Summary, Categories, Expenses, Payments, Upcoming, Who paid, Tips), dollar formatting, bold headings and column widths. It opens in Excel, and Google Sheets keeps the tabs when the file is uploaded to Drive. A snapshot, downloaded fresh each time.
+- B: improve the CSV only (new columns). Smallest change, still one plain sheet.
+- C: send it straight to the couple's Google Drive as a Google Sheet. Needs the app to get permission to write to their Drive: an access and data-location decision of its own.
+**Decision:** A now. C may follow later, under its own PD (B89).
+**Settled by the team (reversible):** the CSV button stays next to the new one; the same two ticks (archived expenses, vendor contacts) apply to both; the formula guard from B69 applies to every cell; amounts come from whole cents and show as dollars. A new library to write the file is allowed, with a one-line reason in the commit (rule 9).
+**Rejected because:** B doesn't give the tabs and formatting; C is a bigger access decision, left for later at the owner's word.

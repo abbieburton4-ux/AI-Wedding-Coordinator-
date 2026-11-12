@@ -11,21 +11,22 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-12 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B86** — Publish offered to delete the who-paid details (third time); stop it happening, not just warn. `merged` (#105); close after the owner's first publish passes
-2. **B87** — faded grey text under the reading standard (phone menu, Overview, sign-in footer). `in review` (#108)
+1. **B88** — a proper Excel download for the budget, with tabs (PD-019, ratified). `in progress`
+2. **B90** — check the workspace catches up by itself after a Pull (seen failing on the first publish after #105). `ready`
 3. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
-4. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
-5. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-6. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-7. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
-8. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
-9. **B34** — database-level guard against the same email being added twice. `ready`
-10. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
-11. **B8** — record missing token counts as empty, not 0. `ready`
-12. **B17** — stop tracking the test database files. `ready`
-13. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44); and a frontend-traps line: gold text uses the darker text token from #102, never `--primary` (B83), and clay text uses `text-soft-clay-text` (B85, #104). `needs-owner: guardrail files need a session the owner runs`
-14. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
-15. **B77** — an older test fails by chance (looks for "555" among random IDs). `ready`
+4. **B89** — send the budget straight to Google Sheets (PD-019 option C). `on hold` (owner: "maybe c later"; needs its own PD)
+5. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
+6. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+7. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
+8. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
+9. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+10. **B34** — database-level guard against the same email being added twice. `ready`
+11. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+12. **B8** — record missing token counts as empty, not 0. `ready`
+13. **B17** — stop tracking the test database files. `ready`
+14. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44); and a frontend-traps line: gold text uses the darker text token from #102, never `--primary` (B83), and clay text uses `text-soft-clay-text` (B85, #104). `needs-owner: guardrail files need a session the owner runs`
+15. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
+16. **B77** — an older test fails by chance (looks for "555" among random IDs). `ready`
 
 ## Open
 
@@ -60,9 +61,10 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B58 — The RUNBOOK backup step doesn't work on Replit.** Found while writing the B53 steps (2026-11-09): the RUNBOOK's checklist-import backup uses `SYNC_DATABASE_URL`, which Replit's Shell doesn't set; there `DATABASE_URL` works, and the Shell always reaches the development database, not the published app's production one. *Fix:* update RUNBOOK for Replit. *Also for B14:* when the app is published, Replit offers to copy development data into production; that is when the imported checklist would carry over, and the publishing plan should cover it. If the wedding is already in production, the Shell can't reach it without pasting a secret, so a safe import route is needed first. *Depends on:* nothing. *#58 (B59):* the backup command now works in Replit's Shell; the publishing note remains.
 
+- **B88 — A proper Excel download for the budget.** Owner, 2026-11-12: "lets next work on the excel export" / "a for now and maybe c later". *Fix:* PD-019 (ratified): an .xlsx with tabs, alongside the CSV. *Depends on:* nothing.
+- **B89 — Send the budget straight to Google Sheets.** PD-019 option C, "maybe c later" (owner, 2026-11-12). Needs its own PD: the app getting permission to write to the couple's Google Drive is an access and data-location call. *Depends on:* the owner asking for it.
+- **B90 — The workspace didn't catch up by itself after a Pull.** Found on the first publish after #105 (2026-11-12): Publish still offered the who-paid DROP. The owner had to run `python db_status.py upgrade` in the Shell, which took the workspace from 0011 to 0013; Publish then showed only the four tip additions. #105 said the running workspace would catch up within about ten seconds of a Pull. `[ASSUMPTION]` the running app started before #105's code arrived, so it had no catch-up yet. *Fix:* check whether the catch-up works on the next Pull that brings a new migration; if not, fix it or drop the claim from `replit.md`. Until then, the one Shell command before every publish stays in the steps. *Depends on:* nothing.
 - **B77 — An older test fails by chance.** Found while building B76 (#89): a check looks for the text "555" in output that is full of random IDs, so now and then a random ID contains "555" and the run fails. The test was left as it is (rule 8). *Fix:* make the check look for the number where it's meant to be, not anywhere in the output. *Depends on:* nothing; small.
-- **B86 — Publish offered to delete the who-paid details from the live app (third time).** 2026-11-12, publishing after #94–#102, Replit listed `DROP TABLE "budget_payers" CASCADE;`, `ALTER TABLE "budget_payments" DROP COLUMN "payer_id";` and the matching index and constraint drops. Same pattern as B59 and B70: production was at a newer migration than the workspace database. The product lane told the owner to Cancel, then Pull, Stop, Run, check, and publish again. B70 only added a warning; it keeps happening. *Fix:* the engineer finds why the workspace falls behind (for example, Publish uses a workspace that wasn't restarted after Pull) and makes it impossible or automatic, not just warned about. For example, the Run step always upgrades first, or a check fails the publish build when the workspace database is behind. Recommend the approach. *Depends on:* nothing. Urgent: a wrong click deletes real data. *Found (#105):* the workspace database was at 0011 and production at 0012; the live app upgrades itself on start, but the workspace only did after Stop and Run. #105 makes the publish build fail when the workspace database is behind, and the running workspace catches up after a Pull. A DROP can still appear on the Publish screen, because nothing runs before Replit shows its SQL, so Cancel on any DROP still applies. `[ASSUMPTION]` the build step behaves as #105 expects; the first publish after merge is the test.
-- **B87 — Faded grey text under the reading standard.** Found while building B85 (#104): inactive labels in the phone menu (4.27:1), the 70%, 60% and 50% faded grey text on Overview, Intake and Guests, and the grey sign-in footer (3.47:1). The standard is 4.5:1. *Fix:* deepen those greys for text, the same way as B83 and B85. *Depends on:* nothing; small.
 
 - **B73 — A test fails now and then.** Found in #78 (B68): one existing check fails at random when a generated id contains "555" (it looks like a phone number to the privacy filter). Not caused by #78. *Fix:* make the test ids fixed, or teach the check to ignore ids. *Depends on:* nothing; small.
 
@@ -100,6 +102,8 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-12 | **B87** — faded grey text deepened to at least 4.5:1 on every page (about 20 failures before, none after) | #108 |
+| 2026-11-12 | **B86** — publish build fails when the workspace database is behind; one Shell command brings it up to date. First publish after merge passed (owner, 2026-11-12: "it worked!") after she ran `python db_status.py upgrade` by hand | #105 |
 | 2026-11-12 | **B85** — a deeper clay for text and icons (about 5.5:1, was 2.6:1); clay fills unchanged | #104 |
 | 2026-11-12 | **B83** — a deeper antique gold for text and icons on light backgrounds (about 5.3:1, was 2:1); gold buttons unchanged | #102 |
 | 2026-11-12 | **B82** — rename a tip from its Edit form; the over-budget note covers tips and says a percentage tip moves with the cost | #101 |
