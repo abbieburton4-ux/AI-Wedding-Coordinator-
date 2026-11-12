@@ -33,7 +33,7 @@ const INITIAL_TABLES: Table[] = [
 ];
 
 const dietColor: Record<Diet, string> = {
-  GF: "bg-soft-clay/10 text-soft-clay",
+  GF: "bg-soft-clay/10 text-soft-clay-text",
   VEGAN: "bg-primary-container/15 text-on-primary-container",
   DF: "bg-tertiary/10 text-tertiary",
   "NUT-FREE": "bg-secondary/10 text-secondary",

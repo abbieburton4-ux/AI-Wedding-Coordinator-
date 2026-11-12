@@ -132,7 +132,7 @@ export function Concierge() {
                 key={btn}
                 type="button"
                 onClick={() => send(btn)}
-                className="bg-soft-clay/10 text-soft-clay text-[10px] font-bold px-4 py-2 rounded-full border border-soft-clay/20"
+                className="bg-soft-clay/10 text-soft-clay-text text-[10px] font-bold px-4 py-2 rounded-full border border-soft-clay/20"
               >
                 {btn}
               </button>
