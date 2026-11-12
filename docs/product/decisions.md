@@ -355,3 +355,13 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - (c) **Deleting or archiving the expense a tip is for.** **Answer: ask.** *Recommended:* the app asks whether to remove the tip as well, or keep it as a plain line. Alternative: the tip always goes with it.
 **Decision:** (a) the tip sits in the same category as its expense; (b) a percentage tip follows the expense's cost, a dollar tip stays as typed; (c) the app asks whether to remove the tip or keep it as a plain line. *(decided-by-agent, reversible:* once a payment on the tip is ticked paid, the tip amount stops following the cost, so a paid figure never moves by itself. The owner's answer to (b) didn't mention this; she can overturn it.)
 **Out of scope:** reminders to tip on the day (rule 1); splitting one tip between several vendors (add one tip per vendor).
+
+## PD-018 — A percentage tip's unpaid payment follows the tip
+
+**Date:** 2026-11-12 · **Status:** ratified (by the owner, one of the couple, 2026-11-12: "yes")
+**Context:** Backlog B81, found while building B79 (#94). When an expense's cost changes, a percentage tip changes with it (PD-017), but a payment already added to the tip keeps its old amount, so the two stop matching.
+**Options:**
+- A: when the tip has exactly one unpaid payment, and that payment was for the tip's full amount, the payment changes with the tip. Otherwise (several payments, or a part payment) payments stay as typed and the tip shows that its payments don't add up.
+- B: payments always stay as typed.
+**Decision:** A. Paid payments never change (rule 4), and a dollar tip's payments never change.
+**Rejected because:** B leaves the couple to spot and fix the mismatch by hand.
