@@ -11,9 +11,9 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-12 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B81** — a percentage tip's unpaid payment doesn't change with the tip. `in progress` (PD-018, ratified; with B82)
-2. **B82** — small tip follow-ups: rename a tip; over-budget warning for percentage tips. `in progress` (with B81)
-3. **B83** — gold text on cream is hard to read (headings, links). `ready` (owner, 2026-11-12: "yes darker gold for text is fine")
+1. **B81** — a percentage tip's unpaid payment doesn't change with the tip. `in review` (#101, with B82; no database change)
+2. **B82** — small tip follow-ups: rename a tip; over-budget warning for percentage tips. `in review` (#101, with B81)
+3. **B83** — gold text on cream is hard to read (headings, links). `in progress` (owner, 2026-11-12: "yes darker gold for text is fine")
 4. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
 5. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
 6. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
