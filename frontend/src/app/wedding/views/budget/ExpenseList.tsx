@@ -90,7 +90,7 @@ export function ExpenseList({
       aria-sort={sortKey === key ? (dir === "asc" ? "ascending" : "descending") : undefined}
       className={`py-2 px-2 font-normal text-xs text-on-surface-variant ${align === "right" ? "text-right" : "text-left"}`}
     >
-      <button type="button" onClick={() => sortBy(key)} className="inline-flex items-center gap-1 hover:text-primary">
+      <button type="button" onClick={() => sortBy(key)} className="inline-flex items-center gap-1 hover:text-primary-text">
         {SORT_LABEL[key]}
         {sortKey === key && <Icon name={dir === "asc" ? "arrow_upward" : "arrow_downward"} size={14} />}
       </button>
@@ -211,7 +211,7 @@ export function ExpenseList({
                   <tr key={cost.id} onClick={() => onOpen(cost.id)} className="cursor-pointer hover:bg-surface-container-low">
                     <td className="py-2 px-2">
                       <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(cost.id); }}
-                        className="text-left text-on-surface hover:text-primary underline-offset-4 hover:underline">
+                        className="text-left text-on-surface hover:text-primary-text underline-offset-4 hover:underline">
                         {cost.vendor_name}
                       </button>
                       {cost.tip_state && (

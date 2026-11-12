@@ -13,9 +13,9 @@ const buttonVariants: Record<ButtonVariant, string> = {
   solid:
     "bg-primary text-primary-foreground hover:bg-primary/90 px-8 py-3 rounded-full",
   ghost:
-    "text-foreground hover:text-primary px-0 py-0",
+    "text-foreground hover:text-primary-text px-0 py-0",
   link:
-    "text-primary underline-offset-4 hover:underline px-0 py-0",
+    "text-primary-text underline-offset-4 hover:underline px-0 py-0",
 };
 
 export function Button({
@@ -91,7 +91,7 @@ export function ReadMoreLink({
   const inner = (
     <>
       <span className="w-8 h-[1px] bg-muted-foreground mr-4 group-hover:w-12 group-hover:bg-primary transition-all duration-300" />
-      <span className="text-[0.65rem] tracking-[0.2em] uppercase font-medium text-foreground group-hover:text-primary transition-colors">
+      <span className="text-[0.65rem] tracking-[0.2em] uppercase font-medium text-foreground group-hover:text-primary-text transition-colors">
         {text}
       </span>
     </>

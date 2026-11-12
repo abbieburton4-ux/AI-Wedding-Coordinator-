@@ -82,7 +82,7 @@ export function Concierge() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <header className="fixed top-0 w-full z-50 bg-surface border-b border-outline-variant/20 h-16 flex items-center px-4">
-        <button type="button" onClick={() => navigate(-1)} aria-label="Back" className="text-primary p-2">
+        <button type="button" onClick={() => navigate(-1)} aria-label="Back" className="text-primary-text p-2">
           <Icon name="arrow_back" />
         </button>
         <h1 className="font-headline-sm text-headline-sm text-center flex-1">Aurelia</h1>
@@ -90,7 +90,7 @@ export function Concierge() {
           type="button"
           onClick={() => setVoiceOpen(true)}
           aria-label="Talk to Aurelia by voice"
-          className="text-primary p-2"
+          className="text-primary-text p-2"
         >
           <Icon name="call" />
         </button>
@@ -100,7 +100,7 @@ export function Concierge() {
         {messages.map((msg, i) =>
           msg.role === "ai" ? (
             <div key={i} className="flex flex-col items-start max-w-[85%]">
-              <span className="text-[10px] font-bold text-primary mb-1 uppercase tracking-widest">Aurelia</span>
+              <span className="text-[10px] font-bold text-primary-text mb-1 uppercase tracking-widest">Aurelia</span>
               <div className="bg-surface-container-low rounded-2xl rounded-tl-none p-4 border border-outline-variant/20">
                 <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
               </div>
@@ -116,7 +116,7 @@ export function Concierge() {
 
         {sending && (
           <div className="flex flex-col items-start max-w-[85%]">
-            <span className="text-[10px] font-bold text-primary mb-1 uppercase tracking-widest">Aurelia</span>
+            <span className="text-[10px] font-bold text-primary-text mb-1 uppercase tracking-widest">Aurelia</span>
             <div className="bg-surface-container-low rounded-2xl rounded-tl-none p-4 border border-outline-variant/20 flex items-center gap-1">
               <span className="w-2 h-2 bg-primary/50 rounded-full animate-bounce [animation-delay:-0.3s]" />
               <span className="w-2 h-2 bg-primary/50 rounded-full animate-bounce [animation-delay:-0.15s]" />
@@ -155,7 +155,7 @@ export function Concierge() {
           }}
           className="max-w-2xl mx-auto relative flex items-center bg-white border border-outline-variant/30 rounded-full p-1 shadow-lg"
         >
-          <button type="button" aria-label="Suggestions" className="p-3 text-primary">
+          <button type="button" aria-label="Suggestions" className="p-3 text-primary-text">
             <Icon name="auto_awesome" />
           </button>
           <input

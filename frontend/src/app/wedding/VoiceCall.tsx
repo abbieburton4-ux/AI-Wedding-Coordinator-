@@ -102,7 +102,7 @@ function VoiceCallInner({ onClose }: { onClose: () => void }) {
 
       <div
         className={
-          "flex items-center justify-center w-32 h-32 rounded-full bg-primary/10 text-primary mb-6 transition-transform " +
+          "flex items-center justify-center w-32 h-32 rounded-full bg-primary/10 text-primary-text mb-6 transition-transform " +
           (isSpeaking ? "scale-110" : connected ? "animate-pulse" : "")
         }
       >

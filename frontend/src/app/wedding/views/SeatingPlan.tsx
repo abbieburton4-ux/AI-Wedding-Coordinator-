@@ -80,7 +80,7 @@ function GuestDragItem({
             type="button"
             onClick={onSend}
             aria-label="Assign to selected table"
-            className="md:hidden text-primary shrink-0"
+            className="md:hidden text-primary-text shrink-0"
           >
             <Icon name="add_circle" size={22} />
           </button>
@@ -191,7 +191,7 @@ function TableNode({
               : "border border-outline-variant/40",
           )}
         >
-          <span className="font-headline-sm text-headline-sm text-primary leading-none">{table.name.replace("Table ", "")}</span>
+          <span className="font-headline-sm text-headline-sm text-primary-text leading-none">{table.name.replace("Table ", "")}</span>
           <span className="font-label-caps text-[10px] text-on-surface-variant">
             {used}/{table.capacity}
           </span>
@@ -313,7 +313,7 @@ function SeatingPlanInner() {
     <main className="pt-20 md:ml-72 md:pt-24 px-margin-mobile md:px-margin-desktop pb-28 md:pb-12 min-h-screen">
       <div className="mb-8 flex flex-col md:flex-row md:justify-between md:items-end gap-4">
         <div>
-          <h1 className="font-display-lg-mobile md:font-display-lg text-display-lg-mobile md:text-display-lg text-primary mb-2">
+          <h1 className="font-display-lg-mobile md:font-display-lg text-display-lg-mobile md:text-display-lg text-primary-text mb-2">
             Seating Plan
           </h1>
           <p className="font-body-md text-body-md text-on-surface-variant">
@@ -344,7 +344,7 @@ function SeatingPlanInner() {
 
       <div className="bg-surface-container-lowest rounded-[2rem] p-6 mb-8 border border-outline-variant/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-start gap-4">
-          <div className="bg-surface-container-low p-3 rounded-full text-primary shrink-0">
+          <div className="bg-surface-container-low p-3 rounded-full text-primary-text shrink-0">
             <Icon name="auto_awesome" filled />
           </div>
           <div>
@@ -453,7 +453,7 @@ function SeatingPlanInner() {
             <div className="p-6 flex-grow overflow-y-auto hide-scrollbar guest-tray rounded-[2rem]">
               <div className="flex justify-between items-start mb-6">
                 <div>
-                  <h2 className="font-headline-md text-headline-md text-primary">{selected.name}</h2>
+                  <h2 className="font-headline-md text-headline-md text-primary-text">{selected.name}</h2>
                   <p className="font-body-md text-body-md text-on-surface-variant">
                     {selected.subtitle} • {selected.guestIds.length}/{selected.capacity} seats
                   </p>

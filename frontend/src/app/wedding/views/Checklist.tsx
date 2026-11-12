@@ -21,7 +21,7 @@ const inputClass =
 const primaryButton =
   `bg-primary text-on-primary rounded-full px-5 py-2 font-button-text text-sm disabled:opacity-60 ${phoneTall} ${focusRing}`;
 const linkButton =
-  `text-sm text-on-surface-variant hover:text-primary underline-offset-4 hover:underline disabled:opacity-60 rounded ${tapArea} ${focusRing}`;
+  `text-sm text-on-surface-variant hover:text-primary-text underline-offset-4 hover:underline disabled:opacity-60 rounded ${tapArea} ${focusRing}`;
 const dangerLink =
   `text-sm text-on-surface-variant hover:text-error underline-offset-4 hover:underline disabled:opacity-60 rounded ${tapArea} ${focusRing}`;
 
@@ -99,7 +99,7 @@ export function Checklist() {
   const shell = (children: ReactNode) => (
     <main className="pt-24 px-margin-mobile md:pl-[calc(18rem+24px)] md:pr-margin-desktop pb-32 max-w-[1120px] mx-auto">
       <div className="mb-6">
-        <h1 className="font-display-lg-mobile md:font-display-lg text-display-lg-mobile md:text-display-lg text-primary mb-2">
+        <h1 className="font-display-lg-mobile md:font-display-lg text-display-lg-mobile md:text-display-lg text-primary-text mb-2">
           Checklist
         </h1>
         <p className="text-on-surface-variant">
@@ -407,7 +407,7 @@ function GroupCard({
 function Badge({ tone, children }: { tone: "error" | "primary" | "catch"; children: ReactNode }) {
   const cls = {
     error: "bg-error/10 text-error",
-    primary: "bg-primary/15 text-primary",
+    primary: "bg-primary/15 text-primary-text",
     catch: "bg-tertiary-fixed text-on-tertiary-fixed",
   }[tone];
   return <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${cls}`}>{children}</span>;

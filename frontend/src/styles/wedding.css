@@ -8,6 +8,9 @@
 .wedding {
   --background: #faf9f6;
   --primary: #d4af37;
+  /* Gold for text and icons (B83): #d4af37 is 2.0:1 on this background, this
+     darker antique gold is 5.3:1 (5.6:1 on white cards). */
+  --primary-text: #806417;
   --secondary: #76593b;
 }
 

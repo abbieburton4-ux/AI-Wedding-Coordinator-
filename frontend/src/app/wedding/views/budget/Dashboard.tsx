@@ -19,7 +19,7 @@ export function Explain({ children }: { children: ReactNode }) {
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((o) => !o)}
-        className={`inline-flex items-center gap-1 text-xs text-on-surface-variant hover:text-primary underline-offset-4 hover:underline mt-2 ${tapArea}`}
+        className={`inline-flex items-center gap-1 text-xs text-on-surface-variant hover:text-primary-text underline-offset-4 hover:underline mt-2 ${tapArea}`}
       >
         <Icon name="help" size={14} /> {open ? "Hide" : "What's this?"}
       </button>

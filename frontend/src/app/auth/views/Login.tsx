@@ -45,7 +45,7 @@ export function Login() {
       footer={
         <>
           No account yet?{" "}
-          <Link to="/signup" className="text-primary hover:underline">Create an account</Link>
+          <Link to="/signup" className="text-primary-text hover:underline">Create an account</Link>
         </>
       }
     >
