@@ -1298,8 +1298,11 @@ async def edit_cost(
             tip.category_id = row.category_id
             tip.updated_at = row.updated_at
             db.add(tip)
+        # An archived tip is out of the totals and its payments out of those due, so
+        # its payments stay as they were.
         for tip, pays, before in tips_before:
-            _follow_tip(db, tip, row, pays, before)
+            if not tip.archived:
+                _follow_tip(db, tip, row, pays, before)
     await db.commit()
     await db.refresh(row)
     return row

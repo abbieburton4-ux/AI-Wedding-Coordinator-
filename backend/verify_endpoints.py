@@ -2031,6 +2031,13 @@ def test_api_suite():
         assert c.patch(f"{b_url}/costs/{bar}", json={"quoted_cents": 500_000},
                        headers=headers).status_code == 200
         assert pay_amounts(whole) == [83_333], "switched to dollars, it never follows"
+        shelved = tip_on_bar({"percent_basis_points": 1000, "due_on": "2027-06-01"})
+        assert pay_amounts(shelved) == [50_000]
+        assert c.patch(f"{b_url}/costs/{shelved}", json={"archived": True},
+                       headers=headers).status_code == 200
+        assert c.patch(f"{b_url}/costs/{bar}", json={"quoted_cents": 600_000},
+                       headers=headers).status_code == 200
+        assert pay_amounts(shelved) == [50_000], "an archived tip's payment stays as it was"
         print("   * A new percentage moves it; a cost cleared, a payment out of step or a "
               "switch to dollars leaves it as typed")
 

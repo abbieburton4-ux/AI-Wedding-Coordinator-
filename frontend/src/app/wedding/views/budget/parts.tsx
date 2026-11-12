@@ -1092,7 +1092,8 @@ export function AddTipForm({
         The tip is added as its own line{target ? `, "Tip: ${target.vendor_name}",` : ""} in the same category, and counts in
         your totals. A percentage tip changes when {target ? `${target.vendor_name}'s` : "the expense's"} cost changes, until
         a payment on the tip is ticked paid. A tip in dollars stays as you typed it. A due date or who pays adds a payment
-        for the tip, not ticked as paid. If that's the tip's only payment, it changes with the tip.
+        for the tip, not ticked as paid. For a percentage tip, that payment changes with the tip while it's the tip's
+        only payment, isn't paid and still matches the tip.
       </p>
       {picks && (
         <OverNote
@@ -1135,7 +1136,8 @@ function TipEditForm({
   const only = cost.payments.length === 1 ? cost.payments[0] : null;
   const follows = cost.tip_basis_points !== null && mode === "percent" && typeof bp === "number"
     && bp !== cost.tip_basis_points && only !== null
-    && !only.paid && !only.refundable && only.amount_cents === cost.committed_cents;
+    && !only.paid && !only.refundable && only.amount_cents === cost.committed_cents
+    && cost.tip_state === "following" && typed !== null && typed > 0 && typed !== only.amount_cents;
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
