@@ -107,7 +107,7 @@ export function Concierge() {
             </div>
           ) : (
             <div key={i} className="flex flex-col items-end max-w-[85%] self-end">
-              <div className="bg-primary text-white rounded-2xl rounded-tr-none p-4">
+              <div className="bg-primary text-on-primary rounded-2xl rounded-tr-none p-4">
                 <p className="text-sm">{msg.text}</p>
               </div>
             </div>
@@ -165,7 +165,7 @@ export function Concierge() {
             className="flex-grow bg-transparent border-none focus:ring-0 focus:outline-none text-sm px-2 disabled:opacity-60"
             placeholder="Ask Aurelia anything..."
           />
-          <button type="submit" aria-label="Send" disabled={sending} className="p-3 bg-primary text-white rounded-full disabled:opacity-50">
+          <button type="submit" aria-label="Send" disabled={sending} className="p-3 bg-primary text-on-primary rounded-full disabled:opacity-50">
             <Icon name="send" size={20} />
           </button>
         </form>

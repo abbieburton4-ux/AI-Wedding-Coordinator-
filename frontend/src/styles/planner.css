@@ -32,7 +32,8 @@
   --color-outline-variant: #d0c5af;
 
   --color-primary-container: #d4af37;
-  --color-on-primary: #ffffff;
+  /* Dark, not white, on the couple's gold (#d4af37): 8.2:1 against 2.1:1 (B72). */
+  --color-on-primary: #1a1c1a;
   --color-on-primary-container: #554300;
   --color-primary-fixed: #ffe088;
   --color-primary-fixed-dim: #e9c349;
