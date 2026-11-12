@@ -375,5 +375,6 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - B: improve the CSV only (new columns). Smallest change, still one plain sheet.
 - C: send it straight to the couple's Google Drive as a Google Sheet. Needs the app to get permission to write to their Drive: an access and data-location decision of its own.
 **Decision:** A now. C may follow later, under its own PD (B89).
-**Settled by the team (reversible):** the CSV button stays next to the new one; the same two ticks (archived expenses, vendor contacts) apply to both; the formula guard from B69 applies to every cell; amounts come from whole cents and show as dollars. A new library to write the file is allowed, with a one-line reason in the commit (rule 9).
+**Settled by the team (reversible):** the same two ticks (archived expenses, vendor contacts) apply to the Excel file; the formula guard from B69 applies to every cell; amounts come from whole cents and show as dollars. A new library to write the file is allowed, with a one-line reason in the commit (rule 9).
 **Rejected because:** B doesn't give the tabs and formatting; C is a bigger access decision, left for later at the owner's word.
+**Follow-up, ratified (owner, 2026-11-12: "we can remove the download .csv button when we have the download excel"):** once the Excel download is live, the "Download CSV" button is removed (B91). "Print / save as PDF" stays.
