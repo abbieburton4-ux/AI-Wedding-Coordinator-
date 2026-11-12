@@ -9,6 +9,7 @@ import { BudgetCharts } from "./budget/Charts";
 import { ExpenseList, type CategoryRequest } from "./budget/ExpenseList";
 import { UpcomingPayments } from "./budget/Upcoming";
 import { BudgetExport } from "./budget/Export";
+import { Payers } from "./budget/Payers";
 import { AMOUNT_HINT, centsToInput, formatCents, parseDollars } from "./budget/money";
 import {
   AddCategoryForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, inputClass, linkButton, primaryButton,
@@ -131,7 +132,8 @@ function BudgetScreen() {
           Budget
         </h1>
         <p className="text-on-surface-variant">
-          Give each category a target, record each vendor's estimated, quoted and final cost, and tick off payments as you make
+          Give each category a target, add each expense with its estimate or quote and who is paying, fill in the actual cost
+          later, and tick off payments as you make
           them. Amounts are in US dollars; "overdue" uses today's date in Chicago.
         </p>
         {!canEdit && myLevel && (
@@ -180,7 +182,7 @@ function BudgetScreen() {
 
           <UpcomingPayments categories={overview.categories} today={overview.today} onOpen={openExpense} />
 
-          <BudgetCharts categories={overview.categories} onCategory={showCategory} />
+          <BudgetCharts categories={overview.categories} payers={overview.payers} onCategory={showCategory} />
 
           <ExpenseList
             categories={overview.categories} today={overview.today} onOpen={openExpense} categoryRequest={categoryRequest}
@@ -220,7 +222,7 @@ function BudgetScreen() {
               {overview.categories.map((cat) => (
                 <CategoryCard
                   key={cat.id} base={base} category={cat} categories={overview.categories} totals={overview.totals}
-                  vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} openRequest={openRequest}
+                  vendors={vendors} payers={overview.payers} canEdit={canEdit} run={run} request={request} busy={busy} openRequest={openRequest}
                   onOpened={clearOpen} addRequest={addRequest} onAddHandled={clearAdd}
                 />
               ))}
@@ -229,6 +231,8 @@ function BudgetScreen() {
             {canEdit && <MethodSuggestions />}
             </FoldBody>
           </section>
+
+          <Payers base={base} payers={overview.payers} canEdit={canEdit} run={run} request={request} busy={busy} />
 
           {weddingId && <BudgetExport weddingId={weddingId} today={overview.today} />}
 

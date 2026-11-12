@@ -208,7 +208,7 @@ function ExpenseBlock({ cost, vendor }: { cost: Cost; vendor?: VendorInfo }) {
   const facts = [
     cost.estimated_cents !== null && `Estimate ${formatCents(cost.estimated_cents)}`,
     cost.quoted_cents !== null && `Quote ${formatCents(cost.quoted_cents)}`,
-    cost.final_cents !== null && `Final ${formatCents(cost.final_cents)}`,
+    cost.final_cents !== null && `Actual cost ${formatCents(cost.final_cents)}`,
     CONTRACT[cost.contract_status],
     cost.payment_method && `Pays by ${cost.payment_method}`,
   ].filter(Boolean);
@@ -243,7 +243,8 @@ function ExpenseBlock({ cost, vendor }: { cost: Cost; vendor?: VendorInfo }) {
               <th scope="col" className="py-1 px-2 font-bold text-right">Amount</th>
               <th scope="col" className="py-1 px-2 font-bold">Due</th>
               <th scope="col" className="py-1 px-2 font-bold">Status</th>
-              <th scope="col" className="py-1 pl-2 font-bold">Method / reference</th>
+              <th scope="col" className="py-1 px-2 font-bold">Who paid</th>
+              <th scope="col" className="py-1 pl-2 font-bold">How it was paid / reference</th>
             </tr>
           </thead>
           <tbody>
@@ -255,6 +256,7 @@ function ExpenseBlock({ cost, vendor }: { cost: Cost; vendor?: VendorInfo }) {
                 <td className="py-1 px-2 text-right">{formatCents(p.amount_cents)}</td>
                 <td className="py-1 px-2 whitespace-nowrap">{day(p.due_on)}</td>
                 <td className="py-1 px-2">{paymentStatus(p)}</td>
+                <td className="py-1 px-2">{p.payer_name ?? "Not set"}</td>
                 <td className="py-1 pl-2">{[p.method, p.reference].filter(Boolean).join(" · ") || "—"}</td>
               </tr>
             ))}

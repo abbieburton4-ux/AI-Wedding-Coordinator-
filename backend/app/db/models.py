@@ -442,7 +442,8 @@ class BudgetCategory(SQLModel, table=True):
 class BudgetCost(SQLModel, table=True):
     """An expense under a category: who it's with, what it costs, and its contract.
 
-    The cost the budget counts is final, else quoted, else estimated (see
+    The cost the budget counts is final (shown as "Actual cost", PD-016), else quoted,
+    else estimated (see
     ``utils/budget_math.py``). Only the couple change ``contract_status``; no agent
     does (rule 4). Archived expenses are kept but left out of every total.
     """
@@ -489,6 +490,20 @@ class BudgetCost(SQLModel, table=True):
     updated_at: datetime.datetime = Field(default_factory=utcnow)
 
 
+class BudgetPayer(SQLModel, table=True):
+    """Someone who pays for things, from the couple's "People who pay" list (PD-016).
+
+    The couple type the names in the app, so real names live only in the database,
+    never in code (rule 3). Choosing a payer on a payment never marks it paid.
+    """
+    __tablename__ = "budget_payers"
+
+    id: str = Field(default_factory=generate_uuid_str, primary_key=True)
+    wedding_id: str = Field(foreign_key="weddings.id", index=True, ondelete="CASCADE")
+    name: str
+    created_at: datetime.datetime = Field(default_factory=utcnow)
+
+
 class BudgetPayment(SQLModel, table=True):
     """A deposit or later payment on a vendor cost.
 
@@ -523,6 +538,11 @@ class BudgetPayment(SQLModel, table=True):
     refundable: bool = Field(
         default=False,
         sa_column=Column(Boolean, nullable=False, server_default=false()),
+    )
+    # Who paid or will pay it (PD-016), from the "People who pay" list; blank until
+    # the couple say. Not ``paid_by_user_id``, which is who ticked it in the app.
+    payer_id: Optional[str] = Field(
+        default=None, foreign_key="budget_payers.id", index=True, ondelete="SET NULL"
     )
     created_at: datetime.datetime = Field(default_factory=utcnow)
 

@@ -1544,7 +1544,7 @@ def test_api_suite():
             assert set(expenses) == {"Sample Export Hall", "Placeholder Florist"}, \
                 "archived expenses left out by default"
             h = expenses["Sample Export Hall"]
-            assert (h["Final (USD)"], h["Cost (USD)"], h["Paid (USD)"],
+            assert (h["Actual (USD)"], h["Cost (USD)"], h["Paid (USD)"],
                     h["Still to pay (USD)"], h["Refundable deposits (USD)"]) == (
                 "12000.50", "12000.50", "6000.00", "6000.50", "2000.00")
             assert (h["Linked vendor"], h["Vendor website"], h["Contract"], h["Status"]) == (
@@ -1618,6 +1618,112 @@ def test_api_suite():
                         headers=headers).status_code == 204
         assert c.put(f"{b_url}/total", json={"total_cents": before_total},
                      headers=headers).status_code == 200
+
+        print("7c6. Verifying who paid: the payer list, the one-step add, payers on payments...")
+        p_url = f"{b_url}/payers"
+        assert c.get(f"{b_url}/overview", headers=viewer_headers).json()["payers"] == [], \
+            "the list starts empty; no names come from code"
+        for who in (viewer_headers, unauth_headers):
+            assert c.post(p_url, json={"name": "Z"}, headers=who).status_code == 403
+            assert c.patch(f"{p_url}/nope", json={"name": "Z"}, headers=who).status_code == 403
+            assert c.delete(f"{p_url}/nope", headers=who).status_code == 403
+        res = c.post(p_url, json={"name": "  Sample  Payer A "}, headers=headers)
+        assert res.status_code == 201 and res.json() == {
+            "id": res.json()["id"], "name": "Sample Payer A", "payment_count": 0}, res.text
+        payer_a = res.json()["id"]
+        res = c.post(p_url, json={"name": "Placeholder Family"}, headers=editor_headers)
+        assert res.status_code == 201, res.text
+        payer_b = res.json()["id"]
+        assert c.post(p_url, json={"name": "sample payer a"}, headers=headers).status_code == 409
+        assert c.post(p_url, json={"name": "   "}, headers=headers).status_code == 422
+        assert c.patch(f"{p_url}/{payer_b}", json={"name": "SAMPLE PAYER A"},
+                       headers=headers).status_code == 409
+        res = c.patch(f"{p_url}/{payer_b}", json={"name": "Placeholder Relatives"},
+                      headers=editor_headers)
+        assert res.status_code == 200 and res.json()["name"] == "Placeholder Relatives"
+        assert c.patch(f"{p_url}/nope", json={"name": "Z"}, headers=headers).status_code == 404
+        print("   * People who pay: owners and editors add and rename; duplicates refused; "
+              "viewers and outsiders can't")
+
+        pay_cat = c.post(f"{b_url}/categories", json={"name": "Placeholder Music"},
+                         headers=headers).json()["id"]
+
+        def costs_in(cat_id):
+            ov = c.get(f"{b_url}/overview", headers=viewer_headers).json()
+            return next(k for k in ov["categories"] if k["id"] == cat_id)["costs"]
+
+        res = c.post(f"{b_url}/categories/{pay_cat}/costs", headers=editor_headers, json={
+            "vendor_name": "Sample Band", "quoted_cents": 400_000, "notes": "Two sets",
+            "first_payment": {"kind": "deposit", "amount_cents": 100_000,
+                              "due_on": "2027-01-10", "payer_id": payer_a}})
+        assert res.status_code == 201, res.text
+        band = res.json()["id"]
+        [cost] = costs_in(pay_cat)
+        [first] = cost["payments"]
+        assert (first["kind"], first["amount_cents"], first["due_on"], first["paid"],
+                first["payer_id"], first["payer_name"]) == (
+            "deposit", 100_000, "2027-01-10", False, payer_a, "Sample Payer A"), first
+        assert cost["last_payer_id"] == payer_a and cost["notes"] == "Two sets"
+        for bad in ({"amount_cents": 0}, {"amount_cents": 1, "payer_id": "nope"},
+                    {"amount_cents": 1, "kind": "refund"}):
+            res = c.post(f"{b_url}/categories/{pay_cat}/costs", headers=headers,
+                         json={"vendor_name": "Half Made", "first_payment": bad})
+            assert res.status_code in (404, 422), (bad, res.text)
+        assert [k["vendor_name"] for k in costs_in(pay_cat)] == ["Sample Band"], \
+            "a refused first payment leaves no half-made expense"
+        res = c.post(f"{b_url}/categories/{pay_cat}/costs", headers=headers,
+                     json={"vendor_name": "Sample DJ"})
+        assert res.status_code == 201
+        dj = next(k for k in costs_in(pay_cat) if k["id"] == res.json()["id"])
+        assert dj["payments"] == [] and dj["last_payer_id"] is None, "no payment unless asked"
+        print("   * Add expense: the expense and its first payment save together, or not at all")
+
+        res = c.post(f"{b_url}/costs/{band}/payments", headers=headers,
+                     json={"amount_cents": 300_000, "payer_id": payer_b})
+        assert res.status_code == 201 and res.json()["paid"] is False, res.text
+        assert res.json()["payer_name"] == "Placeholder Relatives"
+        balance = res.json()["id"]
+        cost = next(k for k in costs_in(pay_cat) if k["id"] == band)
+        assert cost["last_payer_id"] == payer_b, "a new payment starts with the latest payer"
+        assert c.post(f"{b_url}/costs/{band}/payments", headers=headers,
+                      json={"amount_cents": 1, "payer_id": "nope"}).status_code == 404
+        res = c.patch(f"{b_url}/payments/{first['id']}", json={"payer_id": payer_b},
+                      headers=editor_headers)
+        assert res.status_code == 200 and res.json()["paid"] is False, \
+            "choosing who paid never ticks it (rule 4)"
+        assert c.put(f"{b_url}/payments/{first['id']}/paid", json={"paid": True},
+                     headers=headers).json()["paid"] is True
+        res = c.patch(f"{b_url}/payments/{first['id']}", json={"payer_id": payer_a},
+                      headers=headers)
+        assert res.json()["paid"] is True and res.json()["payer_id"] == payer_a, \
+            "changing who paid never unticks it either"
+        res = c.patch(f"{b_url}/payments/{balance}", json={"payer_id": None}, headers=headers)
+        assert res.json()["payer_id"] is None and res.json()["payer_name"] is None
+        assert c.patch(f"{b_url}/payments/{balance}", json={"payer_id": payer_b},
+                       headers=viewer_headers).status_code == 403
+        print("   * Who paid on payments: chosen, changed and cleared; paid ticks untouched")
+
+        res = c.delete(f"{p_url}/{payer_a}", headers=headers)
+        assert res.status_code == 409 and "1 payment" in res.json()["detail"], res.text
+        cost = next(k for k in costs_in(pay_cat) if k["id"] == band)
+        kept = {pay["id"]: pay["payer_id"] for pay in cost["payments"]}
+        assert kept == {first["id"]: payer_a, balance: None}, \
+            "a payer named on a payment isn't removed, and no payment is"
+        ov = c.get(f"{b_url}/overview", headers=headers).json()
+        assert {p["name"]: p["payment_count"] for p in ov["payers"]} == {
+            "Sample Payer A": 1, "Placeholder Relatives": 0}
+        assert c.delete(f"{p_url}/{payer_b}", headers=editor_headers).status_code == 204
+        print("   * Removing a payer: refused while named on a payment; fine otherwise")
+
+        got, heads = sections(export())
+        assert "Who paid" in heads["Payments"] and "How it was paid" in heads["Payments"]
+        band_pays = {r["Amount (USD)"]: r for r in got["Payments"] if r["Expense"] == "Sample Band"}
+        assert band_pays["1000.00"]["Who paid"] == "Sample Payer A"
+        assert band_pays["3000.00"]["Who paid"] == ""
+        print("   * Export: each payment says who paid")
+
+        clear_category(pay_cat)
+        assert c.delete(f"{p_url}/{payer_a}", headers=headers).status_code == 204
 
         print("7d. Verifying vendor cards compare quotes with the couple's own budget (B42)...")
         from app.db.models import Booking, BudgetLine, Quote, Supplier

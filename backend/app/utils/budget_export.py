@@ -32,7 +32,7 @@ BUDGET_LABELS = {
     "over": "Over budget",
 }
 BASIS_LABELS = {
-    "none": "Nothing yet", "final": "Final cost", "quote": "Quote", "estimate": "Estimate",
+    "none": "Nothing yet", "final": "Actual cost", "quote": "Quote", "estimate": "Estimate",
     "scheduled": "Payments scheduled", "mixed": "Mixed",
 }
 CONTRACT_LABELS = {"none": "None", "sent": "Sent", "signed": "Signed"}
@@ -141,7 +141,7 @@ def build_csv(overview, vendors: dict, include_archived: bool = False,
 
     contact_heads = ["Vendor contact", "Vendor email", "Vendor phone"] if include_contacts else []
     rows.append(["Section", "Expense", "Category", "Linked vendor", "Vendor website",
-                 *contact_heads, "Estimated (USD)", "Quoted (USD)", "Final (USD)",
+                 *contact_heads, "Estimated (USD)", "Quoted (USD)", "Actual (USD)",
                  "Cost (USD)", "Cost based on", "Paid (USD)", "Still to pay (USD)",
                  "Overpaid (USD)", "Refundable deposits (USD)", "Status", "Next due",
                  "Contract", "Payment method", "Link", "Notes", "Archived"])
@@ -169,14 +169,14 @@ def build_csv(overview, vendors: dict, include_archived: bool = False,
     rows.append([])
 
     rows.append(["Section", "Expense", "Category", "Type", "Amount (USD)", "Due",
-                 "Paid", "Paid on", "Method", "Reference", "Refundable", "Status",
-                 "Link", "Notes"])
+                 "Paid", "Paid on", "Who paid", "How it was paid", "Reference",
+                 "Refundable", "Status", "Link", "Notes"])
     for cat, cost in shown:
         for p in cost.payments:
             rows.append([
                 "Payments", cost.vendor_name, cat.name, KIND_LABELS.get(p.kind, p.kind),
                 dollars(p.amount_cents), _day(p.due_on), _yes(p.paid), _day(p.paid_on),
-                p.method, p.reference, _yes(p.refundable), payment_status(p),
+                p.payer_name, p.method, p.reference, _yes(p.refundable), payment_status(p),
                 p.link_url, p.notes,
             ])
     rows.append([])

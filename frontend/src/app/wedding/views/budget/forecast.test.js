@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { expenseCost, wouldGoOver } from "./forecast.js";
+import { costBox, expenseCost, wouldGoOver } from "./forecast.js";
 
 const base = { target: 100_000, committed: 80_000, total: 1_000_000, totalCommitted: 990_000 };
 
@@ -41,4 +41,13 @@ test("an edit only counts the change, and lowering a cost never warns", () => {
     { categoryOverBy: 0, totalOverBy: 0 });
   assert.deepEqual(wouldGoOver({ ...base, before: 50_000, after: 75_000 }),
     { categoryOverBy: 5_000, totalOverBy: 15_000 });
+});
+
+test("the one cost box shows and writes the quote if there is one, else the estimate", () => {
+  assert.deepEqual(costBox(1200, 1000), { field: "quoted_cents", cents: 1200, keptEstimate: 1000 });
+  assert.deepEqual(costBox(0, null), { field: "quoted_cents", cents: 0, keptEstimate: null },
+    "a quote of 0 is a real figure");
+  assert.deepEqual(costBox(null, 1000), { field: "estimated_cents", cents: 1000, keptEstimate: null });
+  assert.deepEqual(costBox(null, null), { field: "estimated_cents", cents: null, keptEstimate: null },
+    "a new expense's figure goes in the estimate");
 });

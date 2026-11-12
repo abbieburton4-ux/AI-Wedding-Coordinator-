@@ -169,6 +169,40 @@ export function targetVsCommitted(categories) {
   }));
 }
 
+/** The id of the "Not set" row: payments nobody has said who paid yet. */
+export const NOT_SET = "not_set";
+
+/**
+ * Who paid (PD-016 step 4): per person on the list, what they've paid (ticked
+ * payments) and what's still to come from them (unticked). Payments with no payer, or
+ * a payer no longer on the list, go in a "Not set" row, shown only when there are
+ * some. Like the other charts, refundable deposits and archived expenses are left out.
+ * These are payments only, never contributions (promises; PD-016 call c).
+ * @param {{ costs: any[] }[]} categories
+ * @param {{ id: string, name: string }[]} payers
+ * @returns {{ id: string, name: string, paidCents: number, toComeCents: number,
+ *   totalCents: number, count: number }[]}
+ */
+export function whoPaid(categories, payers) {
+  const rows = payers.map((p) => ({ id: p.id, name: p.name, paidCents: 0, toComeCents: 0, count: 0 }));
+  const notSet = { id: NOT_SET, name: "Not set", paidCents: 0, toComeCents: 0, count: 0 };
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  for (const cat of categories) {
+    for (const cost of cat.costs) {
+      if (cost.archived) continue;
+      for (const p of cost.payments) {
+        if (p.refundable) continue;
+        const row = (p.payer_id && byId.get(p.payer_id)) || notSet;
+        if (p.paid) row.paidCents += p.amount_cents;
+        else row.toComeCents += p.amount_cents;
+        row.count += 1;
+      }
+    }
+  }
+  return (notSet.count > 0 ? [...rows, notSet] : rows)
+    .map((r) => ({ ...r, totalCents: r.paidCents + r.toComeCents }));
+}
+
 /** "$12k", "$950" or "$1.5k" for an axis tick; labels and tables use the exact amount. */
 export function compactDollars(cents) {
   const dollars = Math.round(cents / 100);

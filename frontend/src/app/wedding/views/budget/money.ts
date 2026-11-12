@@ -56,11 +56,11 @@ export function formatInstantDay(isoDateTime: string): string {
 
 const COMMITTED_LABEL = {
   none: "Committed",
-  final: "Committed (final costs)",
+  final: "Committed (actual costs)",
   quote: "Committed (quoted)",
   estimate: "Committed (estimates)",
   scheduled: "Committed (payments scheduled)",
-  mixed: "Committed (final, quoted, estimated or scheduled)",
+  mixed: "Committed (actual, quoted, estimated or scheduled)",
 } as const;
 
 /** The heading for a "committed" figure, saying where the number comes from. */
