@@ -36,11 +36,12 @@ from app.utils.budget_defaults import (
 )
 from app.utils.budget_export import build_csv as budget_export_csv
 from app.utils.budget_export import filename as export_filename
+from app.utils import budget_xlsx
 from app.utils.budget_math import (
     CONTINGENCY_NAME, add_up, basis_of, counted_cost, dashboard_figures, expense_figures,
     is_overdue, percent_of, target_figures, tip_cents_now,
 )
-from app.utils.checklist import wedding_today
+from app.utils.checklist import WEDDING_TZ, wedding_today
 
 router = APIRouter()
 
@@ -437,6 +438,12 @@ class RestoreOut(BaseModel):
 def _today() -> datetime.date:
     # Chicago's date, as the checklist uses (B45). One place, so tests can fix it.
     return wedding_today()
+
+
+def _now() -> datetime.datetime:
+    # Chicago's date and time, naive (a spreadsheet cell has no time zone), for the
+    # export's "snapshot taken" note.
+    return datetime.datetime.now(WEDDING_TZ).replace(tzinfo=None, second=0, microsecond=0)
 
 
 def _clean(text: str) -> str:
@@ -932,6 +939,27 @@ async def budget_overview(
     return await _overview(db, wedding)
 
 
+async def _export_inputs(db: AsyncSession, wedding_id: str, user: User):
+    """The overview and the wedding's Vendors-page rows, for either download. Anyone who
+    can see the budget can download it, family (viewers) included."""
+    wedding = await require_wedding_access(db, wedding_id, user, "viewer")
+    overview = await _overview(db, wedding)
+    vendors = {v.id: v for v in (await db.exec(
+        select(CoupleVendor).where(CoupleVendor.wedding_id == wedding_id))).all()}
+    return overview, vendors
+
+
+def _download(body: bytes, media_type: str, name: str) -> Response:
+    return Response(
+        content=body, media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}"',
+            # Budget figures and, if asked for, contact details: never kept in a cache.
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @router.get("/{wedding_id}/budget/export.csv")
 async def budget_export(
     wedding_id: str,
@@ -942,25 +970,33 @@ async def budget_export(
 ):
     """The budget as one CSV, downloaded to the reader's own device (PD-013 step 5).
 
-    Anyone who can see the budget can download it, family included. Vendor contact
-    details are left out unless asked for. The file is built in memory and returned;
-    it's never written to disk, logged or sent anywhere (rule 1).
+    Vendor contact details are left out unless asked for. The file is built in memory
+    and returned; it's never written to disk, logged or sent anywhere (rule 1).
     """
-    wedding = await require_wedding_access(db, wedding_id, current_user, "viewer")
-    overview = await _overview(db, wedding)
-    vendors = {v.id: v for v in (await db.exec(
-        select(CoupleVendor).where(CoupleVendor.wedding_id == wedding_id))).all()}
+    overview, vendors = await _export_inputs(db, wedding_id, current_user)
     body = budget_export_csv(overview, vendors, include_archived=include_archived,
                              include_contacts=include_contacts)
-    return Response(
-        content=body.encode("utf-8"), media_type="text/csv; charset=utf-8",
-        headers={
-            "Content-Disposition":
-                f'attachment; filename="{export_filename(overview.today)}"',
-            # Budget figures and, if asked for, contact details: never kept in a cache.
-            "Cache-Control": "no-store",
-        },
-    )
+    return _download(body.encode("utf-8"), "text/csv; charset=utf-8",
+                     export_filename(overview.today))
+
+
+@router.get("/{wedding_id}/budget/export.xlsx")
+async def budget_export_xlsx(
+    wedding_id: str,
+    include_archived: bool = Query(False),
+    include_contacts: bool = Query(False),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """The budget as an Excel file with tabs (PD-019), with the same access, ticks and
+    figures as the CSV. Built in memory and returned; never stored, logged or sent."""
+    overview, vendors = await _export_inputs(db, wedding_id, current_user)
+    now = _now()
+    body = budget_xlsx.build_xlsx(overview, vendors, now,
+                                  include_archived=include_archived,
+                                  include_contacts=include_contacts)
+    # Named from the same moment as the snapshot note, so the two never straddle midnight.
+    return _download(body, budget_xlsx.MEDIA_TYPE, budget_xlsx.filename(now.date()))
 
 
 @router.put("/{wedding_id}/budget/total", response_model=Totals)
