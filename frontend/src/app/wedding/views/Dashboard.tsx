@@ -197,9 +197,9 @@ export function Dashboard() {
     return shell(
       <div className="bg-wedding-white custom-shadow rounded-[3rem] p-10 border border-soft-clay/30 max-w-2xl mx-auto mt-8">
         <div className="flex items-start gap-4 mb-4">
-          <Icon name="savings" size={28} className="text-soft-clay mt-1" />
+          <Icon name="savings" size={28} className="text-soft-clay-text mt-1" />
           <div>
-            <span className="font-label-caps text-[10px] text-soft-clay tracking-widest uppercase">
+            <span className="font-label-caps text-[10px] text-soft-clay-text tracking-widest uppercase">
               Your coordinator flagged something
             </span>
             <h1 className="font-headline-sm text-headline-sm text-on-surface mt-1">

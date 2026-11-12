@@ -21,6 +21,10 @@
   --color-wedding-white: #ffffff;
   --color-charcoal-ink: #1a1a1a;
   --color-soft-clay: #c3937c;
+  /* Clay for text and icons only (B85): the fill clay above is 2.6:1 on the
+     cream, this deeper clay (same hue) is 5.5:1 (5.8:1 on white, 5.1:1 on a
+     clay/10 tag). Fills, tints and borders stay #c3937c. */
+  --color-soft-clay-text: #8c5940;
 
   --color-on-surface: #1a1c1a;
   --color-on-surface-variant: #4d4635;
