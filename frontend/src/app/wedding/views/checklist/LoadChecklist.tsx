@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type ChangeEvent } from "react";
 import { formatDay } from "../budget/money";
+import { tapArea } from "../budget/sections";
 import type { ImportResult } from "./types";
 
 type Req = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
@@ -7,9 +8,9 @@ type Req = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
 const focusRing =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
 const primaryButton =
-  `bg-primary text-on-primary rounded-full px-5 py-2 font-button-text text-sm disabled:opacity-60 ${focusRing}`;
+  `bg-primary text-on-primary rounded-full px-5 py-2 font-button-text text-sm disabled:opacity-60 min-h-11 sm:min-h-0 ${focusRing}`;
 const linkButton =
-  `text-sm text-on-surface-variant hover:text-primary underline-offset-4 hover:underline disabled:opacity-60 rounded ${focusRing}`;
+  `text-sm text-on-surface-variant hover:text-primary underline-offset-4 hover:underline disabled:opacity-60 rounded ${tapArea} ${focusRing}`;
 
 // The owner's file is about 10 kB; the server refuses anything near this size too.
 const MAX_FILE_BYTES = 800_000;
@@ -131,7 +132,7 @@ export function LoadChecklist({
             accept=".md,.json,.txt,text/markdown,application/json,text/plain"
             disabled={busy !== null}
             onChange={pick}
-            className={`text-sm text-on-surface file:mr-3 file:rounded-full file:border-0 file:bg-primary file:text-on-primary file:px-4 file:py-2 file:font-button-text ${focusRing}`}
+            className={`text-sm text-on-surface file:mr-3 file:rounded-full file:border-0 file:bg-primary file:text-on-primary file:px-4 file:py-3 sm:file:py-2 file:font-button-text ${focusRing}`}
           />
         </span>
       )}

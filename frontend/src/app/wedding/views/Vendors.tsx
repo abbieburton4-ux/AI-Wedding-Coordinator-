@@ -3,7 +3,8 @@ import { Icon } from "../../shared/Icon";
 import { useApi, USE_FASTAPI_BACKEND } from "../../api";
 import { useReviewedRequest } from "../../api/review";
 import { useActiveWedding } from "../WeddingProvider";
-import { inputClass, linkButton, primaryButton } from "./budget/parts";
+import { dangerLink, inputClass, linkButton, primaryButton } from "./budget/parts";
+import { tapArea } from "./budget/sections";
 import { FoldChevron, scrollToElement, useRememberedFolds, type Folds } from "./folds";
 
 /**
@@ -124,8 +125,8 @@ const sectionDomId = (key: string) => `vendor-category-${key}`;
 
 const textArea =
   "w-full rounded-2xl border border-outline-variant/40 bg-surface-container-low px-4 py-2 text-sm text-on-surface focus:border-primary focus:outline-none";
-const dangerLink =
-  "text-sm text-on-surface-variant hover:text-error underline-offset-4 hover:underline disabled:opacity-60";
+// On a phone, links in a vendor's details are 44px tall so they're easy to tap (B80).
+const phoneTallLink = "max-sm:inline-flex max-sm:min-h-11 max-sm:items-center";
 
 /** Adds https:// when someone types "example.com"; anything with another scheme is left
  *  as typed, so the server refuses it rather than us guessing. */
@@ -436,7 +437,7 @@ function VendorCard({
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 self-start text-sm font-button-text text-primary underline underline-offset-2 hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary rounded-sm"
+          className="inline-flex max-sm:min-h-11 items-center gap-1 self-start text-sm font-button-text text-primary underline underline-offset-2 hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary rounded-sm"
         >
           {shortUrl(vendor.website ?? "")}
           <Icon name="open_in_new" size={14} />
@@ -444,18 +445,18 @@ function VendorCard({
         </a>
       )}
       {(vendor.contact_name || vendor.email || vendor.phone) && (
-        <dl className="text-sm text-on-surface-variant grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        <dl className="text-sm text-on-surface-variant grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 max-sm:items-center max-sm:auto-rows-[minmax(2.75rem,auto)]">
           {vendor.contact_name && (<><dt>Contact</dt><dd className="text-on-surface break-words">{vendor.contact_name}</dd></>)}
           {vendor.email && (
             <>
               <dt>Email</dt>
-              <dd className="break-all"><a href={`mailto:${encodeURI(vendor.email)}`} className="text-primary underline underline-offset-2">{vendor.email}</a></dd>
+              <dd className="break-all max-sm:flex"><a href={`mailto:${encodeURI(vendor.email)}`} className={`text-primary underline underline-offset-2 ${phoneTallLink}`}>{vendor.email}</a></dd>
             </>
           )}
           {vendor.phone && (
             <>
               <dt>Phone</dt>
-              <dd><a href={telHref(vendor.phone)} className="text-primary underline underline-offset-2">{vendor.phone}</a></dd>
+              <dd className="max-sm:flex"><a href={telHref(vendor.phone)} className={`text-primary underline underline-offset-2 ${phoneTallLink}`}>{vendor.phone}</a></dd>
             </>
           )}
         </dl>
@@ -467,9 +468,9 @@ function VendorCard({
         <PasteReply base={base} vendor={vendor} reload={reload} onClose={() => setMode("view")} />
       )}
       {canEdit && mode === "confirm" && (
-        <p className="flex flex-wrap items-center gap-3 text-sm">
+        <p className="flex flex-wrap items-center gap-3 max-sm:gap-y-6 text-sm">
           <span>Remove {vendor.name}{vendor.latest_reply ? " and what the AI read from their reply" : ""}?</span>
-          <button type="button" autoFocus disabled={busy} onClick={remove} className="text-error font-bold underline-offset-4 hover:underline">
+          <button type="button" autoFocus disabled={busy} onClick={remove} className={`text-error font-bold underline-offset-4 hover:underline ${tapArea}`}>
             Yes, remove
           </button>
           <button type="button" disabled={busy} onClick={() => setMode("view")} className={linkButton}>Cancel</button>
@@ -566,7 +567,7 @@ function SectionCard({
           onSave={add} onCancel={() => setAdding(false)} />
       ) : (
         <button type="button" onClick={() => setAdding(true)}
-          className="self-start inline-flex items-center gap-1 text-sm font-button-text text-primary hover:opacity-80">
+          className="self-start inline-flex max-sm:min-h-11 items-center gap-1 text-sm font-button-text text-primary hover:opacity-80">
           <Icon name="add" size={18} /> Add a vendor<span className="sr-only"> to {section.title}</span>
         </button>
       ))}
@@ -619,7 +620,7 @@ function CategorySummary({
           Collapse all<span className="sr-only"> vendor sections</span>
         </button>
       </p>
-      <ul className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <ul className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {rows.map(({ section, status }) => (
           <li key={section.key}>
             <a
@@ -628,11 +629,11 @@ function CategorySummary({
                 e.preventDefault();
                 goToSection(section.key);
               }}
-              className={`flex min-h-12 items-center justify-between gap-2 rounded-2xl px-4 py-3 text-on-surface hover:bg-surface-container focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${SUMMARY_ITEM[status]}`}
+              className={`flex min-h-12 flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-2xl px-4 py-3 text-on-surface hover:bg-surface-container focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${SUMMARY_ITEM[status]}`}
             >
               <span className="flex min-w-0 items-center gap-2">
                 <Icon name={section.icon} size={18} className="text-on-surface-variant" />
-                <span className="text-sm font-button-text break-words">{section.title}</span>
+                <span className="min-w-0 text-sm font-button-text break-words">{section.title}</span>
               </span>
               <StatusBadge status={status} srPrefix=": " />
             </a>

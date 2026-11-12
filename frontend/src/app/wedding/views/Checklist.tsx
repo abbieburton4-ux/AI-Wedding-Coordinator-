@@ -4,6 +4,7 @@ import { Switch } from "../../components/ui/switch";
 import { useApi, USE_FASTAPI_BACKEND } from "../../api";
 import { useActiveWedding } from "../WeddingProvider";
 import { formatDay, formatInstantDay } from "./budget/money";
+import { tapArea } from "./budget/sections";
 import type { Checklist as ChecklistData, ChecklistGroup, ChecklistTask, Filter } from "./checklist/types";
 import { LoadChecklist } from "./checklist/LoadChecklist";
 
@@ -12,14 +13,17 @@ type Run = (fn: () => Promise<unknown>) => Promise<boolean>;
 
 const focusRing =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+// On a phone (below sm) boxes and buttons are at least 44px tall and text links get a
+// bigger invisible tap area, as on the Budget page (B78, B80). From sm up nothing changes.
+const phoneTall = "min-h-11 sm:min-h-0";
 const inputClass =
-  `bg-surface-container-low border border-outline-variant/40 rounded-full px-4 py-2 text-sm text-on-surface focus:border-primary ${focusRing}`;
+  `bg-surface-container-low border border-outline-variant/40 rounded-full px-4 py-2 text-sm text-on-surface focus:border-primary ${phoneTall} ${focusRing}`;
 const primaryButton =
-  `bg-primary text-on-primary rounded-full px-5 py-2 font-button-text text-sm disabled:opacity-60 ${focusRing}`;
+  `bg-primary text-on-primary rounded-full px-5 py-2 font-button-text text-sm disabled:opacity-60 ${phoneTall} ${focusRing}`;
 const linkButton =
-  `text-sm text-on-surface-variant hover:text-primary underline-offset-4 hover:underline disabled:opacity-60 rounded ${focusRing}`;
+  `text-sm text-on-surface-variant hover:text-primary underline-offset-4 hover:underline disabled:opacity-60 rounded ${tapArea} ${focusRing}`;
 const dangerLink =
-  `text-sm text-on-surface-variant hover:text-error underline-offset-4 hover:underline disabled:opacity-60 rounded ${focusRing}`;
+  `text-sm text-on-surface-variant hover:text-error underline-offset-4 hover:underline disabled:opacity-60 rounded ${tapArea} ${focusRing}`;
 
 const json = (method: string, body?: unknown): RequestInit => ({
   method,
@@ -187,7 +191,7 @@ export function Checklist() {
             aria-pressed={filter === f.key}
             onClick={() => setFilter(f.key)}
             className={
-              `px-4 py-2 rounded-full text-sm font-button-text border ${focusRing} ` +
+              `px-4 py-2 rounded-full text-sm font-button-text border ${phoneTall} ${focusRing} ` +
               (filter === f.key
                 ? "bg-primary text-on-primary border-primary"
                 : "bg-surface-container-low text-on-surface border-outline-variant/40 hover:border-primary")
@@ -285,7 +289,8 @@ function DateCard({
                   await onConfirmedSaved();
                 });
               }}
-              className={focusRing}
+              // Grows the 32x18px switch to 48x44px on a phone.
+              className={`relative before:absolute before:-inset-x-2 before:-inset-y-[13px] sm:before:hidden ${focusRing}`}
             />
             <label
               htmlFor={confirmedId}
@@ -327,8 +332,10 @@ function DateCard({
               className={inputClass}
             />
           </span>
-          <button type="submit" disabled={busy || !value} className={primaryButton}>Save date</button>
-          <button type="button" onClick={() => setEditing(false)} className={linkButton}>Cancel</button>
+          <span className="flex items-center gap-3">
+            <button type="submit" disabled={busy || !value} className={primaryButton}>Save date</button>
+            <button type="button" onClick={() => setEditing(false)} className={linkButton}>Cancel</button>
+          </span>
         </form>
       )}
     </section>
@@ -440,7 +447,7 @@ function TaskRow({
             onChange={(e) => setNotes(e.target.value)}
             className={`${inputClass} rounded-[1.25rem]`}
           />
-          <span className="flex gap-3">
+          <span className="flex items-center gap-3">
             <button type="submit" disabled={busy || !title.trim()} className={primaryButton}>Save</button>
             <button
               type="button"
@@ -461,6 +468,9 @@ function TaskRow({
 
   return (
     <li className="py-3 flex items-start gap-3">
+      {/* On a phone the padding grows the box's tap area to 44px; the negative margin keeps
+          it where it was. */}
+      <label htmlFor={id} className="flex shrink-0 -m-3 p-3 sm:m-0 sm:p-0">
       <input
         id={id}
         type="checkbox"
@@ -475,6 +485,7 @@ function TaskRow({
         }}
         className={`mt-1 h-5 w-5 shrink-0 accent-primary cursor-pointer disabled:cursor-default ${focusRing}`}
       />
+      </label>
       <div className="flex-1 min-w-0">
         <label htmlFor={id} className={`block ${task.done ? "line-through text-on-surface-variant" : "text-on-surface"} ${canEdit ? "cursor-pointer" : ""}`}>
           {task.title}
@@ -491,15 +502,15 @@ function TaskRow({
         </span>
         {task.notes && <p className="text-sm text-on-surface-variant mt-1 whitespace-pre-line">{task.notes}</p>}
         {canEdit && (
-          <span className="flex flex-wrap gap-3 mt-1">
+          <span className="flex flex-wrap gap-3 mt-3 sm:mt-1">
             {confirm ? (
-              <span className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="flex flex-wrap items-center gap-2 max-sm:gap-y-6 text-sm">
                 <span>Delete this task?</span>
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => run(() => request(url, json("DELETE")))}
-                  className={`text-error font-bold underline-offset-4 hover:underline rounded ${focusRing}`}
+                  className={`text-error font-bold underline-offset-4 hover:underline rounded ${tapArea} ${focusRing}`}
                 >
                   Yes, delete
                 </button>
