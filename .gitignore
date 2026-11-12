@@ -103,3 +103,6 @@ venv.bak/
 
 # The owner's checklist source (PD-007): its wording stays out of git
 wedding-checklist-prompt.md
+
+# The workspace database's migration, recorded for the publish build (B86)
+backend/workspace_db_revision.txt

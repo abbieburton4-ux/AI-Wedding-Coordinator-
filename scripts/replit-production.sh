@@ -34,4 +34,27 @@ cd backend
 # level with the code, so Publish never proposes undoing a migration (B59). The
 # app's startup runs the same upgrade again; on an up-to-date database it's a no-op.
 python db_status.py upgrade
+
+# In the workspace, a Pull doesn't restart the app, so the development database
+# used to stay behind until someone pressed Stop and Run (B86). While the app runs,
+# re-run the same upgrade whenever the migration files change, and stop
+# watching when the server stops (the server keeps its old code until the next
+# Run). The published app's files never change, and
+# Replit sets REPLIT_DEPLOYMENT=1 there, so it doesn't watch.
+if [ "${REPLIT_DEPLOYMENT:-}" != "1" ]; then
+  server_pid=$$
+  (
+    migrations() { cat migrations/versions/*.py 2>/dev/null | cksum || true; }
+    seen="$(migrations)"
+    while sleep 10 && kill -0 "$server_pid" 2>/dev/null; do
+      now="$(migrations)"
+      if [ "$now" != "$seen" ]; then
+        echo "New migrations pulled; bringing the workspace database up to date." || true
+        DB_STATUS_AUTO=1 python db_status.py upgrade || true
+        seen="$now"
+      fi
+    done
+  ) &
+fi
+
 exec python -m uvicorn app.production:app --host 0.0.0.0 --port "${PORT:-5000}"

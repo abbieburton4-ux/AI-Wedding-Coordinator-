@@ -9,10 +9,14 @@ undoes them (B59), so the workspace database has to be at head before publishing
 
 Run from backend/ against the app's own database (DATABASE_URL). It never prints
 the connection URL. `check` changes nothing; `upgrade` only runs the migrations.
+In the workspace (not the published app), both also record the revision they found
+in `workspace_db_revision.txt`, which the publish build checks (B86,
+`publish_guard.py`).
 """
 import argparse
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.realpath(os.path.dirname(__file__)))
 
@@ -76,8 +80,58 @@ def database_status(engine=None) -> tuple[int, str]:
         )
     return BEHIND, (
         f"Database is behind: at {current}, the code is at {head}. Don't publish. "
-        "Run `alembic upgrade head` from backend/, or stop and press Run again."
+        "Type `python db_status.py upgrade` here in backend/ to bring it up to date."
     )
+
+
+def current_revision(engine=None) -> str:
+    """The database's Alembic revision, "none" without a record, "unknown" if the
+    migrations would reach a different database or it can't be read."""
+    if engine is None:
+        from app.db.session import sync_engine as engine
+    if not same_database():
+        return "unknown"
+    try:
+        with engine.connect() as conn:
+            return MigrationContext.configure(conn).get_current_revision() or "none"
+    except Exception:
+        return "unknown"
+
+
+def record_for_publish(revision_file=None, engine=None, revision=None,
+                       previous=None) -> list[str]:
+    """Note the workspace database's revision for the publish build (B86).
+
+    Skipped in the published app (Replit sets REPLIT_DEPLOYMENT=1 there): only the
+    workspace's development database decides what Publish proposes. When the run
+    script's watcher (DB_STATUS_AUTO=1) moves the revision, the record says so and
+    when, because a Publish pressed just before may already have compared the old
+    state; a run by hand confirms the database and clears that note. Returns the
+    record as it was before (or `previous`, if given), for a later call.
+    """
+    if os.environ.get("REPLIT_DEPLOYMENT") == "1":
+        return []
+    if revision_file is None:
+        from publish_guard import REVISION_FILE as revision_file
+    if previous is None:
+        try:
+            previous = revision_file.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            previous = []
+    if revision is None:
+        revision = current_revision(engine)
+    lines = [revision]
+    if os.environ.get("DB_STATUS_AUTO") == "1":
+        if previous and previous[0].strip() == revision:
+            lines += [line for line in previous[1:2] if line.startswith("auto ")]
+        else:
+            lines.append(f"auto {int(time.time())}")
+    try:
+        revision_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except OSError as exc:
+        print(f"Couldn't record the database's migration for Publish ({exc}); "
+              "Publish will stop until it can.")
+    return previous
 
 
 def upgrade() -> tuple[int, str]:
@@ -93,6 +147,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("action", choices=["check", "upgrade"])
     args = parser.parse_args()
+    # A crash below must not leave an older "up to date" record behind.
+    previous = record_for_publish(revision="unknown")
     try:
         code, message = database_status() if args.action == "check" else upgrade()
     except RuntimeError as exc:
@@ -102,6 +158,7 @@ def main() -> None:
         cause = exc.__cause__
         detail = f" Cause: {type(cause).__name__}: {cause}" if cause else ""
         code, message = OTHER, f"{exc}{detail} Don't publish."
+    record_for_publish(previous=previous)
     print(message)
     sys.exit(code)
 

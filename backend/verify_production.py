@@ -2,6 +2,7 @@
 import asyncio
 import os
 import tempfile
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -201,6 +202,115 @@ def check_db_status():
             settings.DATABASE_URL, settings.SYNC_DATABASE_URL, session_module.sync_engine = prev
 
 
+def check_publish_guard():
+    """Replit's publish build refuses to build, so Publish applies no SQL to
+    production, unless the workspace last recorded its database at head (B86)."""
+    import app.db.session as session_module
+    import db_status
+    import publish_guard
+    from alembic import command
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import create_engine
+
+    here = Path(__file__).resolve().parent
+    cfg = Config(str(here / "alembic.ini"))
+    cfg.set_main_option("script_location", str(here / "migrations"))
+    scripts = ScriptDirectory.from_config(cfg)
+
+    # The guard reads migrations without Alembic; it must agree with Alembic.
+    known, head = publish_guard.code_revisions()
+    assert head == scripts.get_current_head(), (head, scripts.get_current_head())
+    assert known == {rev.revision for rev in scripts.walk_revisions()}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        marker = Path(tmp) / "workspace_db_revision.txt"
+
+        ok, message = publish_guard.check(marker)
+        assert not ok and "hasn't recorded" in message, message
+
+        behind = scripts.get_revision(head).down_revision
+        for recorded, expected in ((behind, "behind"), ("none", "doesn't expect"),
+                                   ("unknown", "doesn't expect"), ("ffff", "doesn't expect"),
+                                   ("", "doesn't expect")):
+            marker.write_text(f"{recorded}\n")
+            ok, message = publish_guard.check(marker)
+            assert not ok and expected in message, (recorded, message)
+        marker.write_text(f"{head}\n")
+        ok, message = publish_guard.check(marker)
+        assert ok and head in message, message
+
+        # db_status records what it finds in the workspace database, never in the
+        # published app's.
+        prev = (settings.DATABASE_URL, settings.SYNC_DATABASE_URL, session_module.sync_engine)
+        prev_deployment = os.environ.pop("REPLIT_DEPLOYMENT", None)
+        try:
+            settings.DATABASE_URL = f"sqlite+aiosqlite:///{tmp}/dev.db"
+            settings.SYNC_DATABASE_URL = f"sqlite:///{tmp}/dev.db"
+            engine = create_engine(settings.SYNC_DATABASE_URL)
+            session_module.sync_engine = engine
+
+            db_status.record_for_publish(marker, engine)
+            assert marker.read_text().strip() == "none"
+            command.upgrade(cfg, behind)
+            db_status.record_for_publish(marker, engine)
+            assert marker.read_text().strip() == behind
+            assert not publish_guard.check(marker)[0]
+            command.upgrade(cfg, "head")
+            db_status.record_for_publish(marker, engine)
+            assert publish_guard.check(marker)[0]
+
+            # The watcher's catch-up may land after Replit compared the databases:
+            # refused until a run by hand confirms it.
+            command.downgrade(cfg, behind)
+            db_status.record_for_publish(marker, engine)
+            os.environ["DB_STATUS_AUTO"] = "1"
+            command.upgrade(cfg, "head")
+            db_status.record_for_publish(marker, engine)
+            ok, message = publish_guard.check(marker)
+            assert not ok and "by itself" in message, message
+            db_status.record_for_publish(marker, engine)  # watcher again, no change
+            assert not publish_guard.check(marker)[0]
+            del os.environ["DB_STATUS_AUTO"]
+            db_status.record_for_publish(marker, engine)
+            assert publish_guard.check(marker)[0]
+            marker.write_text(f"{head}\nauto {int(time.time()) - 16 * 60}\n")
+            assert publish_guard.check(marker)[0]
+
+            # A migration whose parents span lines still parses as one chain.
+            versions = Path(tmp) / "versions"
+            versions.mkdir()
+            (versions / "a.py").write_text("revision = 'a'\ndown_revision = None\n")
+            (versions / "b.py").write_text("revision = 'b'\ndown_revision = 'a'\n")
+            (versions / "c.py").write_text("revision = 'c'\ndown_revision = 'a'\n")
+            (versions / "d.py").write_text("revision = 'd'\ndown_revision = (\n    'b',\n"
+                                           "    'c',\n)\n")
+            assert publish_guard.code_revisions(versions) == ({"a", "b", "c", "d"}, "d")
+
+            marker.write_text("untouched\n")
+            os.environ["REPLIT_DEPLOYMENT"] = "1"
+            db_status.record_for_publish(marker, engine)
+            assert marker.read_text().strip() == "untouched"
+            del os.environ["REPLIT_DEPLOYMENT"]
+
+            # Migrations aimed elsewhere: the guard can't vouch for the database.
+            settings.SYNC_DATABASE_URL = f"sqlite:///{tmp}/other.db"
+            db_status.record_for_publish(marker, engine)
+            assert marker.read_text().strip() == "unknown"
+        finally:
+            settings.DATABASE_URL, settings.SYNC_DATABASE_URL, session_module.sync_engine = prev
+            os.environ.pop("REPLIT_DEPLOYMENT", None)
+            os.environ.pop("DB_STATUS_AUTO", None)
+            if prev_deployment is not None:
+                os.environ["REPLIT_DEPLOYMENT"] = prev_deployment
+
+    # Publishing builds through the guard; the workspace rebuild doesn't need it.
+    replit = (here.parent / ".replit").read_text()
+    assert 'build = ["bash", "scripts/replit-publish-build.sh"]' in replit
+    build = (here.parent / "scripts" / "replit-publish-build.sh").read_text()
+    assert build.index("python backend/publish_guard.py") < build.index("exec bash scripts/replit-build.sh")
+
+
 def check_webhook_never_sends_unattended():
     """The inbound-email webhook has no one to check the text before it goes to the
     AI, so it never runs the quote extractor (PD-008 follow-up 2). It answers 200 so
@@ -255,5 +365,6 @@ if __name__ == "__main__":
     check_static_and_auth()
     check_startup_migrations()
     check_db_status()
+    check_publish_guard()
     check_webhook_never_sends_unattended()
     print("--- PRODUCTION CONFIGURATION AND EXECUTION VERIFICATION PASSED ---")
