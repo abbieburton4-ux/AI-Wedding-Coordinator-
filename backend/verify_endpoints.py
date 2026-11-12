@@ -1615,6 +1615,175 @@ def test_api_suite():
             assert (f["Vendor email"], f["Linked vendor"]) == ("", "")
             print("   * Vendor contacts: only when the box is ticked")
 
+            # 7c5b. The Excel download (PD-019, B88): tabs, real numbers and dates, the
+            # same figures, the formula guard. Re-opened with openpyxl as a second reader.
+            import re as _re
+            import zipfile as _zip
+            from decimal import Decimal as _Dec
+            import openpyxl as _xl
+            from app.utils.budget_xlsx import MEDIA_TYPE as _XLSX
+            real_budget_now = budget_module._now
+            budget_module._now = lambda: _dt.datetime(2026, 11, 20, 15, 7)
+            try:
+                xl_payer = c.post(f"{b_url}/payers", headers=headers,
+                                  json={"name": "=Placeholder Parent"}).json()["id"]
+                hall_pays = next(x for k in c.get(f"{b_url}/overview", headers=headers).json()[
+                    "categories"] for x in k["costs"] if x["id"] == hall)["payments"]
+                second = next(x for x in hall_pays if x["due_on"] == "2026-11-01")["id"]
+                assert c.patch(f"{b_url}/payments/{second}", headers=headers,
+                               json={"payer_id": xl_payer}).status_code == 200
+                tip = c.post(f"{b_url}/costs/{hall}/tips", headers=headers,
+                             json={"percent_basis_points": 1850})
+                assert tip.status_code == 201, tip.text
+                soon = c.post(f"{b_url}/categories/{other_cat}/costs", headers=headers, json={
+                    "vendor_name": "-Placeholder Cake", "estimated_cents": 45_000,
+                    "notes": "Odd \uffff char\ufffe pasted"}).json()["id"]
+                for due in ("2026-11-27", "2026-12-15", "2027-01-30"):
+                    c.post(f"{b_url}/costs/{soon}/payments", headers=headers,
+                           json={"amount_cents": 15_000, "due_on": due})
+
+                def xlsx(query="", who=None):
+                    res = c.get(f"{b_url}/export.xlsx{query}", headers=who or headers)
+                    assert res.status_code == 200, res.text
+                    return res
+
+                def tab(book, name):
+                    rows = list(book[name].iter_rows(values_only=True))
+                    return [dict(zip(rows[0], r)) for r in rows[1:]]
+
+                def cents(value):
+                    return int(_Dec(str(value)) * 100)
+
+                res = xlsx()
+                assert res.headers["content-type"] == _XLSX
+                assert res.headers["content-disposition"] == \
+                    'attachment; filename="wedding-budget-2026-11-20.xlsx"', "Chicago date"
+                assert res.headers["cache-control"] == "no-store"
+                raw = res.content
+                with _zip.ZipFile(_io.BytesIO(raw)) as z:
+                    names = z.namelist()
+                    sheets = "".join(z.read(n).decode("utf-8") for n in names
+                                     if n.startswith("xl/worksheets/sheet"))
+                assert "xl/vbaProject.bin" not in names, "no macros"
+                assert "<f>" not in sheets and "<f " not in sheets, "no formula anywhere"
+                book = _xl.load_workbook(_io.BytesIO(raw))
+                assert book.sheetnames == ["Summary", "Categories", "Expenses", "Payments",
+                                           "Upcoming", "Who paid", "Tips"]
+                for ws in book.worksheets:
+                    assert ws.freeze_panes == "A2", ws.title
+                    assert all(cell.font.b for cell in ws[1] if cell.value), ws.title
+                    assert "Snapshot taken November 20, 2026 at 3:07 PM Chicago time" in \
+                        ws.oddFooter.left.text, ws.title
+                    for row in ws.iter_rows():
+                        for cell in row:
+                            assert cell.data_type != "f", (ws.title, cell.coordinate)
+                    assert ws.column_dimensions["A"].width >= 20, ws.title
+                ov = c.get(f"{b_url}/overview", headers=headers).json()
+                t, d = ov["totals"], ov["dashboard"]
+                summary = {r["Item"]: r["Value"] for r in tab(book, "Summary")}
+                assert summary["Snapshot taken (Chicago time)"] == _dt.datetime(2026, 11, 20, 15, 7)
+                assert book["Summary"]["B2"].number_format.startswith("mmm")
+                for item, value in (("Total budget", t["total_cents"]),
+                                    ("Committed", t["committed_cents"]),
+                                    ("Paid", t["paid_cents"]),
+                                    ("Still to pay", t["remaining_cents"]),
+                                    ("Left of total budget", d["left_of_total_cents"]),
+                                    ("Refundable deposits (not part of the cost)",
+                                     t["refundable_cents"]),
+                                    ("Tips (already part of committed)", d["tips_cents"])):
+                    assert isinstance(summary[item], (int, float)), (item, summary[item])
+                    assert cents(summary[item]) == value, (item, summary[item], value)
+                assert d["tips_cents"] == 222_009, "18.5% of 12000.50, from budget_math"
+                assert summary["Contingency target"] == "No Contingency category"
+                money = book["Summary"]["B5"]
+                assert money.number_format == '"$"#,##0.00' and money.data_type == "n"
+                cats = {r["Category"]: r for r in tab(book, "Categories")}
+                assert "=Placeholder Hall" in cats, "kept as typed, as text"
+                q = next(c2 for c2 in book["Categories"]["A"] if c2.value == "=Placeholder Hall")
+                assert q.data_type == "s" and q.quotePrefix, "a formula-looking name stays text"
+                for k in ov["categories"]:
+                    row = cats[k["name"]]
+                    assert cents(row["Committed"]) == k["committed_cents"]
+                    assert cents(row["Paid"]) == k["paid_cents"]
+                    assert cents(row["Still to pay"]) == k["remaining_cents"]
+                expenses = {r["Expense"]: r for r in tab(book, "Expenses")}
+                assert "Archived Placeholder" not in expenses
+                h = expenses["Sample Export Hall"]
+                assert (cents(h["Actual"]), cents(h["Counted cost"]), h["Contract"],
+                        h["Status"], h["Payment method"], h["Link"]) == (
+                    1_200_050, 1_200_050, "Signed", "Overdue", "+Check",
+                    "https://drive.example.test/file/d/hall")
+                assert h["Comments"] == "@note, with a comma\nand a new line"
+                assert h["Next due"] == _dt.datetime(2026, 11, 1), "a real date"
+                assert "Vendor email" not in h and b"hall@example.test" not in raw
+                cake = expenses["-Placeholder Cake"]
+                assert cake["Comments"] == "Odd  char pasted", "what XML can't hold is dropped"
+                assert cents(cake["Estimate or quote"]) == 45_000 and cake["Actual"] is None
+                tip_row = next(r for r in expenses.values() if r["Tip for"])
+                assert (tip_row["Tip for"], tip_row["Tip (%)"]) == ("Sample Export Hall", 18.5)
+                pays = tab(book, "Payments")
+                assert all(r["Expense"] != "Archived Placeholder" for r in pays)
+                paid_row = next(r for r in pays if r["Paid"] == "Yes")
+                assert (cents(paid_row["Amount"]), paid_row["Date paid"], paid_row["Reference"],
+                        paid_row["Who paid"]) == (
+                    600_000, _dt.datetime(2026, 11, 5), "-REF1", "Not set")
+                assert next(r for r in pays if r["Due"] == _dt.datetime(2026, 11, 1))[
+                    "Who paid"] == "=Placeholder Parent"
+                upcoming = tab(book, "Upcoming")
+                assert [(r["When"], r["Expense"]) for r in upcoming] == [
+                    ("Overdue", "Sample Export Hall"),
+                    ("Due in the next 7 days", "-Placeholder Cake"),
+                    ("Due in 8 to 30 days", "-Placeholder Cake"),
+                    ("Later, or no due date yet", "-Placeholder Cake"),
+                    ("Later, or no due date yet", "Sample Export Hall"),
+                ], upcoming
+                assert len(upcoming) == len(ov["next_due"]), "every unpaid payment, once"
+                assert sum(cents(r["Amount"]) for r in upcoming) == sum(
+                    x["amount_cents"] for x in ov["next_due"])
+                assert cents(summary["Overdue (total)"]) == 600_050
+                payers = {r["Who"]: r for r in tab(book, "Who paid")}
+                assert set(payers) == {"=Placeholder Parent", "Not set"}
+                assert (cents(payers["=Placeholder Parent"]["Paid"]),
+                        cents(payers["=Placeholder Parent"]["Still to come"])) == (0, 600_050)
+                assert (cents(payers["Not set"]["Paid"]),
+                        cents(payers["Not set"]["Still to come"]),
+                        payers["Not set"]["Payments"]) == (600_000, 45_000, 4), \
+                    "refundable deposits and archived expenses aren't counted"
+                tips = tab(book, "Tips")
+                assert len(tips) == 1 == d["tip_count"]
+                assert (tips[0]["For which expense"], tips[0]["Percentage (%)"],
+                        cents(tips[0]["Amount"]), cents(tips[0]["Paid"])) == (
+                    "Sample Export Hall", 18.5, 222_009, 0)
+                print("   * Excel: seven tabs, real dollar numbers and dates, bold frozen "
+                      "headings, a snapshot note, the same figures as the screen")
+
+                book = _xl.load_workbook(_io.BytesIO(
+                    xlsx("?include_archived=true&include_contacts=true").content))
+                expenses = {r["Expense"]: r for r in tab(book, "Expenses")}
+                assert expenses["Archived Placeholder"]["Archived"] == "Yes"
+                assert (expenses["Sample Export Hall"]["Vendor email"],
+                        expenses["Sample Export Hall"]["Vendor phone"]) == (
+                    "hall@example.test", "(555) 010-0123")
+                summary = {r["Item"]: r["Value"] for r in tab(book, "Summary")}
+                assert cents(summary["Committed"]) == t["committed_cents"], \
+                    "listing archived expenses doesn't add them to the totals"
+                assert all(r["Expense"] != "Archived Placeholder"
+                           for r in tab(book, "Upcoming"))
+                not_set = next(r for r in tab(book, "Who paid") if r["Who"] == "Not set")
+                assert (cents(not_set["Paid"]), cents(not_set["Still to come"])) == (
+                    600_000, 45_000), "an archived expense's payments stay out of who paid"
+                for who in (viewer_headers, editor_headers):
+                    xlsx("?include_contacts=true", who)
+                assert c.get(f"{b_url}/export.xlsx",
+                             headers=unauth_headers).status_code == 403
+                assert c.get(f"{b_url}/export.xlsx").status_code in (401, 403)
+                print("   * Excel: the same two ticks and the same access as the CSV")
+                # The tip goes first, so tidying up can remove its expense without asking.
+                assert c.delete(f"{b_url}/costs/{tip.json()['id']}",
+                                headers=headers).status_code == 204
+            finally:
+                budget_module._now = real_budget_now
+
             assert safe_cell("=1+1") == "'=1+1" and safe_cell("\tx") == "'\tx"
             assert safe_cell("  =1") == "'  =1" and safe_cell("\uff1d1") == "'\uff1d1"
             assert safe_cell("Plain") == "Plain" and safe_cell(None) == ""
@@ -1632,6 +1801,9 @@ def test_api_suite():
             clear_category(k["id"])
         assert c.delete(f"/api/v1/weddings/{wedding_id}/vendors/{ex_vendor_id}",
                         headers=headers).status_code == 204
+        for payer in c.get(f"{b_url}/overview", headers=headers).json()["payers"]:
+            assert c.delete(f"{b_url}/payers/{payer['id']}",
+                            headers=headers).status_code == 204
         assert c.put(f"{b_url}/total", json={"total_cents": before_total},
                      headers=headers).status_code == 200
 
