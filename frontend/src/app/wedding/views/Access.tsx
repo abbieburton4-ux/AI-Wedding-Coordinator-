@@ -117,7 +117,7 @@ export function Access() {
       ) : (
         <>
           <div className="bg-primary-container/20 border border-primary/20 rounded-[1.5rem] p-4 mb-8 flex gap-3">
-            <Icon name="info" className="text-primary shrink-0" />
+            <Icon name="info" className="text-primary-text shrink-0" />
             <p className="text-sm text-on-surface">
               Adding someone here doesn't send them an invitation or any email. Let them know yourself,
               and ask them to sign in with the email address you add.

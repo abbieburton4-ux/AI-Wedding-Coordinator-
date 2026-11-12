@@ -9,7 +9,7 @@ export const tapArea = "relative before:absolute before:-inset-x-1 before:-inset
 
 // The same look as parts.tsx's linkButton; not imported, since parts.tsx imports this file.
 const linkButton =
-  `text-sm text-on-surface-variant hover:text-primary underline-offset-4 hover:underline disabled:opacity-60 ${tapArea}`;
+  `text-sm text-on-surface-variant hover:text-primary-text underline-offset-4 hover:underline disabled:opacity-60 ${tapArea}`;
 
 /**
  * The Budget screen's sections (PD-015 steps 3 and 4): a jump-to bar at the top and
@@ -91,7 +91,7 @@ export function SectionHeading({
         aria-expanded={!isFolded}
         aria-controls={bodyId(section)}
         onClick={() => folds.toggle(section)}
-        className="inline-flex items-center gap-2 text-left hover:text-primary rounded-md min-h-11 sm:min-h-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+        className="inline-flex items-center gap-2 text-left hover:text-primary-text rounded-md min-h-11 sm:min-h-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
       >
         {children}
         <FoldChevron folded={isFolded} />

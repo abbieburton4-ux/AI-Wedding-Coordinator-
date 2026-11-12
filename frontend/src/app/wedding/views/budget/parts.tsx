@@ -26,7 +26,7 @@ export const fieldClass = "flex flex-col gap-1 w-full sm:w-auto min-w-0";
 export const primaryButton =
   "bg-primary text-on-primary rounded-full px-5 py-2 font-button-text text-sm disabled:opacity-60 min-h-11 sm:min-h-0";
 export const linkButton =
-  `text-sm text-on-surface-variant hover:text-primary underline-offset-4 hover:underline disabled:opacity-60 ${tapArea}`;
+  `text-sm text-on-surface-variant hover:text-primary-text underline-offset-4 hover:underline disabled:opacity-60 ${tapArea}`;
 export const dangerLink =
   `text-sm text-on-surface-variant hover:text-error underline-offset-4 hover:underline disabled:opacity-60 ${tapArea}`;
 
@@ -329,7 +329,7 @@ export function CategoryCard({
         {canEdit && (
           <button
             type="button" onClick={startAdding}
-            className="inline-flex items-center gap-1 rounded-full border border-primary px-4 py-2.5 sm:py-1.5 text-sm text-primary hover:bg-primary hover:text-on-primary"
+            className="inline-flex items-center gap-1 rounded-full border border-primary px-4 py-2.5 sm:py-1.5 text-sm text-primary-text hover:bg-primary hover:text-on-primary"
           >
             <Icon name="add" size={16} /> Add expense<span className="sr-only"> to {category.name}</span>
           </button>
@@ -492,7 +492,7 @@ function OpenLink({ url, label }: { url: string | null; label: string }) {
   // The site's name is shown, so nobody clicks a link without seeing where it goes.
   const host = new URL(href).hostname;
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline">
+    <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary-text underline-offset-4 hover:underline">
       {label} ({host}) <Icon name="open_in_new" size={14} /> <span className="sr-only">(opens in a new tab)</span>
     </a>
   );
@@ -609,7 +609,7 @@ function NoPayersHint() {
   return (
     <p className="w-full text-xs text-on-surface-variant">
       To choose who paid, first{" "}
-      <button type="button" onClick={go} className={`${linkButton} text-xs text-primary`}>
+      <button type="button" onClick={go} className={`${linkButton} text-xs text-primary-text`}>
         add the people who pay
       </button>
       .
@@ -872,7 +872,7 @@ function TipsQuestion({
           ? `Archive ${one ? "the tip" : "the tips"} too`
           : `Remove ${one ? "the tip" : "the tips"}${payments ? ` and ${plural(payments, "payment")}` : ""} too`}
       </button>
-      <button type="button" disabled={busy} onClick={() => onChoose("keep")} className={`${btn} text-primary`}>
+      <button type="button" disabled={busy} onClick={() => onChoose("keep")} className={`${btn} text-primary-text`}>
         Keep {one ? "the tip as a plain line" : "the tips as plain lines"}
       </button>
       <button type="button" disabled={busy} onClick={onNo} className={linkButton}>Cancel</button>
@@ -1427,7 +1427,7 @@ function PaymentRow({
             <Icon name="warning" size={14} /> Overdue
           </span>
         )}
-        <span className={`block text-xs ${payment.paid ? "text-primary" : "text-on-surface-variant"}`}>{paidNote}</span>
+        <span className={`block text-xs ${payment.paid ? "text-primary-text" : "text-on-surface-variant"}`}>{paidNote}</span>
         <WhoPaid base={base} payment={payment} payers={payers} canEdit={canEdit && !cost.archived} run={run} request={request} busy={busy} />
         {payment.refundable && (
           <span className="block text-xs text-on-surface-variant">Tracked here, but not counted in the cost or in paid.</span>

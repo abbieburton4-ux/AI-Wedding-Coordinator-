@@ -10,7 +10,7 @@ const focusRing =
 const primaryButton =
   `bg-primary text-on-primary rounded-full px-5 py-2 font-button-text text-sm disabled:opacity-60 min-h-11 sm:min-h-0 ${focusRing}`;
 const linkButton =
-  `text-sm text-on-surface-variant hover:text-primary underline-offset-4 hover:underline disabled:opacity-60 rounded ${tapArea} ${focusRing}`;
+  `text-sm text-on-surface-variant hover:text-primary-text underline-offset-4 hover:underline disabled:opacity-60 rounded ${tapArea} ${focusRing}`;
 
 // The owner's file is about 10 kB; the server refuses anything near this size too.
 const MAX_FILE_BYTES = 800_000;

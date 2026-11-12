@@ -18,7 +18,7 @@ export function AuthShell({
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center px-6 py-16">
       <Link
         to="/"
-        className="mb-10 font-sans uppercase tracking-[0.3em] text-sm text-foreground hover:text-primary transition-colors"
+        className="mb-10 font-sans uppercase tracking-[0.3em] text-sm text-foreground hover:text-primary-text transition-colors"
       >
         VenueFlow
       </Link>

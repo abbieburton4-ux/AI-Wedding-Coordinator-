@@ -261,7 +261,7 @@ export function Dashboard() {
             <button
               type="button"
               onClick={() => replan(true)}
-              className="px-6 bg-primary/10 text-primary py-4 rounded-full font-button-text tracking-widest uppercase hover:bg-primary/20 transition-colors"
+              className="px-6 bg-primary/10 text-primary-text py-4 rounded-full font-button-text tracking-widest uppercase hover:bg-primary/20 transition-colors"
             >
               Continue anyway
             </button>
@@ -298,7 +298,7 @@ export function Dashboard() {
   if (intakeWaiting) {
     return shell(
       <div className="bg-wedding-white custom-shadow rounded-[3rem] p-10 border border-outline-variant/10 max-w-2xl mx-auto mt-8 text-center">
-        <Icon name="savings" size={32} className="text-primary mb-4 mx-auto" />
+        <Icon name="savings" size={32} className="text-primary-text mb-4 mx-auto" />
         <h1 className="font-headline-sm text-headline-sm text-on-surface mb-2">
           Ready to update your plan
         </h1>
@@ -342,7 +342,7 @@ export function Dashboard() {
             <button
               type="button"
               onClick={() => replan(false)}
-              className="px-6 bg-primary/10 text-primary py-3 rounded-full font-button-text tracking-widest uppercase hover:bg-primary/20 transition-colors"
+              className="px-6 bg-primary/10 text-primary-text py-3 rounded-full font-button-text tracking-widest uppercase hover:bg-primary/20 transition-colors"
             >
               Retry now
             </button>
@@ -374,7 +374,7 @@ export function Dashboard() {
         <section className="mb-8">
           <div className="bg-primary-container/10 border border-primary-container/20 rounded-[3rem] p-6 flex items-center justify-between flex-wrap gap-4">
             <div>
-              <p className="font-label-caps text-[10px] text-primary tracking-widest uppercase mb-1">Your wedding</p>
+              <p className="font-label-caps text-[10px] text-primary-text tracking-widest uppercase mb-1">Your wedding</p>
               <h2 className="font-headline-sm text-headline-sm text-on-surface">
                 {wedding.region} • {wedding.ceremony_type}
               </h2>
@@ -385,7 +385,7 @@ export function Dashboard() {
                   : "Budget not set yet"}
               </p>
             </div>
-            <span className="px-3 py-1.5 bg-primary/10 text-primary rounded-full text-xs font-bold uppercase tracking-wider">
+            <span className="px-3 py-1.5 bg-primary/10 text-primary-text rounded-full text-xs font-bold uppercase tracking-wider">
               {wedding.status}
             </span>
           </div>
@@ -400,7 +400,7 @@ export function Dashboard() {
             <button
               type="button"
               onClick={() => navigate("/wedding/checklist")}
-              className="text-sm font-button-text text-primary hover:opacity-80 transition-opacity"
+              className="text-sm font-button-text text-primary-text hover:opacity-80 transition-opacity"
             >
               View the checklist
             </button>
@@ -414,7 +414,7 @@ export function Dashboard() {
                 className="w-full text-left flex items-start gap-4 p-4 hover:bg-primary/5 rounded-[2rem] transition-colors"
               >
                 <span className="mt-1 w-9 h-9 shrink-0 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Icon name="task_alt" size={18} className="text-primary" />
+                  <Icon name="task_alt" size={18} className="text-primary-text" />
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="font-button-text text-on-surface">{t.title}</p>
@@ -440,7 +440,7 @@ export function Dashboard() {
             onClick={() => navigate(s.to)}
             className="text-left bg-wedding-white custom-shadow rounded-[2rem] p-5 border border-outline-variant/10 hover:border-primary/30 transition-colors"
           >
-            <Icon name={s.icon} className="text-primary mb-3" />
+            <Icon name={s.icon} className="text-primary-text mb-3" />
             <p className="font-display-sm text-display-sm text-on-surface leading-none">
               {loading ? "—" : s.value}
             </p>

@@ -99,7 +99,7 @@ function CategoryName({ name, hasExpenses, id, onCategory }: { name: string; has
       type="button"
       onClick={() => onCategory(id)}
       aria-label={`${name}: show its expenses`}
-      className={`text-left py-2.5 sm:py-1 ${FOCUS} text-on-surface hover:text-primary underline underline-offset-4 decoration-outline-variant hover:decoration-primary`}
+      className={`text-left py-2.5 sm:py-1 ${FOCUS} text-on-surface hover:text-primary-text underline underline-offset-4 decoration-outline-variant hover:decoration-primary-text`}
     >
       {name}
     </button>
@@ -184,7 +184,7 @@ function SpendingChart({ categories, onCategory, animate }: { categories: Catego
               type="button"
               aria-pressed={measure === m}
               onClick={() => setMeasure(m)}
-              className={`rounded-full px-3 py-2.5 sm:py-1 ${FOCUS} ${measure === m ? "bg-on-surface text-surface-container-lowest font-bold" : "text-on-surface-variant hover:text-primary"}`}
+              className={`rounded-full px-3 py-2.5 sm:py-1 ${FOCUS} ${measure === m ? "bg-on-surface text-surface-container-lowest font-bold" : "text-on-surface-variant hover:text-primary-text"}`}
             >
               {m === "committed" ? "Committed" : "Paid"}
             </button>

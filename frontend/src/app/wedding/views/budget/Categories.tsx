@@ -169,7 +169,7 @@ export function CategoryOrder({
                   onClick={() => move(i, i - 1, "up")}
                   disabled={busy || i === 0}
                   aria-label={`Move ${cat.name} up`}
-                  className="p-3 sm:p-2 rounded-full text-on-surface-variant hover:text-primary disabled:opacity-40"
+                  className="p-3 sm:p-2 rounded-full text-on-surface-variant hover:text-primary-text disabled:opacity-40"
                 >
                   <Icon name="arrow_upward" size={18} />
                 </button>
@@ -179,7 +179,7 @@ export function CategoryOrder({
                   onClick={() => move(i, i + 1, "down")}
                   disabled={busy || i === categories.length - 1}
                   aria-label={`Move ${cat.name} down`}
-                  className="p-3 sm:p-2 rounded-full text-on-surface-variant hover:text-primary disabled:opacity-40"
+                  className="p-3 sm:p-2 rounded-full text-on-surface-variant hover:text-primary-text disabled:opacity-40"
                 >
                   <Icon name="arrow_downward" size={18} />
                 </button>

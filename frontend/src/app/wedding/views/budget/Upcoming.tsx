@@ -108,7 +108,7 @@ function GroupList({
                 <button
                   type="button"
                   onClick={() => onOpen(item.costId)}
-                  className={`text-left py-1 text-on-surface hover:text-primary underline underline-offset-4 decoration-outline-variant hover:decoration-primary ${FOCUS} ${tapArea}`}
+                  className={`text-left py-1 text-on-surface hover:text-primary-text underline underline-offset-4 decoration-outline-variant hover:decoration-primary-text ${FOCUS} ${tapArea}`}
                   aria-label={`${item.expenseName}: open this expense`}
                 >
                   {item.expenseName}

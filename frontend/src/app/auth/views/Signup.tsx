@@ -48,7 +48,7 @@ export function Signup() {
       footer={
         <>
           Already have an account?{" "}
-          <Link to="/login" className="text-primary hover:underline">Sign in</Link>
+          <Link to="/login" className="text-primary-text hover:underline">Sign in</Link>
         </>
       }
     >

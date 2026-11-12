@@ -24,7 +24,7 @@ const GUESTS: Guest[] = [
 ];
 
 const STATS = [
-  { label: "Attending", value: 142, icon: "check_circle", valueClass: "text-primary", iconOpacity: "opacity-10 group-hover:opacity-20", iconClass: "text-primary" },
+  { label: "Attending", value: 142, icon: "check_circle", valueClass: "text-primary-text", iconOpacity: "opacity-10 group-hover:opacity-20", iconClass: "text-primary-text" },
   { label: "Pending", value: 28, icon: "hourglass_empty", valueClass: "text-secondary", iconOpacity: "opacity-10 group-hover:opacity-20", iconClass: "text-secondary" },
   { label: "Declined", value: 15, icon: "cancel", valueClass: "text-on-surface-variant/60", iconOpacity: "opacity-5 group-hover:opacity-10", iconClass: "text-on-surface-variant" },
 ];
@@ -176,7 +176,7 @@ export function Guests() {
                         {g.name.charAt(0)}
                       </div>
                       <div className="min-w-0">
-                        <p className={cn("font-body-lg text-body-lg font-medium text-on-surface group-hover:text-primary transition-colors", declined && "line-through")}>
+                        <p className={cn("font-body-lg text-body-lg font-medium text-on-surface group-hover:text-primary-text transition-colors", declined && "line-through")}>
                           {g.name}
                         </p>
                         <p className="font-body-md text-body-md text-on-surface-variant md:hidden">
@@ -199,7 +199,7 @@ export function Guests() {
 
                     <div className="hidden md:block col-span-2">
                       {g.table ? (
-                        <span className={cn("font-body-md text-body-md", g.head ? "text-primary font-medium" : "text-on-surface")}>
+                        <span className={cn("font-body-md text-body-md", g.head ? "text-primary-text font-medium" : "text-on-surface")}>
                           {g.table}
                           {g.head && " (Head)"}
                         </span>
@@ -263,7 +263,7 @@ export function Guests() {
                 <Icon name="auto_awesome" size={140} />
               </div>
               <div className="relative z-10 flex items-center gap-2 mb-2">
-                <Icon name="auto_awesome" filled className="text-primary" />
+                <Icon name="auto_awesome" filled className="text-primary-text" />
                 <h3 className="font-headline-sm text-headline-sm text-on-surface">Smart Seating</h3>
               </div>
               <p className="font-body-md text-body-md text-on-surface-variant relative z-10">

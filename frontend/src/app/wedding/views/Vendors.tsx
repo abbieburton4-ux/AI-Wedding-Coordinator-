@@ -437,7 +437,7 @@ function VendorCard({
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex max-sm:min-h-11 items-center gap-1 self-start text-sm font-button-text text-primary underline underline-offset-2 hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary rounded-sm"
+          className="inline-flex max-sm:min-h-11 items-center gap-1 self-start text-sm font-button-text text-primary-text underline underline-offset-2 hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary rounded-sm"
         >
           {shortUrl(vendor.website ?? "")}
           <Icon name="open_in_new" size={14} />
@@ -450,13 +450,13 @@ function VendorCard({
           {vendor.email && (
             <>
               <dt>Email</dt>
-              <dd className="break-all max-sm:flex"><a href={`mailto:${encodeURI(vendor.email)}`} className={`text-primary underline underline-offset-2 ${phoneTallLink}`}>{vendor.email}</a></dd>
+              <dd className="break-all max-sm:flex"><a href={`mailto:${encodeURI(vendor.email)}`} className={`text-primary-text underline underline-offset-2 ${phoneTallLink}`}>{vendor.email}</a></dd>
             </>
           )}
           {vendor.phone && (
             <>
               <dt>Phone</dt>
-              <dd className="max-sm:flex"><a href={telHref(vendor.phone)} className={`text-primary underline underline-offset-2 ${phoneTallLink}`}>{vendor.phone}</a></dd>
+              <dd className="max-sm:flex"><a href={telHref(vendor.phone)} className={`text-primary-text underline underline-offset-2 ${phoneTallLink}`}>{vendor.phone}</a></dd>
             </>
           )}
         </dl>
@@ -533,7 +533,7 @@ function SectionCard({
     >
       <div className="flex flex-wrap items-center gap-3">
         <span className="w-10 h-10 shrink-0 rounded-full bg-primary/10 flex items-center justify-center">
-          <Icon name={section.icon} size={20} className="text-primary" />
+          <Icon name={section.icon} size={20} className="text-primary-text" />
         </span>
         <h3 id={headingId} className="min-w-0 font-headline-sm text-headline-sm text-on-surface">
           <button
@@ -541,7 +541,7 @@ function SectionCard({
             aria-expanded={!folded}
             aria-controls={bodyId}
             onClick={onToggle}
-            className="inline-flex min-h-11 items-center gap-2 text-left hover:text-primary rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+            className="inline-flex min-h-11 items-center gap-2 text-left hover:text-primary-text rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
           >
             <span className="break-words">{section.title}</span>
             <FoldChevron folded={folded} />
@@ -567,7 +567,7 @@ function SectionCard({
           onSave={add} onCancel={() => setAdding(false)} />
       ) : (
         <button type="button" onClick={() => setAdding(true)}
-          className="self-start inline-flex max-sm:min-h-11 items-center gap-1 text-sm font-button-text text-primary hover:opacity-80">
+          className="self-start inline-flex max-sm:min-h-11 items-center gap-1 text-sm font-button-text text-primary-text hover:opacity-80">
           <Icon name="add" size={18} /> Add a vendor<span className="sr-only"> to {section.title}</span>
         </button>
       ))}
@@ -678,7 +678,7 @@ export function Vendors() {
   return (
     <main className="pt-16 md:pl-72 pb-20 md:pb-8">
       <section className="px-margin-mobile md:px-margin-desktop py-8 md:py-12 bg-surface">
-        <h2 className="font-display-lg-mobile md:font-display-lg text-display-lg-mobile md:text-display-lg text-primary">
+        <h2 className="font-display-lg-mobile md:font-display-lg text-display-lg-mobile md:text-display-lg text-primary-text">
           Vendors
         </h2>
         <p className="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mt-2">

@@ -129,7 +129,7 @@ function BudgetScreen() {
   return (
     <main className="pt-24 px-margin-mobile md:pl-[calc(18rem+24px)] md:pr-margin-desktop pb-32 max-w-[1120px] mx-auto">
       <div className="mb-8">
-        <h1 className="font-display-lg-mobile md:font-display-lg text-display-lg-mobile md:text-display-lg text-primary mb-2">
+        <h1 className="font-display-lg-mobile md:font-display-lg text-display-lg-mobile md:text-display-lg text-primary-text mb-2">
           Budget
         </h1>
         <p className="text-on-surface-variant">
@@ -482,11 +482,11 @@ function AddExpenseStart({
         <p className="text-sm text-on-surface">
           Each expense goes in a category, and you don't have any yet.{" "}
           {hasSuggestions ? (
-            <button type="button" onClick={() => goTo(SUGGESTIONS_ID)} className={`${linkButton} font-bold text-primary`}>
+            <button type="button" onClick={() => goTo(SUGGESTIONS_ID)} className={`${linkButton} font-bold text-primary-text`}>
               Add the suggested categories first
             </button>
           ) : (
-            <button type="button" onClick={() => goTo("new-cat-name")} className={`${linkButton} font-bold text-primary`}>
+            <button type="button" onClick={() => goTo("new-cat-name")} className={`${linkButton} font-bold text-primary-text`}>
               Add a category first
             </button>
           )}
@@ -534,7 +534,7 @@ function AddTipStart({
     <div className="mt-3">
       <button
         type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
-        className="inline-flex items-center gap-1 rounded-full border border-primary px-4 py-2.5 sm:py-1.5 text-sm text-primary hover:bg-primary hover:text-on-primary"
+        className="inline-flex items-center gap-1 rounded-full border border-primary px-4 py-2.5 sm:py-1.5 text-sm text-primary-text hover:bg-primary hover:text-on-primary"
       >
         <Icon name="volunteer_activism" size={16} /> Add tip
       </button>
@@ -554,7 +554,7 @@ function AddTipStart({
 function SampleBudget() {
   return (
     <main className="pt-24 px-margin-mobile md:pl-[calc(18rem+24px)] md:pr-margin-desktop pb-32 max-w-[1120px] mx-auto">
-      <h1 className="font-display-lg-mobile text-display-lg-mobile text-primary mb-2">Budget</h1>
+      <h1 className="font-display-lg-mobile text-display-lg-mobile text-primary-text mb-2">Budget</h1>
       <SampleDataNotice className="mt-4 mb-8">
         These categories and amounts are made-up examples, not your budget.
       </SampleDataNotice>

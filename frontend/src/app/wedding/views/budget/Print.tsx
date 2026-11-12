@@ -112,7 +112,7 @@ export function BudgetPrint() {
       ) : (
         <>
           <header className="mb-6">
-            <h1 className="font-display-lg-mobile text-display-lg-mobile text-primary print:text-black mb-1">Wedding budget</h1>
+            <h1 className="font-display-lg-mobile text-display-lg-mobile text-primary-text print:text-black mb-1">Wedding budget</h1>
             <p className="text-sm text-on-surface-variant print:text-black">
               As of {formatDay(overview.today)} (Chicago). Amounts in US dollars.
               {archived
