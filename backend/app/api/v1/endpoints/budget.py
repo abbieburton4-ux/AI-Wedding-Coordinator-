@@ -34,8 +34,6 @@ from app.utils.budget_defaults import (
     DEFAULT_NAMES, default_key, default_name, missing_defaults, removed_defaults,
     suggestions_for,
 )
-from app.utils.budget_export import build_csv as budget_export_csv
-from app.utils.budget_export import filename as export_filename
 from app.utils import budget_xlsx
 from app.utils.budget_math import (
     CONTINGENCY_NAME, add_up, basis_of, counted_cost, dashboard_figures, expense_figures,
@@ -940,7 +938,7 @@ async def budget_overview(
 
 
 async def _export_inputs(db: AsyncSession, wedding_id: str, user: User):
-    """The overview and the wedding's Vendors-page rows, for either download. Anyone who
+    """The overview and the wedding's Vendors-page rows, for the download. Anyone who
     can see the budget can download it, family (viewers) included."""
     wedding = await require_wedding_access(db, wedding_id, user, "viewer")
     overview = await _overview(db, wedding)
@@ -960,26 +958,6 @@ def _download(body: bytes, media_type: str, name: str) -> Response:
     )
 
 
-@router.get("/{wedding_id}/budget/export.csv")
-async def budget_export(
-    wedding_id: str,
-    include_archived: bool = Query(False),
-    include_contacts: bool = Query(False),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """The budget as one CSV, downloaded to the reader's own device (PD-013 step 5).
-
-    Vendor contact details are left out unless asked for. The file is built in memory
-    and returned; it's never written to disk, logged or sent anywhere (rule 1).
-    """
-    overview, vendors = await _export_inputs(db, wedding_id, current_user)
-    body = budget_export_csv(overview, vendors, include_archived=include_archived,
-                             include_contacts=include_contacts)
-    return _download(body.encode("utf-8"), "text/csv; charset=utf-8",
-                     export_filename(overview.today))
-
-
 @router.get("/{wedding_id}/budget/export.xlsx")
 async def budget_export_xlsx(
     wedding_id: str,
@@ -988,8 +966,9 @@ async def budget_export_xlsx(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """The budget as an Excel file with tabs (PD-019), with the same access, ticks and
-    figures as the CSV. Built in memory and returned; never stored, logged or sent."""
+    """The budget as an Excel file with tabs (PD-019), downloaded to the reader's own
+    device. Vendor contact details are left out unless asked for. Built in memory and
+    returned; never written to disk, logged or sent anywhere (rule 1)."""
     overview, vendors = await _export_inputs(db, wedding_id, current_user)
     now = _now()
     body = budget_xlsx.build_xlsx(overview, vendors, now,
