@@ -11,7 +11,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-12 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B76** — more detail on each expense: type, due date, who paid (dropdown), one estimate-or-quote box, actual cost later, comments; and a "who paid" chart (PD-016, ratified). `in progress`
+1. **B76** — more detail on each expense: type, due date, who paid (dropdown), one estimate-or-quote box, actual cost later, comments; and a "who paid" chart (PD-016, ratified). `in review` (#89; Publish will show additions only: one new table, one optional column)
 2. **B19** — guest planning: list, food, seating (must-have 3), after the budget enhancements. `needs-owner: guest-planning scope PD, to be proposed`
 3. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
 4. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
@@ -26,6 +26,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 13. **B17** — stop tracking the test database files. `ready`
 14. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
 15. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
+16. **B77** — an older test fails by chance (looks for "555" among random IDs). `ready`
 
 ## Open
 
@@ -62,6 +63,7 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 - **B58 — The RUNBOOK backup step doesn't work on Replit.** Found while writing the B53 steps (2026-11-09): the RUNBOOK's checklist-import backup uses `SYNC_DATABASE_URL`, which Replit's Shell doesn't set; there `DATABASE_URL` works, and the Shell always reaches the development database, not the published app's production one. *Fix:* update RUNBOOK for Replit. *Also for B14:* when the app is published, Replit offers to copy development data into production; that is when the imported checklist would carry over, and the publishing plan should cover it. If the wedding is already in production, the Shell can't reach it without pasting a secret, so a safe import route is needed first. *Depends on:* nothing. *#58 (B59):* the backup command now works in Replit's Shell; the publishing note remains.
 
 - **B76 — More detail on each expense, and a "who paid" chart.** Owner, 2026-11-12: "when adding an expense, we need do include additional information. type: deposit, payment. line item name. due date. who paid (dropdown …), estimated/quoted can be combined. actual costs to be updated later. comments (optional). also add a graph for who paid". Today the Add expense form asks only for a name, an estimate and a quote; type, due date and comments live on the payments and edit forms, and nothing records who paid. *Fix:* PD-016. Small database change (who paid on each payment, and the couple's list of payers, kept in the app, not in git: rule 3). *Depends on:* PD-016 (ratified 2026-11-12).
+- **B77 — An older test fails by chance.** Found while building B76 (#89): a check looks for the text "555" in output that is full of random IDs, so now and then a random ID contains "555" and the run fails. The test was left as it is (rule 8). *Fix:* make the check look for the number where it's meant to be, not anywhere in the output. *Depends on:* nothing; small.
 - **B72 — White text on the gold buttons is hard to read.** Found in #78 (B68) by the accessibility review: the app's primary gold buttons with white text fall below the contrast standard. Affects the whole app, not just the budget. *Fix:* darken the button colour or use dark text, in the theme tokens. *Depends on:* nothing; small.
 
 - **B73 — A test fails now and then.** Found in #78 (B68): one existing check fails at random when a generated id contains "555" (it looks like a phone number to the privacy filter). Not caused by #78. *Fix:* make the test ids fixed, or teach the check to ignore ids. *Depends on:* nothing; small.
