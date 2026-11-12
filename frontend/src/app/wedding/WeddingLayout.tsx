@@ -60,7 +60,7 @@ function WeddingBottomNav() {
           className={({ isActive }) =>
             cn(
               "flex flex-col items-center justify-center w-16 h-12 transition-all",
-              isActive ? "text-primary-text" : "text-outline",
+              isActive ? "text-primary-text" : "text-outline-text",
             )
           }
         >

@@ -34,4 +34,4 @@ export function AuthShell({
 
 /** Shared input styling for the auth forms. */
 export const authInputClass =
-  "w-full bg-transparent border border-border rounded-full px-5 py-3 text-foreground placeholder:text-muted-foreground/60 focus:border-foreground focus:outline-none transition-colors";
+  "w-full bg-transparent border border-border rounded-full px-5 py-3 text-foreground placeholder:text-muted-foreground focus:border-foreground focus:outline-none transition-colors";

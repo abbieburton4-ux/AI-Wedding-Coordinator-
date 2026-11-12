@@ -336,7 +336,7 @@ export function Dashboard() {
         </p>
         {intakeStalled && (
           <div className="mt-6">
-            <p className="text-sm text-on-surface-variant/70 mb-3">
+            <p className="text-sm text-on-surface-variant/80 mb-3">
               This is taking longer than usual.
             </p>
             <button
@@ -418,7 +418,7 @@ export function Dashboard() {
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="font-button-text text-on-surface">{t.title}</p>
-                  <p className={`text-xs mt-1 font-bold uppercase tracking-wider ${t.label === "overdue" ? "text-error" : "text-on-surface-variant/70"}`}>
+                  <p className={`text-xs mt-1 font-bold uppercase tracking-wider ${t.label === "overdue" ? "text-error" : "text-on-surface-variant/80"}`}>
                     {t.label === "catch_up" ? "Catch up" : t.group.label}
                     {t.group.due_on ? ` · due ${formatDay(t.group.due_on)}` : ""}
                     {t.label === "overdue" ? " · overdue" : ""}
