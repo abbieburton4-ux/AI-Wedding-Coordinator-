@@ -8,25 +8,24 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 ## Next up
 
-*Updated 2026-11-10 by the product lane. Re-rank if this date is more than 14 days old.*
+*Updated 2026-11-12 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B75** — fold and unfold the Vendors sections (PD-015 follow-up). `in review` (#85; #84 merged into the B74 branch by mistake, so #85 brings it to main)
+1. **B76** — more detail on each expense: type, due date, who paid (dropdown), one estimate-or-quote box, actual cost later, comments; and a "who paid" chart (PD-016, ratified). `in progress`
 2. **B19** — guest planning: list, food, seating (must-have 3), after the budget enhancements. `needs-owner: guest-planning scope PD, to be proposed`
-3. **B70** — Publish offered to delete the Vendors section from the live app because the workspace hadn't caught up; make that harder to hit. `in review` (agent/B70-publish-drop-warning: a DROP-means-Cancel warning at the top of the publish steps; the run-script and `db_status.py` checks already existed)
-4. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
-5. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
-6. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-7. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-8. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
-9. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
-10. **B34** — database-level guard against the same email being added twice. `ready`
-11. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
-12. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
-13. **B8** — record missing token counts as empty, not 0. `ready`
-14. **B17** — stop tracking the test database files. `ready`
-15. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
-16. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
+3. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
+4. **B43** — small follow-ups from the B23 fix review (wider price filter on AI reasons, three screen tidy-ups). `ready`
+5. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+6. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
+7. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
+8. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+9. **B34** — database-level guard against the same email being added twice. `ready`
+10. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+11. **B29** — real budget and checklist briefly show labelled sample content while loading. `ready`
+12. **B8** — record missing token counts as empty, not 0. `ready`
+13. **B17** — stop tracking the test database files. `ready`
+14. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44). `needs-owner: guardrail files need a session the owner runs`
+15. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
 
 ## Open
 
@@ -48,7 +47,6 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 ### Trust and privacy
 
-- **B70 — Publish offered to delete the live Vendors section.** 2026-11-09, while republishing for PD-014, Replit's Publish listed `DROP TABLE "couple_vendor_quotes" CASCADE;` and `DROP TABLE "couple_vendors" CASCADE;` (plus two `DISABLE ROW LEVEL SECURITY` lines). The owner cancelled. After Pull, Stop and Run, the workspace said "Database is up to date (migration 0007)" and Publish then listed no changes. Same pattern as B59: the workspace database was behind production. Approving would have deleted the couple's vendors, including Wildman BT. *Fix:* make this hard to reach by accident. For example, a check before Publish that fails loudly when the workspace isn't at the latest migration, and a clearer warning at the top of `replit.md`'s publish steps that a DROP means "Cancel". The engineer recommends the approach. *Depends on:* nothing.
 - **B8 — Unmeasured token counts are logged as 0.** Every agent records `"input"`/`"output"` tokens as `0` when Gemini returns no usage data (`usage... if usage else 0` in `planner.py`, `matcher.py`, `extractor.py`, `concierge.py`), so a missing measurement looks like a free call (AGENTS.md rule 10). *Fix:* record `None`, after checking that every consumer of those counts (metrics, logs, frontend) handles a missing value.
 - **B22 — The owner and the groom manage access themselves (PD-002 step 2).** Done in PR #14: the access settings screen, owner-only access changes, and email confirmation for password sign-in. The remaining follow-up is B38.
 - **B19 — Guest planning (must-have 3), but the guest list and seating plan show unlabelled sample data.** `frontend/src/app/wedding/views/Guests.tsx:9` (`GUESTS`, made-up names with dietary tags) and `SeatingPlan.tsx:13` (`GUESTS`, `INITIAL_TABLES`) are hard-coded and never call the API, on the couple's own workspace (rule 10). The backend has a `Guest` table (`backend/app/db/models.py:322`: name, email, phone, RSVP status, `dietary`, plus-one, table number), but no guest endpoint exists in `api/v1/endpoints/`. *Why it matters:* the couple listed "guest planning (list, food, seating)" as must-have 3, for 225 invited guests. Today nothing they enter would be saved. The "food" part includes dietary needs, which are health data (AGENTS.md rule 3). They must never appear in git, fixtures, issues, logs or `AgentDecisionLog` payloads. In the app, family (view only) can see them: "family can see dietary notes" (owner, 2026-11-04, `wedding.md`). *Fix:* label the sample data as sample now, as a quick and separate step. Also reword the sample "Smart Seating" text that names Aurelia, now that Aurelia is off (PD-010; found in #54; decided-by-agent, reversible). Then a proposed PD on guest-planning scope (what "food" covers, what seating needs), then backend guest endpoints and wiring. How it's built is not yet decided. *Depends on:* B10/B22 before real guest data goes in, and that PD.
@@ -63,11 +61,11 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B58 — The RUNBOOK backup step doesn't work on Replit.** Found while writing the B53 steps (2026-11-09): the RUNBOOK's checklist-import backup uses `SYNC_DATABASE_URL`, which Replit's Shell doesn't set; there `DATABASE_URL` works, and the Shell always reaches the development database, not the published app's production one. *Fix:* update RUNBOOK for Replit. *Also for B14:* when the app is published, Replit offers to copy development data into production; that is when the imported checklist would carry over, and the publishing plan should cover it. If the wedding is already in production, the Shell can't reach it without pasting a secret, so a safe import route is needed first. *Depends on:* nothing. *#58 (B59):* the backup command now works in Replit's Shell; the publishing note remains.
 
+- **B76 — More detail on each expense, and a "who paid" chart.** Owner, 2026-11-12: "when adding an expense, we need do include additional information. type: deposit, payment. line item name. due date. who paid (dropdown …), estimated/quoted can be combined. actual costs to be updated later. comments (optional). also add a graph for who paid". Today the Add expense form asks only for a name, an estimate and a quote; type, due date and comments live on the payments and edit forms, and nothing records who paid. *Fix:* PD-016. Small database change (who paid on each payment, and the couple's list of payers, kept in the app, not in git: rule 3). *Depends on:* PD-016 (ratified 2026-11-12).
 - **B72 — White text on the gold buttons is hard to read.** Found in #78 (B68) by the accessibility review: the app's primary gold buttons with white text fall below the contrast standard. Affects the whole app, not just the budget. *Fix:* darken the button colour or use dark text, in the theme tokens. *Depends on:* nothing; small.
 
 - **B73 — A test fails now and then.** Found in #78 (B68): one existing check fails at random when a generated id contains "555" (it looks like a phone number to the privacy filter). Not caused by #78. *Fix:* make the test ids fixed, or teach the check to ignore ids. *Depends on:* nothing; small.
 
-- **B75 — Fold and unfold the Vendors sections.** Owner, 2026-11-10 (PD-015 follow-up, ratified): each of the seven Vendors sections folds and unfolds, with Expand all / Collapse all, remembered per device; the summary at the top opens a folded section. No database change. *Depends on:* B74 (reuse its fold control).
 
 ### Housekeeping
 
@@ -103,6 +101,8 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-12 | **B70** — a "DROP means Cancel" warning at the top of the Replit publish steps; the run-script and `db_status.py` checks already existed | #87 |
+| 2026-11-10 | **B75** — fold and unfold the seven Vendors sections, Expand all / Collapse all, remembered per device (PD-015 follow-up). No database change | #85 |
 | 2026-11-10 | **B74** — Budget page (PD-015): Food & Drink suggested category (Venue & Catering becomes Venue; one-click "Rename to Venue"), Add expense on every category and at the top, sticky jump bar, fold and unfold every section. No database change | #83 |
 | 2026-11-10 | **B69** — budget step 5 (PD-013): Export box with "Download CSV" (opens in Google Sheets; archived and vendor contacts only if ticked; formula guard) and "Print / save as PDF". No database change. Completes the budget tracker from the owner's brief (B65–B69) | #81 |
 | 2026-11-10 | **B71** — a suggested budget category the couple delete isn't offered again; "Show suggestions you removed" brings them back to the list. Publish adds `declined_budget_defaults` to `weddings` | #80 |
