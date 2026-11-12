@@ -5,7 +5,7 @@ import {
   safeHttpUrl,
 } from "./money";
 import { venueRename } from "./expenses";
-import { PERCENT_HINT, parsePercent, percentOf, percentText, tipBase } from "./tips";
+import { PERCENT_HINT, parsePercent, percentOf, percentText, tipBase, tipPaymentsGap, tipsMove } from "./tips";
 import { costBox, expenseCost, wouldGoOver } from "./forecast";
 import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId, tapArea, useFolds } from "./sections";
 import { Bar, Chip, TargetChip, targetTone } from "./status";
@@ -130,7 +130,15 @@ export function Confirm({
 // ---- Category -----------------------------------------------------------------------
 
 /** What a new or edited expense is measured against, for the "would go over" note. */
-type Limits = { target: number | null; committed: number; total: number | null; totalCommitted: number };
+export type Limits = { target: number | null; committed: number; total: number | null; totalCommitted: number };
+
+/** A category's limits: its target and what's on it, and the couple's total. */
+export function limitsFor(category: Category, totals: Totals): Limits {
+  return {
+    target: category.planned_cents, committed: category.committed_cents,
+    total: totals.total_cents, totalCommitted: totals.committed_cents,
+  };
+}
 
 /** Asks a category to open and scroll to one of its expenses; n changes on each ask. */
 export type OpenRequest = { id: string; n: number } | null;
@@ -201,10 +209,7 @@ export function CategoryCard({
 
   const planned_cents = category.planned_cents;
   const over = category.state === "over";
-  const limits: Limits = {
-    target: planned_cents, committed: category.committed_cents,
-    total: totals.total_cents, totalCommitted: totals.committed_cents,
-  };
+  const limits = limitsFor(category, totals);
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -640,6 +645,7 @@ function CostBlock({
   const isTip = cost.tip_state !== null;
   const tips = siblings.filter((c) => cost.tip_ids.includes(c.id));
   const activeTips = tips.filter((c) => !c.archived);
+  const linked = isTip ? siblings.find((c) => c.id === cost.tip_for_cost_id) : undefined;
   const archive = (choice?: "remove" | "keep") =>
     run(() => request(`${base}/costs/${cost.id}${choice ? `?tips=${choice}` : ""}`, json("PATCH", { archived: !cost.archived })));
   const remove = (choice?: "remove" | "keep") =>
@@ -663,9 +669,9 @@ function CostBlock({
     >
       {editing ? (
         isTip ? (
-          <TipEditForm base={base} cost={cost} run={run} request={request} busy={busy} onDone={() => setEditing(false)} />
+          <TipEditForm base={base} cost={cost} linked={linked} limits={limits} run={run} request={request} busy={busy} onDone={() => setEditing(false)} />
         ) : (
-          <CostEditForm base={base} cost={cost} limits={limits} vendors={vendors} run={run} request={request} busy={busy} onDone={() => setEditing(false)} />
+          <CostEditForm base={base} cost={cost} tips={tips} limits={limits} vendors={vendors} run={run} request={request} busy={busy} onDone={() => setEditing(false)} />
         )
       ) : (
         <div className="mb-2">
@@ -787,7 +793,8 @@ function CostBlock({
             <OpenLink url={cost.link_url} label="Open link" />
           </p>
           {cost.notes && <p className="text-sm text-on-surface mt-2 whitespace-pre-line">{cost.notes}</p>}
-          {cost.over_scheduled_cents > 0 && (
+          {isTip && <TipPaymentsNote cost={cost} />}
+          {!isTip && cost.over_scheduled_cents > 0 && (
             <p className="flex items-start gap-1 text-sm text-error mt-2">
               <Icon name="warning" size={16} className="mt-0.5" />
               The payments you've added come to {formatCents(cost.over_scheduled_cents)} more than the cost
@@ -800,7 +807,7 @@ function CostBlock({
       {canEdit && addingTip && !isTip && !cost.archived && (
         <div className="border-t border-outline-variant/20 pt-3 mb-3">
           <AddTipForm
-            base={base} targets={[{ cost, categoryName }]} fixedId={cost.id} payers={payers}
+            base={base} targets={[{ cost, categoryName, limits }]} fixedId={cost.id} payers={payers}
             run={run} request={request} busy={busy} idPrefix={`tip-${cost.id}`} onDone={() => setAddingTip(false)}
           />
         </div>
@@ -825,6 +832,29 @@ function TipChip() {
     <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold bg-surface-container-high text-on-surface">
       <Icon name="volunteer_activism" size={14} /> Tip
     </span>
+  );
+}
+
+/**
+ * A tip whose payments don't add up to it (PD-018): "Payments come to $1,600; the tip
+ * is now $1,800." A percentage tip's one unpaid payment for the whole tip changes with
+ * it; anything else (a part payment, several payments) stays as typed, so this says so.
+ */
+function TipPaymentsNote({ cost }: { cost: Cost }) {
+  const gap = tipPaymentsGap(cost);
+  if (!gap) return null;
+  const waiting = cost.tip_state === "waiting";
+  const tipText = waiting
+    ? `the tip counts as $0 until ${cost.tip_for_name ?? "its expense"} has a cost`
+    : `the tip is ${cost.tip_state === "following" ? "now " : ""}${formatCents(gap.tipCents)}`;
+  const fix = gap.paymentsCents < gap.tipCents
+    ? " Add a payment for the rest, or change a payment's amount to match."
+    : " Change a payment's amount to match.";
+  return (
+    <p className="flex items-start gap-1 text-sm text-on-surface mt-2">
+      <Icon name="error" size={16} className="mt-0.5 text-status-todo" />
+      <span>Payments come to {formatCents(gap.paymentsCents)}; {tipText}.{waiting ? "" : fix}</span>
+    </p>
   );
 }
 
@@ -936,6 +966,20 @@ function tipPreview(target: Cost | undefined, mode: TipMode, percent: string, am
   return `${percentText(bp)}% of ${formatCents(base)} = ${formatCents(percentOf(base, bp))}`;
 }
 
+/**
+ * What a typed tip comes to in whole cents, for the "would go over" note: the amount,
+ * or the percentage of base (0 while there's no cost); null while the box isn't valid.
+ */
+function typedTipCents(mode: TipMode, percent: string, amount: string, base: number | null): number | null {
+  if (mode === "amount") {
+    const cents = parseDollars(amount);
+    return typeof cents === "number" ? cents : null;
+  }
+  const bp = parsePercent(percent);
+  if (typeof bp !== "number") return null;
+  return base === null ? 0 : percentOf(base, bp);
+}
+
 /** Reads the percentage or amount box; null (with an error set) if it isn't valid. */
 function tipValue(mode: TipMode, percent: string, amount: string, setError: (e: string | null) => void) {
   if (mode === "percent") {
@@ -959,8 +1003,8 @@ export function AddTipForm({
   base, targets, fixedId, payers, run, request, busy, idPrefix, onDone,
 }: {
   base: string;
-  /** The expenses a tip can be for, with their category's name. */
-  targets: { cost: Cost; categoryName: string }[];
+  /** The expenses a tip can be for, with their category's name and limits. */
+  targets: { cost: Cost; categoryName: string; limits: Limits }[];
   /** Set when the form opens from one expense, so it doesn't ask which. */
   fixedId?: string;
   payers: Payer[]; run: Run; request: Req; busy: boolean; idPrefix: string; onDone: () => void;
@@ -975,8 +1019,10 @@ export function AddTipForm({
   const [error, setError] = useState<string | null>(null);
   // The list can reload while this is open; never send an expense that's gone.
   const targetId = fixedId ?? (targets.some((t) => t.cost.id === picked) ? picked : targets[0]?.cost.id ?? "");
-  const target = targets.find((t) => t.cost.id === targetId)?.cost;
+  const picks = targets.find((t) => t.cost.id === targetId);
+  const target = picks?.cost;
   const preview = tipPreview(target, mode, percent, amount);
+  const typed = target ? typedTipCents(mode, percent, amount, tipBase(target)) : null;
   const groups = targets.reduce<{ name: string; items: Cost[] }[]>((acc, t) => {
     const last = acc[acc.length - 1];
     if (last && last.name === t.categoryName) last.items.push(t.cost);
@@ -1046,8 +1092,14 @@ export function AddTipForm({
         The tip is added as its own line{target ? `, "Tip: ${target.vendor_name}",` : ""} in the same category, and counts in
         your totals. A percentage tip changes when {target ? `${target.vendor_name}'s` : "the expense's"} cost changes, until
         a payment on the tip is ticked paid. A tip in dollars stays as you typed it. A due date or who pays adds a payment
-        for the tip, not ticked as paid.
+        for the tip, not ticked as paid. If that's the tip's only payment, it changes with the tip.
       </p>
+      {picks && (
+        <OverNote
+          limits={picks.limits} before={0} after={typed}
+          follows={mode === "percent" ? picks.cost.vendor_name : undefined}
+        />
+      )}
       <button type="submit" disabled={busy} className={primaryButton}>Add tip</button>
       <button type="button" onClick={onDone} className={linkButton}>Cancel</button>
       {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
@@ -1055,10 +1107,17 @@ export function AddTipForm({
   );
 }
 
-/** Editing a tip: switch between a percentage and an amount, change it, or its comments. */
+/**
+ * Editing a tip: rename it, switch between a percentage and an amount, change it, or
+ * its comments. ``linked`` is the expense it's for, when it's in the list.
+ */
 function TipEditForm({
-  base, cost, run, request, busy, onDone,
-}: { base: string; cost: Cost; run: Run; request: Req; busy: boolean; onDone: () => void }) {
+  base, cost, linked, limits, run, request, busy, onDone,
+}: {
+  base: string; cost: Cost; linked: Cost | undefined; limits: Limits; run: Run; request: Req; busy: boolean;
+  onDone: () => void;
+}) {
+  const [name, setName] = useState(cost.vendor_name);
   const [mode, setMode] = useState<TipMode>(cost.tip_basis_points !== null ? "percent" : "amount");
   const [percent, setPercent] = useState(percentText(cost.tip_basis_points));
   const [amount, setAmount] = useState(cost.tip_basis_points === null ? centsToInput(cost.committed_cents) : "");
@@ -1071,22 +1130,29 @@ function TipEditForm({
   const preview = mode === "percent" && typeof bp === "number" && base_cents !== null && cost.tip_state === "following"
     ? `${percentText(bp)}% of ${formatCents(base_cents)} = ${formatCents(percentOf(base_cents, bp))}`
     : null;
+  const typed = typedTipCents(mode, percent, amount, linked ? tipBase(linked) : base_cents);
+  // The one unpaid payment for the whole tip, which a new percentage moves too (PD-018).
+  const only = cost.payments.length === 1 ? cost.payments[0] : null;
+  const follows = cost.tip_basis_points !== null && mode === "percent" && typeof bp === "number"
+    && bp !== cost.tip_basis_points && only !== null
+    && !only.paid && !only.refundable && only.amount_cents === cost.committed_cents;
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     const value = tipValue(mode, percent, amount, setError);
     if (!value) return;
-    const ok = await run(() => request(`${base}/tips/${cost.id}`, json("PATCH", { ...value, notes: notes || null })));
+    if (!name.trim()) { setError("Please type a name for the tip."); return; }
+    const ok = await run(() => request(`${base}/tips/${cost.id}`, json("PATCH", {
+      vendor_name: name, ...value, notes: notes || null,
+    })));
     if (ok) onDone();
   };
 
   return (
     <form onSubmit={save} className="flex flex-wrap items-end gap-3 mb-3" aria-label={`Edit ${cost.vendor_name}`}>
-      <p className="w-full text-sm text-on-surface">
-        <span className="font-button-text">{cost.vendor_name}</span>
-        {cost.tip_for_name ? `, a tip for ${cost.tip_for_name}` : ""}
-      </p>
+      {cost.tip_for_name && <p className="w-full text-sm text-on-surface">A tip for {cost.tip_for_name}</p>}
+      <TextInput id={`${id}-name`} label="Line item name" value={name} onChange={setName} wide />
       <TipModePicker name={`${id}-mode`} mode={mode} onChange={setMode} />
       {mode === "percent" ? (
         <PercentInput id={`${id}-percent`} value={percent} onChange={setPercent} />
@@ -1100,6 +1166,18 @@ function TipEditForm({
           A payment on this tip is ticked paid, so a new percentage is worked out once, now, and then stays fixed.
         </p>
       )}
+      {follows && only && (
+        <p className="w-full text-xs text-on-surface-variant">
+          Its payment of {formatCents(only.amount_cents)} isn't paid yet and is for the whole tip, so it changes to
+          match the new percentage.
+        </p>
+      )}
+      {!cost.archived && (
+        <OverNote
+          limits={limits} before={cost.committed_cents} after={typed}
+          follows={mode === "percent" && !paid ? cost.tip_for_name ?? undefined : undefined}
+        />
+      )}
       <button type="submit" disabled={busy} className={primaryButton}>Save</button>
       <button type="button" onClick={onDone} className={linkButton}>Cancel</button>
       {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
@@ -1108,8 +1186,13 @@ function TipEditForm({
 }
 
 function CostEditForm({
-  base, cost, limits, vendors, run, request, busy, onDone,
-}: { base: string; cost: Cost; limits: Limits; vendors: VendorRef[]; run: Run; request: Req; busy: boolean; onDone: () => void }) {
+  base, cost, tips, limits, vendors, run, request, busy, onDone,
+}: {
+  base: string; cost: Cost;
+  /** This expense's tips: percentage ones move with the cost typed here. */
+  tips: Cost[];
+  limits: Limits; vendors: VendorRef[]; run: Run; request: Req; busy: boolean; onDone: () => void;
+}) {
   const [vendor, setVendor] = useState(cost.vendor_name);
   const [vendorId, setVendorId] = useState(cost.vendor?.id ?? "");
   // One box for the estimate or quote (PD-016). It shows the quote if there is one and
@@ -1140,6 +1223,10 @@ function CostEditForm({
   const typedBoxes: (string | null)[] = box.field === "quoted_cents"
     ? [actual, figure, centsToInput(cost.estimated_cents)]
     : [actual, null, figure];
+  // Percentage tips follow the cost (PD-017), so the "would go over" note counts how
+  // they'd move too: worked out from the typed boxes, never from payments.
+  const typedAfter = typedCost(typedBoxes, cost.scheduled_cents);
+  const moving = tipsMove(tips, typedTipBase(typedBoxes));
 
   const pickVendor = (value: string) => {
     setVendorId(value);
@@ -1175,9 +1262,16 @@ function CostEditForm({
       {!cost.archived && (
         <OverNote
           limits={limits}
-          before={cost.committed_cents}
-          after={typedCost(typedBoxes, cost.scheduled_cents)}
+          before={cost.committed_cents + moving.before}
+          after={typedAfter === null ? null : typedAfter + moving.after}
         />
+      )}
+      {!cost.archived && typedAfter !== null && moving.count > 0 && moving.after !== moving.before && (
+        <p className="w-full text-xs text-on-surface-variant">
+          With this cost, its percentage {moving.count === 1 ? "tip comes" : "tips come"} to {formatCents(moving.after)}{" "}
+          (now {formatCents(moving.before)}). A tip's payment changes with it when it's the tip's only payment, isn't
+          paid yet and is for the whole tip.
+        </p>
       )}
       <button type="submit" disabled={busy} className={primaryButton}>Save</button>
       <button type="button" onClick={onDone} className={linkButton}>Cancel</button>
@@ -1321,8 +1415,30 @@ function typedCost(boxes: (string | null)[], scheduledCents: number): number | n
   return expenseCost(f, q, e, scheduledCents);
 }
 
-/** A note, never a block: saving this would take the category or the total over. */
-function OverNote({ limits, before, after }: { limits: Limits; before: number; after: number | null }) {
+/**
+ * What a percentage tip would be worked out from with these typed boxes (final, quote,
+ * estimate; null for a box the form doesn't have): the first one filled in, else null.
+ * Payments never count, as in the API. Null too while a box isn't a valid amount,
+ * which only matters while the note is hidden anyway.
+ */
+function typedTipBase(boxes: (string | null)[]): number | null {
+  for (const b of boxes) {
+    if (b === null) continue;
+    const cents = parseDollars(b);
+    if (cents === undefined) return null;
+    if (cents !== null) return cents;
+  }
+  return null;
+}
+
+/**
+ * A note, never a block: saving this would take the category or the total over.
+ * ``follows`` names the expense a percentage tip changes with, so the note says the
+ * figure can move later.
+ */
+function OverNote({ limits, before, after, follows }: {
+  limits: Limits; before: number; after: number | null; follows?: string;
+}) {
   const { categoryOverBy, totalOverBy } =
     after === null ? { categoryOverBy: 0, totalOverBy: 0 } : wouldGoOver({ ...limits, before, after });
   const over = [
@@ -1346,7 +1462,12 @@ function OverNote({ limits, before, after }: { limits: Limits; before: number; a
           </>
         )}
       </p>
-      {over.length > 0 && <p className="text-xs text-on-surface-variant pl-5">Over {amounts.join(", ")}.</p>}
+      {over.length > 0 && (
+        <p className="text-xs text-on-surface-variant pl-5">
+          Over {amounts.join(", ")}.
+          {follows && ` This is a percentage tip, so it will go up or down when ${follows}'s cost changes, and so will how far over you are.`}
+        </p>
+      )}
     </div>
   );
 }

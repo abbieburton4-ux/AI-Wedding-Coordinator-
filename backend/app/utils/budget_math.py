@@ -25,6 +25,11 @@ The rules, in full:
   half up to the whole cent, and follows that cost when it changes. Once any
   payment on the tip is ticked paid, it costs the amount saved at that moment
   instead. While the linked expense has no cost, a percentage tip costs 0.
+- Payments are stored as typed, with one exception (PD-018): when a percentage tip's
+  amount changes (its expense's cost or its percentage changes), a tip whose only
+  payment is unpaid, not refundable and exactly what the tip came to just before the
+  change has that payment moved to the new amount, in the same save
+  (``_follow_tip`` in the budget routes). Nothing else ever changes a payment.
 """
 import datetime
 from dataclasses import dataclass, field

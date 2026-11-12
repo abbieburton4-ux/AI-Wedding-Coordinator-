@@ -1949,6 +1949,108 @@ def test_api_suite():
 
         clear_category(tip_cat)
         clear_category(moved_cat)
+
+        print("7c8. Verifying a percentage tip's unpaid payment follows the tip (PD-018)...")
+        follow_cat = c.post(f"{b_url}/categories", json={"name": "Placeholder Drinks"},
+                            headers=headers).json()["id"]
+        bar = c.post(f"{b_url}/categories/{follow_cat}/costs", headers=headers, json={
+            "vendor_name": "Sample Bar Co", "quoted_cents": 800_000}).json()["id"]
+
+        def follow_costs():
+            return {k["id"]: k for k in costs_in(follow_cat)}
+
+        def tip_on_bar(body):
+            res = c.post(f"{b_url}/costs/{bar}/tips", json=body, headers=headers)
+            assert res.status_code == 201, res.text
+            return res.json()["id"]
+
+        def add_pay(cost_id, cents, **extra):
+            res = c.post(f"{b_url}/costs/{cost_id}/payments",
+                         json={"amount_cents": cents, **extra}, headers=headers)
+            assert res.status_code == 201, res.text
+            return res.json()["id"]
+
+        def pay_amounts(cost_id):
+            return sorted(p["amount_cents"] for p in follow_costs()[cost_id]["payments"])
+
+        # 20% of $8,000 = $1,600, with its one payment added for the full amount.
+        whole = tip_on_bar({"percent_basis_points": 2000, "due_on": "2027-06-01"})
+        assert pay_amounts(whole) == [160_000]
+        part = tip_on_bar({"percent_basis_points": 1000})              # $800
+        add_pay(part, 50_000)                                          # a part payment
+        split = tip_on_bar({"percent_basis_points": 1000})             # $800
+        add_pay(split, 40_000)
+        add_pay(split, 40_000)                                         # two payments
+        held = tip_on_bar({"percent_basis_points": 1000})              # $800
+        add_pay(held, 80_000, refundable=True)
+        paid = tip_on_bar({"percent_basis_points": 1000})              # $800
+        paid_pay = add_pay(paid, 80_000)
+        assert c.put(f"{b_url}/payments/{paid_pay}/paid", json={"paid": True},
+                     headers=headers).status_code == 200
+        cash = tip_on_bar({"amount_cents": 30_000, "due_on": "2027-06-01"})
+
+        assert c.patch(f"{b_url}/costs/{bar}", json={"final_cents": 900_000},
+                       headers=headers).status_code == 200
+        k = follow_costs()
+        assert k[whole]["committed_cents"] == 180_000 and pay_amounts(whole) == [180_000], \
+            "one unpaid payment for the whole tip follows it, in whole cents"
+        assert k[part]["committed_cents"] == 90_000 and pay_amounts(part) == [50_000], \
+            "a part payment stays as typed"
+        assert pay_amounts(split) == [40_000, 40_000], "several payments stay as typed"
+        assert pay_amounts(held) == [80_000], "a refundable payment never follows"
+        assert (k[paid]["tip_state"], k[paid]["committed_cents"],
+                pay_amounts(paid)) == ("frozen", 80_000, [80_000]), "a paid payment never moves"
+        assert pay_amounts(cash) == [30_000], "a dollar tip's payment never moves"
+        res = c.patch(f"{b_url}/tips/{paid}", json={"percent_basis_points": 1500},
+                      headers=headers)
+        assert res.status_code == 200, res.text
+        assert (follow_costs()[paid]["committed_cents"], pay_amounts(paid)) == (
+            135_000, [80_000]), "a new percentage never moves a paid payment"
+        print("   * A cost change moves one unpaid full payment; part, split, refundable, "
+              "paid and dollar-tip payments stay as typed")
+
+        assert c.patch(f"{b_url}/costs/{bar}", json={"final_cents": 333_333},
+                       headers=headers).status_code == 200
+        assert (follow_costs()[whole]["committed_cents"], pay_amounts(whole)) == (
+            66_667, [66_667]), "rounded half up to the cent, the same as the tip"
+        res = c.patch(f"{b_url}/tips/{whole}", json={"percent_basis_points": 2500},
+                      headers=headers)
+        assert res.status_code == 200, res.text
+        assert pay_amounts(whole) == [83_333], "a new percentage moves it too"
+        assert c.patch(f"{b_url}/costs/{bar}", json={"final_cents": None, "quoted_cents": None},
+                       headers=headers).status_code == 200
+        k = follow_costs()
+        assert (k[whole]["tip_state"], pay_amounts(whole)) == ("waiting", [83_333]), \
+            "a tip waiting for a cost leaves its payment as typed"
+        assert c.patch(f"{b_url}/costs/{bar}", json={"quoted_cents": 400_000},
+                       headers=headers).status_code == 200
+        assert (follow_costs()[whole]["committed_cents"], pay_amounts(whole)) == (
+            100_000, [83_333]), "once out of step, it stays as typed"
+        res = c.patch(f"{b_url}/tips/{whole}", json={"amount_cents": 83_333}, headers=headers)
+        assert res.status_code == 200
+        assert c.patch(f"{b_url}/costs/{bar}", json={"quoted_cents": 500_000},
+                       headers=headers).status_code == 200
+        assert pay_amounts(whole) == [83_333], "switched to dollars, it never follows"
+        print("   * A new percentage moves it; a cost cleared, a payment out of step or a "
+              "switch to dollars leaves it as typed")
+
+        res = c.patch(f"{b_url}/tips/{cash}", json={"vendor_name": "  Sample   bar staff "},
+                      headers=headers)
+        assert res.status_code == 200 and res.json()["vendor_name"] == "Sample bar staff"
+        for bad in ("", "   ", "x" * 121):
+            assert c.patch(f"{b_url}/tips/{cash}", json={"vendor_name": bad},
+                           headers=headers).status_code == 422, bad
+        assert c.patch(f"{b_url}/tips/{cash}", json={"vendor_name": "Nope"},
+                       headers=viewer_headers).status_code == 403
+        assert c.patch(f"{b_url}/costs/{bar}", json={"vendor_name": "Sample Pub"},
+                       headers=headers).status_code == 200
+        k = follow_costs()
+        assert (k[cash]["vendor_name"], k[part]["vendor_name"]) == (
+            "Sample bar staff", "Tip: Sample Pub"), "a renamed tip keeps its own name"
+        print("   * Edit tip: rename it; renaming the expense keeps a tip's own name")
+
+        assert c.delete(f"{b_url}/costs/{bar}?tips=remove", headers=headers).status_code == 204
+        clear_category(follow_cat)
         assert c.delete(f"{p_url}/{payer_a}", headers=headers).status_code == 204
 
         print("7d. Verifying vendor cards compare quotes with the couple's own budget (B42)...")
