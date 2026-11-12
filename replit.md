@@ -179,6 +179,26 @@ publish should list **no** database changes.
   which means no suggestion has been removed yet.
   [ASSUMPTION] This is what Alembic's PostgreSQL SQL looks like; Replit's own
   screen hasn't been seen for it.
+- `0012` (B76, "People who pay" and who paid each payment): one new table and one
+  new column, all additions. Expect these lines:
+  - `CREATE TABLE budget_payers` (its primary key `pk_budget_payers` and foreign
+    key `fk_budget_payers_wedding_id_weddings` may appear inside it or as separate
+    `ADD CONSTRAINT` lines; either is fine);
+  - `CREATE INDEX ix_budget_payers_wedding_id` (it may instead be part of the
+    `CREATE TABLE` line);
+  - `ADD COLUMN payer_id` on `budget_payments`, optional (no `NOT NULL`, no
+    default), so the pane shouldn't turn orange for it;
+  - `CREATE INDEX ix_budget_payments_payer_id`;
+  - `ADD CONSTRAINT fk_budget_payments_payer_id_budget_payers` (a link to
+    `budget_payers`, `ON DELETE SET NULL`).
+
+  If `0011` goes out in the same publish, its line is listed too. There should be
+  no `DROP`, no `ALTER COLUMN` and no `DROP CONSTRAINT`. Every expense and payment
+  already entered keeps its amounts, dates and paid ticks; "who paid" starts blank
+  on each, and the list of names starts empty. The names are typed in the app
+  later, never by Publish.
+  [ASSUMPTION] This is what Alembic's PostgreSQL SQL looks like; Replit's own
+  screen hasn't been seen for it.
 
 **When you publish** (plain steps for the owner):
 

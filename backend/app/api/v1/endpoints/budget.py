@@ -1,5 +1,5 @@
-"""The couple's budget (PD-004, PD-013): total, categories, expenses, payments,
-contributions.
+"""The couple's budget (PD-004, PD-013, PD-016): total, categories, expenses, payments,
+contributions, and the people who pay.
 
 Every amount is whole US cents and every sum here is integer arithmetic (rule 4); the
 figures are worked out on read by ``utils/budget_math.py``.
@@ -26,8 +26,8 @@ from app.api.v1.review import Approval, needs_review
 from app.api.v1.access import require_wedding_access
 from app.api.v1.endpoints.auth import get_current_user
 from app.db.models import (
-    BudgetCategory, BudgetContribution, BudgetCost, BudgetPayment, CoupleVendor, User, Wedding,
-    utcnow,
+    BudgetCategory, BudgetContribution, BudgetCost, BudgetPayer, BudgetPayment, CoupleVendor,
+    User, Wedding, utcnow,
 )
 from app.db.session import get_db
 from app.utils.budget_defaults import (
@@ -49,6 +49,9 @@ router = APIRouter()
 MAX_CENTS = 1_000_000_000
 MAX_NOTES = 2000
 MAX_LINK = 2000
+# Far more than one wedding's payers (PD-016 has five), so a runaway client can't
+# fill the list.
+MAX_PAYERS = 30
 
 
 def Cents(default=None):
@@ -90,6 +93,14 @@ def Link(default=None):
     return Field(default=default, max_length=MAX_LINK)
 
 
+class FirstPaymentIn(BaseModel):
+    """The expense's first payment, saved with it in one go (PD-016 step 1)."""
+    kind: Literal["deposit", "payment"] = "payment"
+    amount_cents: int = Field(ge=1, le=MAX_CENTS)
+    due_on: Optional[datetime.date] = None
+    payer_id: Optional[str] = None
+
+
 class CostIn(BaseModel):
     vendor_name: str = Name()
     quoted_cents: Optional[int] = Cents()
@@ -100,6 +111,8 @@ class CostIn(BaseModel):
     notes: Optional[str] = Notes()
     link_url: Optional[str] = Link()
     couple_vendor_id: Optional[str] = None
+    # Left out (or null) adds the expense with no payment yet.
+    first_payment: Optional[FirstPaymentIn] = None
 
 
 class CostPatch(BaseModel):
@@ -125,6 +138,7 @@ class PaymentIn(BaseModel):
     reference: Optional[str] = Short()
     notes: Optional[str] = Notes()
     link_url: Optional[str] = Link()
+    payer_id: Optional[str] = None
 
 
 class PaymentPatch(BaseModel):
@@ -138,6 +152,12 @@ class PaymentPatch(BaseModel):
     link_url: Optional[str] = Link()
     # Only on a payment already ticked paid; ticking it is PUT .../paid.
     paid_on: Optional[datetime.date] = None
+    # Who paid it, from the "People who pay" list; null clears it. Never ticks it.
+    payer_id: Optional[str] = None
+
+
+class PayerIn(BaseModel):
+    name: str = Name()
 
 
 class PaidIn(BaseModel):
@@ -204,6 +224,7 @@ class PaymentOut(BaseModel):
     due_on: Optional[datetime.date]
     paid: bool
     paid_at: Optional[datetime.datetime]
+    # Who ticked it in the app, not who paid it (that's payer_id).
     paid_by_name: Optional[str]
     paid_on: Optional[datetime.date]
     refundable: bool
@@ -211,6 +232,9 @@ class PaymentOut(BaseModel):
     reference: Optional[str]
     notes: Optional[str]
     link_url: Optional[str]
+    # Who paid or will pay it, from the "People who pay" list (PD-016); None if not set.
+    payer_id: Optional[str]
+    payer_name: Optional[str]
     overdue: bool
     # How far over the expense's cost paid would be if this were ticked; 0 if it
     # wouldn't be (and always 0 for refundable or paid payments).
@@ -250,6 +274,9 @@ class CostOut(BaseModel):
     # The soonest due date among its unpaid payments (refundable ones included), or
     # None when nothing unpaid has a date. For sorting the list of all expenses.
     next_due_on: Optional[datetime.date]
+    # The payer of its most recently added payment, which a new payment starts with
+    # (PD-016 step 1); None when that payment has none, or there are no payments.
+    last_payer_id: Optional[str]
     payments: List[PaymentOut]
 
 
@@ -276,6 +303,13 @@ class CategoryOut(BaseModel):
     suggestions: List[str]
     # Every expense, archived ones included (flagged); the sums leave archived out.
     costs: List[CostOut]
+
+
+class PayerOut(BaseModel):
+    id: str
+    name: str
+    # Payments that name them, so the screen can say why one can't be removed.
+    payment_count: int
 
 
 class ContributionOut(BaseModel):
@@ -335,6 +369,8 @@ class Overview(BaseModel):
     dashboard: Dashboard
     categories: List[CategoryOut]
     contributions: List[ContributionOut]
+    # The "People who pay" list (PD-016), in the order added.
+    payers: List[PayerOut]
     next_due: List[DueOut]
     # The suggested categories (PD-013 b) the couple don't have yet, in order, less
     # the ones they removed on purpose (B71).
@@ -422,6 +458,35 @@ async def _vendor(db: AsyncSession, vendor_id: Optional[str], wedding_id: str) -
     return vendor_id
 
 
+async def _payer(db: AsyncSession, payer_id: Optional[str], wedding_id: str) -> Optional[str]:
+    """A payer id from this wedding's "People who pay" list, or None for nobody."""
+    if not payer_id:
+        return None
+    found = (await db.exec(select(BudgetPayer.id).where(
+        BudgetPayer.id == payer_id, BudgetPayer.wedding_id == wedding_id))).first()
+    if not found:
+        raise HTTPException(status_code=404,
+                            detail="That person isn't on your People who pay list")
+    return payer_id
+
+
+def _payer_key(name: str) -> str:
+    return " ".join(name.split()).casefold()
+
+
+async def _check_unique_payer(db: AsyncSession, wedding_id: str, name: str,
+                              except_id: Optional[str] = None) -> None:
+    # Checked here only, with no unique index: two adds of one name at the same moment
+    # could both pass. Harmless (rename or remove one), so not worth a computed column.
+    key = _payer_key(name)
+    for row in (await db.exec(
+        select(BudgetPayer).where(BudgetPayer.wedding_id == wedding_id)
+    )).all():
+        if row.id != except_id and _payer_key(row.name) == key:
+            raise HTTPException(status_code=409,
+                                detail=f"{row.name} is already on the list")
+
+
 def _ordered_categories(wedding_id: str):
     """The wedding's categories in the couple's order; unnumbered ones last, as added."""
     return (select(BudgetCategory).where(BudgetCategory.wedding_id == wedding_id)
@@ -490,20 +555,27 @@ async def _check_unique_name(db: AsyncSession, wedding_id: str, name: str,
 
 
 def _payment_out(row: BudgetPayment, paid_by_name: Optional[str], figures,
-                 today: datetime.date) -> PaymentOut:
+                 today: datetime.date, payer_names: dict) -> PaymentOut:
     return PaymentOut(
         id=row.id, cost_id=row.cost_id, kind=row.kind, amount_cents=row.amount_cents,
         due_on=row.due_on, paid=row.paid, paid_at=row.paid_at,
         paid_by_name=paid_by_name if row.paid else None,
         paid_on=row.paid_on if row.paid else None, refundable=row.refundable,
         method=row.method, reference=row.reference, notes=row.notes,
-        link_url=row.link_url, overdue=is_overdue(row, today),
+        link_url=row.link_url, payer_id=row.payer_id,
+        payer_name=payer_names.get(row.payer_id), overdue=is_overdue(row, today),
         would_overpay_cents=figures.would_overpay.get(row.id, 0),
     )
 
 
-def _cost_out(cost: BudgetCost, pays: list, payers: dict, vendors: dict,
-              today: datetime.date) -> CostOut:
+def _last_payer(pays: list) -> Optional[str]:
+    if not pays:
+        return None
+    return max(pays, key=lambda p: (p.created_at, p.id)).payer_id
+
+
+def _cost_out(cost: BudgetCost, pays: list, tickers: dict, vendors: dict,
+              today: datetime.date, payer_names: dict) -> CostOut:
     f = cost_figures(cost, pays, today)
     v = vendors.get(cost.couple_vendor_id)
     due_days = [p.due_on for p in pays if not p.paid and p.due_on is not None]
@@ -520,7 +592,9 @@ def _cost_out(cost: BudgetCost, pays: list, payers: dict, vendors: dict,
         overpaid_cents=f.overpaid_cents, refundable_cents=f.refundable_cents,
         refundable_paid_cents=f.refundable_paid_cents,
         next_due_on=min(due_days) if due_days else None,
-        payments=[_payment_out(p, payers.get(p.paid_by_user_id), f, today) for p in pays],
+        last_payer_id=_last_payer(pays),
+        payments=[_payment_out(p, tickers.get(p.paid_by_user_id), f, today, payer_names)
+                  for p in pays],
     )
 
 
@@ -542,12 +616,21 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
     )).all()
     vendors = {v.id: v for v in (await db.exec(
         select(CoupleVendor).where(CoupleVendor.wedding_id == wid))).all()}
-    payer_ids = {p.paid_by_user_id for p in payments if p.paid_by_user_id}
-    payers = {}
-    if payer_ids:
-        payers = {u.id: u.name for u in (await db.exec(
-            select(User).where(User.id.in_(sorted(payer_ids)))
+    ticker_ids = {p.paid_by_user_id for p in payments if p.paid_by_user_id}
+    tickers = {}
+    if ticker_ids:
+        tickers = {u.id: u.name for u in (await db.exec(
+            select(User).where(User.id.in_(sorted(ticker_ids)))
         )).all()}
+    payer_rows = (await db.exec(
+        select(BudgetPayer).where(BudgetPayer.wedding_id == wid)
+        .order_by(BudgetPayer.created_at, BudgetPayer.id)
+    )).all()
+    payer_names = {p.id: p.name for p in payer_rows}
+    payer_uses: dict = {}
+    for p in payments:
+        if p.payer_id:
+            payer_uses[p.payer_id] = payer_uses.get(p.payer_id, 0) + 1
 
     by_cost: dict = {}
     for p in payments:
@@ -571,7 +654,8 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
                 names[cost.id] = (cat.name, cost.vendor_name)
             # Paying one vendor more than agreed doesn't reduce what's owed to another,
             # so "still to pay" and "overpaid" are worked out per expense, never netted.
-            out_costs.append(_cost_out(cost, by_cost.get(cost.id, []), payers, vendors, today))
+            out_costs.append(_cost_out(cost, by_cost.get(cost.id, []), tickers, vendors, today,
+                                       payer_names))
         counted = [c for c in out_costs if not c.archived]
         sums = add_up(counted)
         out_categories.append(CategoryOut(
@@ -615,6 +699,8 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
             id=c.id, contributor=c.contributor, amount_cents=c.amount_cents,
             category_id=c.category_id,
         ) for c in contributions],
+        payers=[PayerOut(id=p.id, name=p.name, payment_count=payer_uses.get(p.id, 0))
+                for p in payer_rows],
         next_due=next_due,
         missing_default_categories=missing_defaults(
             (c.name for c in categories), _declined(wedding)),
@@ -630,11 +716,15 @@ async def _payment_response(db: AsyncSession, row: BudgetPayment) -> PaymentOut:
     pays = (await db.exec(select(BudgetPayment).where(
         BudgetPayment.cost_id == row.cost_id))).all()
     today = _today()
-    payer = None
+    ticker = None
     if row.paid and row.paid_by_user_id:
         user = await db.get(User, row.paid_by_user_id)
-        payer = user.name if user else None
-    return _payment_out(row, payer, cost_figures(cost, list(pays), today), today)
+        ticker = user.name if user else None
+    payer_names = {}
+    if row.payer_id:
+        payer = await db.get(BudgetPayer, row.payer_id)
+        payer_names = {payer.id: payer.name} if payer else {}
+    return _payment_out(row, ticker, cost_figures(cost, list(pays), today), today, payer_names)
 
 
 # --- Routes ---------------------------------------------------------------------------
@@ -914,8 +1004,12 @@ async def add_cost(
     wedding_id: str, category_id: str, payload: CostIn,
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
+    """Adds an expense and, if given, its first payment, in one save: either both are
+    saved or neither is. The payment starts unpaid; ticking it is a separate click."""
     await _editor(db, wedding_id, current_user)
     await _row(db, BudgetCategory, category_id, wedding_id, "category")
+    first = payload.first_payment
+    first_payer = await _payer(db, first.payer_id, wedding_id) if first else None
     row = BudgetCost(
         wedding_id=wedding_id, category_id=category_id,
         vendor_name=_clean(payload.vendor_name), quoted_cents=payload.quoted_cents,
@@ -926,6 +1020,13 @@ async def add_cost(
         couple_vendor_id=await _vendor(db, payload.couple_vendor_id, wedding_id),
     )
     db.add(row)
+    if first:
+        # Flushed after the expense, in the same commit, so the payment's link to it holds.
+        await db.flush()
+        db.add(BudgetPayment(
+            wedding_id=wedding_id, cost_id=row.id, kind=first.kind,
+            amount_cents=first.amount_cents, due_on=first.due_on, payer_id=first_payer,
+        ))
     await db.commit()
     await db.refresh(row)
     return row
@@ -1025,6 +1126,7 @@ async def add_payment(
         refundable=payload.refundable, method=_short(payload.method),
         reference=_short(payload.reference), notes=_notes(payload.notes),
         link_url=_link(payload.link_url),
+        payer_id=await _payer(db, payload.payer_id, wedding_id),
     )
     db.add(row)
     await db.commit()
@@ -1062,6 +1164,8 @@ async def edit_payment(
         row.notes = _notes(updates["notes"])
     if "link_url" in updates:
         row.link_url = _link(updates["link_url"])
+    if "payer_id" in updates:
+        row.payer_id = await _payer(db, updates["payer_id"], wedding_id)
     if "paid_on" in updates:
         if updates["paid_on"] is not None and not row.paid:
             raise HTTPException(status_code=422,
@@ -1115,6 +1219,83 @@ async def remove_payment(
     await _editor(db, wedding_id, current_user)
     row = await _row(db, BudgetPayment, payment_id, wedding_id, "payment")
     await db.delete(row)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+async def _payer_out(db: AsyncSession, row: BudgetPayer) -> PayerOut:
+    uses = (await db.exec(select(func.count()).select_from(BudgetPayment).where(
+        BudgetPayment.payer_id == row.id))).one()
+    return PayerOut(id=row.id, name=row.name, payment_count=uses)
+
+
+@router.post("/{wedding_id}/budget/payers", status_code=status.HTTP_201_CREATED,
+             response_model=PayerOut)
+async def add_payer(
+    wedding_id: str, payload: PayerIn,
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Adds a name to the "People who pay" list (PD-016 call a). The couple type the
+    names, so they live only in the database."""
+    await _editor(db, wedding_id, current_user)
+    name = _clean(payload.name)
+    await _check_unique_payer(db, wedding_id, name)
+    count = (await db.exec(select(func.count()).select_from(BudgetPayer).where(
+        BudgetPayer.wedding_id == wedding_id))).one()
+    if count >= MAX_PAYERS:
+        raise HTTPException(status_code=422,
+                            detail=f"The list can hold up to {MAX_PAYERS} people")
+    row = BudgetPayer(wedding_id=wedding_id, name=name)
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return PayerOut(id=row.id, name=row.name, payment_count=0)
+
+
+@router.patch("/{wedding_id}/budget/payers/{payer_id}", response_model=PayerOut)
+async def rename_payer(
+    wedding_id: str, payer_id: str, payload: PayerIn,
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Renames someone; every payment they're on shows the new name."""
+    await _editor(db, wedding_id, current_user)
+    row = await _row(db, BudgetPayer, payer_id, wedding_id, "person")
+    name = _clean(payload.name)
+    await _check_unique_payer(db, wedding_id, name, except_id=row.id)
+    row.name = name
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return await _payer_out(db, row)
+
+
+@router.delete("/{wedding_id}/budget/payers/{payer_id}",
+               status_code=status.HTTP_204_NO_CONTENT)
+async def remove_payer(
+    wedding_id: str, payer_id: str,
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Removes someone who isn't named on any payment. Someone who is can't be
+    removed, so a record of who paid is never lost by accident: choose someone else on
+    those payments first, or rename them instead. No payment is ever deleted here."""
+    await _editor(db, wedding_id, current_user)
+    row = await _row(db, BudgetPayer, payer_id, wedding_id, "person")
+    name = row.name
+    # One conditional DELETE, so someone chosen on a payment at the same moment is
+    # never removed (which would quietly blank that payment's payer).
+    in_use = sa_select(BudgetPayment.__table__.c.id).where(
+        BudgetPayment.__table__.c.payer_id == payer_id)
+    result = await db.execute(
+        BudgetPayer.__table__.delete()
+        .where(BudgetPayer.__table__.c.id == payer_id, ~in_use.exists()))
+    if result.rowcount == 0:
+        await db.rollback()
+        n = (await db.exec(select(func.count()).select_from(BudgetPayment).where(
+            BudgetPayment.payer_id == payer_id))).one()
+        raise HTTPException(
+            status_code=409,
+            detail=(f"{name} is chosen as who paid on {n} payment{'s' if n != 1 else ''}. "
+                    "Choose someone else on those first, or rename them instead."))
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

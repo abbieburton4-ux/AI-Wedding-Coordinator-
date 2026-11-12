@@ -103,7 +103,7 @@ export function BudgetDashboard({ overview, children }: { overview: Overview; ch
           label={committedLabel(t.committed_basis)}
           value={formatCents(t.committed_cents)}
           sub={plural(d.expense_count, "expense")}
-          explain="What you've agreed or expect to spend: each expense's final cost, else its quote, else its estimate. It isn't money paid yet."
+          explain="What you've agreed or expect to spend: each expense's actual cost, else its estimate or quote. It isn't money paid yet."
         />
         <Card
           label="Paid"

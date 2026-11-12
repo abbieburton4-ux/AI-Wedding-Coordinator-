@@ -26,6 +26,7 @@ export interface Payment {
   due_on: string | null;
   paid: boolean;
   paid_at: string | null;
+  /** Who ticked it in the app; not who paid it (that's payer_id). */
   paid_by_name: string | null;
   /** The day the couple say they paid; only on a paid payment. */
   paid_on: string | null;
@@ -35,6 +36,9 @@ export interface Payment {
   reference: string | null;
   notes: string | null;
   link_url: string | null;
+  /** Who paid or will pay it, from the "People who pay" list (PD-016); null if not set. */
+  payer_id: string | null;
+  payer_name: string | null;
   overdue: boolean;
   /** How far over the cost "paid" would go if this were ticked; 0 if it wouldn't. */
   would_overpay_cents: number;
@@ -46,6 +50,7 @@ export interface Cost {
   vendor_name: string;
   estimated_cents: number | null;
   quoted_cents: number | null;
+  /** Shown to the couple as "Actual cost" (PD-016). */
   final_cents: number | null;
   contract_status: ContractStatus;
   payment_method: string | null;
@@ -69,6 +74,8 @@ export interface Cost {
   refundable_paid_cents: number;
   /** The soonest due date among its unpaid payments; null when none has a date. */
   next_due_on: string | null;
+  /** The payer of its most recently added payment, which a new payment starts with. */
+  last_payer_id: string | null;
   payments: Payment[];
 }
 
@@ -132,6 +139,14 @@ export interface Contribution {
   category_id: string | null;
 }
 
+/** Someone on the "People who pay" list (PD-016). The couple type the names in the app. */
+export interface Payer {
+  id: string;
+  name: string;
+  /** Payments that name them; someone named on any can't be removed. */
+  payment_count: number;
+}
+
 export interface DuePayment {
   payment_id: string;
   cost_id: string;
@@ -162,6 +177,7 @@ export interface Overview {
   dashboard: Dashboard;
   categories: Category[];
   contributions: Contribution[];
+  payers: Payer[];
   next_due: DuePayment[];
   /** The suggested categories the couple don't have yet, in the suggested order. */
   missing_default_categories: string[];

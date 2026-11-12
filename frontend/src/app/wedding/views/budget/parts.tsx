@@ -5,14 +5,14 @@ import {
   safeHttpUrl,
 } from "./money";
 import { venueRename } from "./expenses";
-import { expenseCost, wouldGoOver } from "./forecast";
-import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId } from "./sections";
+import { costBox, expenseCost, wouldGoOver } from "./forecast";
+import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId, useFolds } from "./sections";
 import { Bar, Chip, TargetChip, targetTone } from "./status";
 import type {
-  Category, ContractStatus, Contribution, Cost, ExpenseStatus, Payment, Run, Totals, VendorRef,
+  Category, ContractStatus, Contribution, Cost, ExpenseStatus, Payer, Payment, Run, Totals, VendorRef,
 } from "./types";
 
-type Req = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
+export type Req = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
 
 export const inputClass =
   "bg-surface-container-low border border-outline-variant/40 rounded-full px-4 py-2 text-sm text-on-surface focus:border-primary focus:outline-none";
@@ -20,10 +20,10 @@ export const primaryButton =
   "bg-primary text-on-primary rounded-full px-5 py-2 font-button-text text-sm disabled:opacity-60";
 export const linkButton =
   "text-sm text-on-surface-variant hover:text-primary underline-offset-4 hover:underline disabled:opacity-60";
-const dangerLink =
+export const dangerLink =
   "text-sm text-on-surface-variant hover:text-error underline-offset-4 hover:underline disabled:opacity-60";
 
-const json = (method: string, body?: unknown): RequestInit => ({
+export const json = (method: string, body?: unknown): RequestInit => ({
   method,
   ...(body === undefined ? {} : { body: JSON.stringify(body) }),
 });
@@ -79,7 +79,7 @@ export function TextInput({
 }
 
 /** Reads an amount box; reports a plain-language error instead of guessing. */
-function amountOrError(text: string, setError: (e: string | null) => void): number | null | undefined {
+export function amountOrError(text: string, setError: (e: string | null) => void): number | null | undefined {
   const cents = parseDollars(text);
   if (cents === undefined) setError(AMOUNT_HINT);
   return cents;
@@ -106,7 +106,7 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-function Confirm({
+export function Confirm({
   text, onYes, onNo, busy, yesLabel = "Yes, remove",
 }: { text: ReactNode; onYes: () => void; onNo: () => void; busy: boolean; yesLabel?: string }) {
   return (
@@ -129,10 +129,10 @@ type Limits = { target: number | null; committed: number; total: number | null; 
 export type OpenRequest = { id: string; n: number } | null;
 
 export function CategoryCard({
-  base, category, categories, totals, vendors, canEdit, run, request, busy, openRequest, onOpened,
+  base, category, categories, totals, vendors, payers, canEdit, run, request, busy, openRequest, onOpened,
   addRequest = null, onAddHandled,
 }: {
-  base: string; category: Category; categories: Category[]; totals: Totals; vendors: VendorRef[];
+  base: string; category: Category; categories: Category[]; totals: Totals; vendors: VendorRef[]; payers: Payer[];
   canEdit: boolean; run: Run; request: Req; busy: boolean; openRequest: OpenRequest;
   /** Called once the asked-for expense has been scrolled to, so the ask is cleared. */
   onOpened: () => void;
@@ -331,7 +331,7 @@ export function CategoryCard({
       {open && (
         <div className="mt-4 space-y-4">
           {active.map((cost) => (
-            <CostBlock key={cost.id} base={base} cost={cost} limits={limits} vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} focus={focusFor(cost)} onOpened={onOpened} />
+            <CostBlock key={cost.id} base={base} cost={cost} limits={limits} vendors={vendors} payers={payers} canEdit={canEdit} run={run} request={request} busy={busy} focus={focusFor(cost)} onOpened={onOpened} />
           ))}
           {active.length === 0 && (
             <p className="text-sm text-on-surface-variant">No expenses yet.</p>
@@ -342,13 +342,13 @@ export function CategoryCard({
                 {showArchived ? "Hide archived" : `Show archived (${archived.length}), not counted in totals`}
               </button>
               {showArchived && archived.map((cost) => (
-                <CostBlock key={cost.id} base={base} cost={cost} limits={limits} vendors={vendors} canEdit={canEdit} run={run} request={request} busy={busy} focus={focusFor(cost)} onOpened={onOpened} />
+                <CostBlock key={cost.id} base={base} cost={cost} limits={limits} vendors={vendors} payers={payers} canEdit={canEdit} run={run} request={request} busy={busy} focus={focusFor(cost)} onOpened={onOpened} />
               ))}
             </>
           )}
           {canEdit && (
             <AddCostForm
-              base={base} categoryId={category.id} limits={limits} vendors={vendors} run={run} request={request} busy={busy}
+              base={base} categoryId={category.id} limits={limits} vendors={vendors} payers={payers} run={run} request={request} busy={busy}
               suggestions={category.suggestions} taken={active.map((c) => c.vendor_name)}
             />
           )}
@@ -510,10 +510,12 @@ function LinkInput({ id, value, onChange }: { id: string; value: string; onChang
   );
 }
 
-function NotesInput({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+function NotesInput({
+  id, value, onChange, label = "Notes (optional)",
+}: { id: string; value: string; onChange: (v: string) => void; label?: string }) {
   return (
     <span className="flex flex-col gap-1 w-full">
-      <label htmlFor={id} className="text-xs text-on-surface-variant">Notes (optional)</label>
+      <label htmlFor={id} className="text-xs text-on-surface-variant">{label}</label>
       <textarea
         id={id}
         rows={2}
@@ -558,19 +560,62 @@ function VendorSelect({ id, vendors, value, onChange }: { id: string; vendors: V
   );
 }
 
-/** "Final $12,000", "Quoted $11,000", "Estimate $10,000" or "No cost recorded". */
+/** "Actual cost $12,000", "Estimate or quote $11,000" or "No cost recorded". */
 function costLine(cost: Cost): string {
-  if (cost.final_cents !== null) return `Final ${formatCents(cost.final_cents)}`;
-  if (cost.quoted_cents !== null) return `Quoted ${formatCents(cost.quoted_cents)}`;
-  if (cost.estimated_cents !== null) return `Estimate ${formatCents(cost.estimated_cents)}`;
+  if (cost.final_cents !== null) return `Actual cost ${formatCents(cost.final_cents)}`;
+  const box = costBox(cost.quoted_cents, cost.estimated_cents);
+  if (box.cents !== null) return `Estimate or quote ${formatCents(box.cents)}`;
   if (cost.scheduled_cents > 0) return `Payments so far ${formatCents(cost.scheduled_cents)}`;
   return "No cost recorded";
 }
 
+/** The "Who paid" dropdown, from the wedding's "People who pay" list. Blank is allowed. */
+function PayerSelect({
+  id, payers, value, onChange, label = "Who paid (optional)",
+}: { id: string; payers: Payer[]; value: string; onChange: (v: string) => void; label?: string }) {
+  // A payer removed since the form opened reads as "Not set", never as a stale id.
+  const shown = payers.some((p) => p.id === value) ? value : "";
+  return (
+    <SelectInput id={id} label={label} value={shown} onChange={onChange}>
+      <option value="">Not set</option>
+      {payers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+    </SelectInput>
+  );
+}
+
+/** A payer id that's still on the list, or null. */
+function payerOrNull(payers: Payer[], id: string): string | null {
+  return payers.some((p) => p.id === id) ? id : null;
+}
+
+/** Under a payer dropdown while the list is empty: where to add the names. */
+function NoPayersHint() {
+  const folds = useFolds();
+  const go = () => {
+    const el = document.getElementById(PAYERS_INPUT_ID);
+    if (!el) return;
+    if (folds) folds.jumpTo("payers", el);
+    else el.scrollIntoView({ block: "center" });
+    window.requestAnimationFrame(() => el.focus({ preventScroll: true }));
+  };
+  return (
+    <p className="w-full text-xs text-on-surface-variant">
+      To choose who paid, first{" "}
+      <button type="button" onClick={go} className={`${linkButton} text-xs text-primary`}>
+        add the people who pay
+      </button>
+      .
+    </p>
+  );
+}
+
+/** The name box on the "People who pay" list, which other forms point to. */
+export const PAYERS_INPUT_ID = "new-payer-name";
+
 function CostBlock({
-  base, cost, limits, vendors, canEdit, run, request, busy, focus, onOpened,
+  base, cost, limits, vendors, payers, canEdit, run, request, busy, focus, onOpened,
 }: {
-  base: string; cost: Cost; limits: Limits; vendors: VendorRef[]; canEdit: boolean; run: Run; request: Req; busy: boolean;
+  base: string; cost: Cost; limits: Limits; vendors: VendorRef[]; payers: Payer[]; canEdit: boolean; run: Run; request: Req; busy: boolean;
   /** Non-zero when the list of all expenses asked to open this one; a new number each time. */
   focus: number;
   onOpened: () => void;
@@ -673,11 +718,11 @@ function CostBlock({
       {cost.payments.length > 0 && (
         <ul className="divide-y divide-outline-variant/20 mb-2">
           {cost.payments.map((p) => (
-            <PaymentRow key={p.id} base={base} payment={p} cost={cost} canEdit={canEdit} run={run} request={request} busy={busy} />
+            <PaymentRow key={p.id} base={base} payment={p} cost={cost} payers={payers} canEdit={canEdit} run={run} request={request} busy={busy} />
           ))}
         </ul>
       )}
-      {canEdit && !cost.archived && <AddPaymentForm base={base} cost={cost} run={run} request={request} busy={busy} />}
+      {canEdit && !cost.archived && <AddPaymentForm base={base} cost={cost} payers={payers} run={run} request={request} busy={busy} />}
     </div>
   );
 }
@@ -687,9 +732,11 @@ function CostEditForm({
 }: { base: string; cost: Cost; limits: Limits; vendors: VendorRef[]; run: Run; request: Req; busy: boolean; onDone: () => void }) {
   const [vendor, setVendor] = useState(cost.vendor_name);
   const [vendorId, setVendorId] = useState(cost.vendor?.id ?? "");
-  const [estimate, setEstimate] = useState(centsToInput(cost.estimated_cents));
-  const [quote, setQuote] = useState(centsToInput(cost.quoted_cents));
-  const [final, setFinal] = useState(centsToInput(cost.final_cents));
+  // One box for the estimate or quote (PD-016). It shows the quote if there is one and
+  // saves back to the same field, so an earlier estimate under a quote stays saved.
+  const box = costBox(cost.quoted_cents, cost.estimated_cents);
+  const [figure, setFigure] = useState(centsToInput(box.cents));
+  const [actual, setActual] = useState(centsToInput(cost.final_cents));
   const [contract, setContract] = useState<ContractStatus>(cost.contract_status);
   const [method, setMethod] = useState(cost.payment_method ?? "");
   const [link, setLink] = useState(cost.link_url ?? "");
@@ -700,16 +747,19 @@ function CostEditForm({
   const save = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    const amounts = [estimate, quote, final].map((t) => amountOrError(t, setError));
+    const amounts = [figure, actual].map((t) => amountOrError(t, setError));
     if (amounts.some((a) => a === undefined)) return;
-    const [estimated_cents, quoted_cents, final_cents] = amounts;
+    const [figure_cents, final_cents] = amounts;
     const ok = await run(() => request(`${base}/costs/${id}`, json("PATCH", {
-      vendor_name: vendor, estimated_cents, quoted_cents, final_cents, contract_status: contract,
+      vendor_name: vendor, [box.field]: figure_cents, final_cents, contract_status: contract,
       payment_method: method || null, link_url: link || null, notes: notes || null,
       couple_vendor_id: vendorId || null,
     })));
     if (ok) onDone();
   };
+  const typedBoxes: (string | null)[] = box.field === "quoted_cents"
+    ? [actual, figure, centsToInput(cost.estimated_cents)]
+    : [actual, null, figure];
 
   const pickVendor = (value: string) => {
     setVendorId(value);
@@ -719,11 +769,10 @@ function CostEditForm({
 
   return (
     <form onSubmit={save} className="flex flex-wrap items-end gap-3 mb-3">
-      <TextInput id={`cost-name-${id}`} label="Expense or vendor name" value={vendor} onChange={setVendor} wide />
+      <TextInput id={`cost-name-${id}`} label="Line item name" value={vendor} onChange={setVendor} wide />
       <VendorSelect id={`cost-vendor-${id}`} vendors={vendors} value={vendorId} onChange={pickVendor} />
-      <MoneyInput id={`cost-est-${id}`} label="Estimated cost" value={estimate} onChange={setEstimate} />
-      <MoneyInput id={`cost-quote-${id}`} label="Quoted cost" value={quote} onChange={setQuote} />
-      <MoneyInput id={`cost-final-${id}`} label="Final cost" value={final} onChange={setFinal} />
+      <MoneyInput id={`cost-figure-${id}`} label="Estimate or quote" value={figure} onChange={setFigure} />
+      <MoneyInput id={`cost-final-${id}`} label="Actual cost (fill in later)" value={actual} onChange={setActual} />
       <SelectInput id={`cost-contract-${id}`} label="Contract" value={contract} onChange={(v) => setContract(v as ContractStatus)}>
         <option value="none">No contract yet</option>
         <option value="sent">Sent</option>
@@ -737,13 +786,17 @@ function CostEditForm({
       <LinkInput id={`cost-link-${id}`} value={link} onChange={setLink} />
       <NotesInput id={`cost-notes-${id}`} value={notes} onChange={setNotes} />
       <p className="w-full text-xs text-on-surface-variant">
-        The budget counts the final cost if you've entered one, otherwise the quote, otherwise the estimate.
+        The budget counts the actual cost once you've entered it, otherwise the estimate or quote.
+        {box.keptEstimate !== null && (
+          <> Your earlier estimate of {formatCents(box.keptEstimate)} is also saved. This box is the quote, which
+          the budget uses instead; if you empty it, the earlier estimate counts again.</>
+        )}
       </p>
       {!cost.archived && (
         <OverNote
           limits={limits}
           before={cost.committed_cents}
-          after={typedCost([final, quote, estimate], cost.scheduled_cents)}
+          after={typedCost(typedBoxes, cost.scheduled_cents)}
         />
       )}
       <button type="submit" disabled={busy} className={primaryButton}>Save</button>
@@ -753,31 +806,61 @@ function CostEditForm({
   );
 }
 
+/**
+ * Adding an expense (PD-016 step 1): its name, the estimate or quote, and its first
+ * payment (type, amount, due date, who paid) plus comments, saved in one go. The
+ * amount starts as the estimate or quote; change it for a deposit, or empty it to add
+ * the expense with no payment yet. The payment is added unpaid (rule 4).
+ */
 function AddCostForm({
-  base, categoryId, limits, vendors, run, request, busy, suggestions, taken,
+  base, categoryId, limits, vendors, payers, run, request, busy, suggestions, taken,
 }: {
-  base: string; categoryId: string; limits: Limits; vendors: VendorRef[]; run: Run; request: Req; busy: boolean;
+  base: string; categoryId: string; limits: Limits; vendors: VendorRef[]; payers: Payer[]; run: Run; request: Req; busy: boolean;
   /** One-tap ideas for this category; those already used here aren't offered. */
   suggestions: string[]; taken: string[];
 }) {
   const [vendor, setVendor] = useState("");
   const [vendorId, setVendorId] = useState("");
-  const [estimate, setEstimate] = useState("");
-  const [quote, setQuote] = useState("");
+  const [figure, setFigure] = useState("");
+  const [kind, setKind] = useState<"deposit" | "payment">("payment");
+  // The amount follows the estimate or quote until the couple type their own.
+  const [typedAmount, setTypedAmount] = useState<string | null>(null);
+  const amount = typedAmount ?? figure;
+  const [due, setDue] = useState("");
+  const [payer, setPayer] = useState("");
+  const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    const est = amountOrError(estimate, setError);
-    const quoted = amountOrError(quote, setError);
-    if (est === undefined || quoted === undefined) return;
+    const figureCents = amountOrError(figure, setError);
+    const amountCents = amountOrError(amount, setError);
+    if (figureCents === undefined || amountCents === undefined) return;
+    const payerId = payerOrNull(payers, payer);
+    if (!amountCents && (due || payerId)) {
+      setError("Please enter the amount of this payment, or clear its due date and who paid to add the expense without one.");
+      return;
+    }
     const ok = await run(() =>
       request(`${base}/categories/${categoryId}/costs`, json("POST", {
-        vendor_name: vendor, estimated_cents: est, quoted_cents: quoted, couple_vendor_id: vendorId || null,
+        vendor_name: vendor, estimated_cents: figureCents, couple_vendor_id: vendorId || null,
+        notes: notes || null,
+        first_payment: amountCents
+          ? { kind, amount_cents: amountCents, due_on: due || null, payer_id: payerId }
+          : null,
       })),
     );
-    if (ok) { setVendor(""); setVendorId(""); setEstimate(""); setQuote(""); }
+    if (ok) {
+      setVendor(""); setVendorId(""); setFigure(""); setKind("payment"); setTypedAmount(null);
+      setDue(""); setPayer(""); setNotes("");
+    }
   };
+  const typedAmountCents = parseDollars(amount);
+  const typedFigureCents = parseDollars(figure);
+  // Shown, never blocking: a first payment bigger than the estimate or quote.
+  const overFigure = typeof typedAmountCents === "number" && typeof typedFigureCents === "number"
+    ? typedAmountCents - typedFigureCents
+    : 0;
   const pickVendor = (value: string) => {
     setVendorId(value);
     const picked = vendors.find((v) => v.id === value);
@@ -809,11 +892,39 @@ function AddCostForm({
       {vendors.length > 0 && (
         <VendorSelect id={`new-cost-vendor-${categoryId}`} vendors={vendors} value={vendorId} onChange={pickVendor} />
       )}
-      <TextInput id={`new-cost-${categoryId}`} label="Expense or vendor name" value={vendor} onChange={setVendor} wide />
-      <MoneyInput id={`new-est-${categoryId}`} label="Estimated (optional)" value={estimate} onChange={setEstimate} />
-      <MoneyInput id={`new-quote-${categoryId}`} label="Quoted (optional)" value={quote} onChange={setQuote} />
+      <TextInput id={`new-cost-${categoryId}`} label="Line item name" value={vendor} onChange={setVendor} wide />
+      <MoneyInput id={`new-figure-${categoryId}`} label="Estimate or quote (optional)" value={figure} onChange={setFigure} />
+      <SelectInput id={`new-kind-${categoryId}`} label="Type" value={kind} onChange={(v) => setKind(v as "deposit" | "payment")}>
+        <option value="payment">Payment</option>
+        <option value="deposit">Deposit</option>
+      </SelectInput>
+      <MoneyInput
+        id={`new-amount-${categoryId}`} label="Amount of this payment" value={amount}
+        onChange={(v) => setTypedAmount(v)} placeholder="None yet"
+      />
+      <span className="flex flex-col gap-1">
+        <label htmlFor={`new-due-${categoryId}`} className="text-xs text-on-surface-variant">Due date (optional)</label>
+        <input id={`new-due-${categoryId}`} type="date" value={due} onChange={(e) => setDue(e.target.value)} className={inputClass} />
+      </span>
+      <PayerSelect id={`new-payer-${categoryId}`} payers={payers} value={payer} onChange={setPayer} />
+      {payers.length === 0 && <NoPayersHint />}
+      <NotesInput id={`new-notes-${categoryId}`} value={notes} onChange={setNotes} label="Comments (optional)" />
+      <p className="w-full text-xs text-on-surface-variant">
+        The amount starts as the full estimate or quote; change it for a deposit. Saving adds the expense and this
+        payment together, not ticked as paid. Leave the amount empty to add the expense without a payment. You can
+        add more payments under it later, and fill in the actual cost once you know it.
+      </p>
       <button type="submit" disabled={busy} className={primaryButton}>Add expense</button>
-      <OverNote limits={limits} before={0} after={typedCost([null, quote, estimate], 0)} />
+      {overFigure > 0 && (
+        <p role="status" className="w-full flex items-start gap-1 text-sm text-error">
+          <Icon name="warning" size={16} className="mt-0.5" />
+          This payment is {formatCents(overFigure)} more than the estimate or quote. You can still add it.
+        </p>
+      )}
+      <OverNote
+        limits={limits} before={0}
+        after={typedCost([null, null, figure], typeof typedAmountCents === "number" ? typedAmountCents : 0)}
+      />
       {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
     </form>
   );
@@ -864,9 +975,43 @@ function OverNote({ limits, before, after }: { limits: Limits; before: number; a
 
 const KIND_LABEL = { deposit: "Deposit", payment: "Payment" } as const;
 
+/**
+ * Who paid, on a payment row: their name, or for a payment nobody has said yet a
+ * "Who paid?" dropdown for owners and editors (PD-016 call b). Choosing saves it
+ * straight away and never ticks the payment paid (rule 4).
+ */
+function WhoPaid({
+  base, payment, payers, canEdit, run, request, busy,
+}: { base: string; payment: Payment; payers: Payer[]; canEdit: boolean; run: Run; request: Req; busy: boolean }) {
+  if (payment.payer_name) {
+    return <span className="block text-xs text-on-surface">{payment.paid ? "Paid by" : "To be paid by"} {payment.payer_name}</span>;
+  }
+  if (!canEdit) return <span className="block text-xs text-on-surface-variant">Who paid: not set yet</span>;
+  if (payers.length === 0) {
+    return <span className="block text-xs text-on-surface-variant">Who paid? Add the people who pay to choose.</span>;
+  }
+  const id = `who-paid-${payment.id}`;
+  return (
+    <span className="flex flex-wrap items-center gap-2 text-xs mt-1">
+      <label htmlFor={id} className="font-bold text-on-surface">Who paid?</label>
+      <select
+        id={id} value="" disabled={busy}
+        onChange={(e) => {
+          const picked = payerOrNull(payers, e.target.value);
+          if (picked) run(() => request(`${base}/payments/${payment.id}`, json("PATCH", { payer_id: picked })));
+        }}
+        className="bg-surface-container-low border border-outline-variant/40 rounded-full px-3 py-1 text-xs text-on-surface focus:border-primary focus:outline-none"
+      >
+        <option value="">Choose…</option>
+        {payers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+    </span>
+  );
+}
+
 function PaymentRow({
-  base, payment, cost, canEdit, run, request, busy,
-}: { base: string; payment: Payment; cost: Cost; canEdit: boolean; run: Run; request: Req; busy: boolean }) {
+  base, payment, cost, payers, canEdit, run, request, busy,
+}: { base: string; payment: Payment; cost: Cost; payers: Payer[]; canEdit: boolean; run: Run; request: Req; busy: boolean }) {
   const [confirm, setConfirm] = useState(false);
   const [confirmOverpay, setConfirmOverpay] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -881,7 +1026,7 @@ function PaymentRow({
   if (editing) {
     return (
       <li className="py-2">
-        <PaymentEditForm base={base} payment={payment} run={run} request={request} busy={busy} onDone={() => setEditing(false)} />
+        <PaymentEditForm base={base} payment={payment} payers={payers} run={run} request={request} busy={busy} onDone={() => setEditing(false)} />
       </li>
     );
   }
@@ -891,7 +1036,7 @@ function PaymentRow({
   const paidNote = payment.paid
     ? `Paid${paidOn ? ` on ${paidOn}` : ""}${payment.paid_by_name ? `, ticked by ${payment.paid_by_name}` : ""}`
     : "Not paid yet";
-  const details = [payment.method && `By ${payment.method}`, payment.reference && `Ref. ${payment.reference}`].filter(Boolean);
+  const details = [payment.method && `Paid with ${payment.method}`, payment.reference && `Ref. ${payment.reference}`].filter(Boolean);
   return (
     <li className="py-2 flex flex-wrap items-center gap-3 text-sm">
       <span className="flex-grow">
@@ -903,6 +1048,7 @@ function PaymentRow({
           </span>
         )}
         <span className={`block text-xs ${payment.paid ? "text-primary" : "text-on-surface-variant"}`}>{paidNote}</span>
+        <WhoPaid base={base} payment={payment} payers={payers} canEdit={canEdit && !cost.archived} run={run} request={request} busy={busy} />
         {payment.refundable && (
           <span className="block text-xs text-on-surface-variant">Tracked here, but not counted in the cost or in paid.</span>
         )}
@@ -958,9 +1104,10 @@ function PaymentRow({
 }
 
 function PaymentEditForm({
-  base, payment, run, request, busy, onDone,
-}: { base: string; payment: Payment; run: Run; request: Req; busy: boolean; onDone: () => void }) {
+  base, payment, payers, run, request, busy, onDone,
+}: { base: string; payment: Payment; payers: Payer[]; run: Run; request: Req; busy: boolean; onDone: () => void }) {
   const [kind, setKind] = useState<"deposit" | "payment">(payment.kind);
+  const [payer, setPayer] = useState(payment.payer_id ?? "");
   const [amount, setAmount] = useState(centsToInput(payment.amount_cents));
   const [dueOn, setDueOn] = useState(payment.due_on ?? "");
   const [refundable, setRefundable] = useState(payment.refundable);
@@ -982,6 +1129,7 @@ function PaymentEditForm({
       request(`${base}/payments/${id}`, json("PATCH", {
         kind, amount_cents: cents, due_on: dueOn || null, refundable,
         method: method || null, reference: reference || null, link_url: link || null, notes: notes || null,
+        payer_id: payerOrNull(payers, payer),
         ...(payment.paid ? { paid_on: paidOn || null } : {}),
       })),
     );
@@ -1005,8 +1153,9 @@ function PaymentEditForm({
           <input id={`edit-paidon-${id}`} type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} className={inputClass} />
         </span>
       )}
+      <PayerSelect id={`edit-payer-${id}`} payers={payers} value={payer} onChange={setPayer} />
       <span className="flex flex-col gap-1">
-        <label htmlFor={`edit-method-${id}`} className="text-xs text-on-surface-variant">Paid by (optional)</label>
+        <label htmlFor={`edit-method-${id}`} className="text-xs text-on-surface-variant">How it was paid (optional)</label>
         <input id={`edit-method-${id}`} list="budget-method-suggestions" autoComplete="off" maxLength={120}
           value={method} onChange={(e) => setMethod(e.target.value)} className={inputClass} />
       </span>
@@ -1024,11 +1173,16 @@ function PaymentEditForm({
   );
 }
 
-function AddPaymentForm({ base, cost, run, request, busy }: { base: string; cost: Cost; run: Run; request: Req; busy: boolean }) {
+function AddPaymentForm({
+  base, cost, payers, run, request, busy,
+}: { base: string; cost: Cost; payers: Payer[]; run: Run; request: Req; busy: boolean }) {
   const [kind, setKind] = useState<"deposit" | "payment">("deposit");
   const [amount, setAmount] = useState("");
   const [due, setDue] = useState("");
   const [refundable, setRefundable] = useState(false);
+  // Starts as whoever paid this expense's latest payment (PD-016), until changed.
+  const [pickedPayer, setPickedPayer] = useState<string | null>(null);
+  const payer = pickedPayer ?? cost.last_payer_id ?? "";
   const [error, setError] = useState<string | null>(null);
   const costId = cost.id;
 
@@ -1046,9 +1200,12 @@ function AddPaymentForm({ base, cost, run, request, busy }: { base: string; cost
     if (cents === undefined) return;
     if (!cents) { setError("Please enter how much this payment is."); return; }
     const ok = await run(() =>
-      request(`${base}/costs/${costId}/payments`, json("POST", { kind, amount_cents: cents, due_on: due || null, refundable })),
+      request(`${base}/costs/${costId}/payments`, json("POST", {
+        kind, amount_cents: cents, due_on: due || null, refundable, payer_id: payerOrNull(payers, payer),
+      })),
     );
-    if (ok) { setAmount(""); setDue(""); setKind("payment"); setRefundable(false); }
+    // The new payment is now the latest, so the next one starts with the same payer.
+    if (ok) { setAmount(""); setDue(""); setKind("payment"); setRefundable(false); setPickedPayer(null); }
   };
   return (
     <form onSubmit={submit} className="flex flex-wrap items-end gap-3 pt-2">
@@ -1065,6 +1222,9 @@ function AddPaymentForm({ base, cost, run, request, busy }: { base: string; cost
         <input type="checkbox" checked={refundable} onChange={(e) => setRefundable(e.target.checked)} className="h-4 w-4 accent-primary" />
         Refundable security deposit
       </label>
+      {payers.length > 0 && (
+        <PayerSelect id={`pay-payer-${costId}`} payers={payers} value={payer} onChange={(v) => setPickedPayer(v)} />
+      )}
       <button type="submit" disabled={busy} className={primaryButton}>Add payment</button>
       {over > 0 && (
         <p role="status" className="w-full flex items-start gap-1 text-sm text-error">

@@ -70,3 +70,14 @@ export function shareText(cents: number, totalCents: number): string;
 export function paymentProgress(categories: Category[]): ProgressRow[];
 export function targetVsCommitted(categories: Category[]): TargetRow[];
 export function compactDollars(cents: number): string;
+
+export interface PayerRow {
+  id: string;
+  name: string;
+  paidCents: number;
+  toComeCents: number;
+  totalCents: number;
+  count: number;
+}
+export const NOT_SET: string;
+export function whoPaid(categories: Category[], payers: { id: string; name: string }[]): PayerRow[];

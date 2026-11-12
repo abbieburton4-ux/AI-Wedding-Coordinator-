@@ -424,6 +424,31 @@ def check_publish_safety(real_head: str, new_revisions: list) -> None:
     assert not diff, diff
     assert [r[0] for r in declined] == [None], "existing weddings have removed none"
 
+    print("6a5. Real migrations: 0011 already published, then 0012 on its own (B76)...")
+    dev12, prod11 = url("dev12"), url("prod11")
+    command.upgrade(config_for(dev12), "0012")
+    command.upgrade(config_for(prod11), LAST_UNGUARDED)
+    seed_wedding(prod11)
+    command.upgrade(config_for(prod11), "0011")
+    added = publish_like_replit(dev12, prod11)
+    assert sorted(added) == sorted([
+        "CREATE TABLE budget_payers", "ADD COLUMN budget_payments.payer_id",
+        "CREATE INDEX ix_budget_payments_payer_id",
+        "ADD CONSTRAINT fk_budget_payments_payer_id_budget_payers",
+    ]), f"0012 adds one table and one column, nothing else: {added}"
+    command.upgrade(config_for(prod11), "head")
+    with create_engine(prod11).connect() as conn:
+        diff = compare_metadata(MigrationContext.configure(conn), SQLModel.metadata)
+        payers = conn.execute(text("SELECT COUNT(*) FROM budget_payers")).scalar()
+        pays = conn.execute(text(
+            "SELECT amount_cents, paid, payer_id FROM budget_payments "
+            "ORDER BY amount_cents")).fetchall()
+    assert not diff, diff
+    assert payers == 0, "the list of people who pay starts empty"
+    assert [tuple(r) for r in pays] == [
+        (200_000, 0, None), (600_000, 0, None), (600_000, 0, None)], \
+        "existing payments keep their amounts and ticks, with no payer"
+
     fixture_dir = os.path.join(work, "fixture_versions")
     os.makedirs(fixture_dir)
     with open(os.path.join(fixture_dir, "zz_fixture.py"), "w") as fh:

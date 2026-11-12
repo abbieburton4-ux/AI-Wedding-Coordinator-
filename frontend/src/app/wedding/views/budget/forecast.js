@@ -37,3 +37,20 @@ export function wouldGoOver({ target, committed, total, totalCommitted, before, 
     limit === null || limit === undefined ? 0 : Math.max(now + change - limit, 0);
   return { categoryOverBy: overBy(target, committed), totalOverBy: overBy(total, totalCommitted) };
 }
+
+/**
+ * The one "Estimate or quote" box (PD-016). It shows the quote if there is one, else
+ * the estimate, and saving writes back to that same field. So an estimate entered
+ * before a quote stays saved (keptEstimate, for a note under the box), and nothing
+ * the couple can't see is overwritten.
+ * @param {number|null} quotedCents
+ * @param {number|null} estimatedCents
+ * @returns {{ field: "quoted_cents"|"estimated_cents", cents: number|null,
+ *   keptEstimate: number|null }}
+ */
+export function costBox(quotedCents, estimatedCents) {
+  if (quotedCents !== null && quotedCents !== undefined) {
+    return { field: "quoted_cents", cents: quotedCents, keptEstimate: estimatedCents ?? null };
+  }
+  return { field: "estimated_cents", cents: estimatedCents ?? null, keptEstimate: null };
+}

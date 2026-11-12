@@ -11,7 +11,7 @@ const linkButton =
  * this device per wedding, not wedding data, so localStorage is fine for it.
  */
 export type SectionKey =
-  | "overview" | "upcoming" | "charts" | "expenses" | "categories" | "export" | "contributions";
+  | "overview" | "upcoming" | "charts" | "expenses" | "categories" | "payers" | "export" | "contributions";
 
 /** In page order, so the bar reads the way the page scrolls. */
 export const SECTIONS: { key: SectionKey; label: string }[] = [
@@ -20,6 +20,7 @@ export const SECTIONS: { key: SectionKey; label: string }[] = [
   { key: "charts", label: "Charts" },
   { key: "expenses", label: "All expenses" },
   { key: "categories", label: "Categories" },
+  { key: "payers", label: "People who pay" },
   { key: "export", label: "Export" },
   { key: "contributions", label: "Who's contributing" },
 ];

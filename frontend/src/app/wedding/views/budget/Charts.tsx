@@ -5,9 +5,9 @@ import { formatCents } from "./money";
 import { linkButton } from "./parts";
 import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId } from "./sections";
 import { TargetChip } from "./status";
-import type { Category } from "./types";
+import type { Category, Payer } from "./types";
 import {
-  compactDollars, paymentProgress, shareText, spendingByCategory, targetVsCommitted,
+  NOT_SET, compactDollars, paymentProgress, shareText, spendingByCategory, targetVsCommitted, whoPaid,
   type ProgressRow, type TargetRow,
 } from "./figures";
 
@@ -29,11 +29,13 @@ type OnCategory = (categoryId: string) => void;
 
 /**
  * The budget charts (PD-013 step 4), one at a time behind tabs so the screen isn't
- * crowded: spending by category, target against committed, and payments made. Every
+ * crowded: spending by category, target against committed, payments made, and who paid. Every
  * figure is the API's. Each chart lists its categories in words underneath (the keyboard
  * way in) and can switch to a table; choosing a category opens its expenses.
  */
-export function BudgetCharts({ categories, onCategory }: { categories: Category[]; onCategory: OnCategory }) {
+export function BudgetCharts({
+  categories, payers, onCategory,
+}: { categories: Category[]; payers: Payer[]; onCategory: OnCategory }) {
   const animate = !reducedMotion();
 
   // The section's own fold (PD-015) hides the charts, so there's no second toggle here.
@@ -53,6 +55,7 @@ export function BudgetCharts({ categories, onCategory }: { categories: Category[
               <TabsTrigger value="spending" className={TAB}>Spending by category</TabsTrigger>
               <TabsTrigger value="target" className={TAB}>Target vs committed</TabsTrigger>
               <TabsTrigger value="payments" className={TAB}>Payments made</TabsTrigger>
+              <TabsTrigger value="payers" className={TAB}>Who paid</TabsTrigger>
             </TabsList>
             <TabsContent value="spending" className={card}>
               <SpendingChart categories={categories} onCategory={onCategory} animate={animate} />
@@ -62,6 +65,9 @@ export function BudgetCharts({ categories, onCategory }: { categories: Category[
             </TabsContent>
             <TabsContent value="payments" className={card}>
               <PaymentsChart categories={categories} onCategory={onCategory} animate={animate} />
+            </TabsContent>
+            <TabsContent value="payers" className={card}>
+              <WhoPaidChart categories={categories} payers={payers} animate={animate} />
             </TabsContent>
           </Tabs>
         )}
@@ -166,7 +172,7 @@ function SpendingChart({ categories, onCategory, animate }: { categories: Catego
       {totalCents === 0 ? (
         <p className="text-sm text-on-surface-variant">
           {measure === "committed"
-            ? "Nothing committed yet. Add an expense with an estimate, quote or final cost and it shows here."
+            ? "Nothing committed yet. Add an expense with an estimate or quote, or an actual cost, and it shows here."
             : "Nothing paid yet. When you tick a payment as paid, it shows here."}
         </p>
       ) : table ? (
@@ -433,6 +439,103 @@ function PaymentsChart({ categories, onCategory, animate }: { categories: Catego
           )}
           <p className="text-xs text-on-surface-variant mt-3">
             Refundable deposits aren't counted. Paying one vendor more than agreed doesn't count toward another.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---- Who paid --------------------------------------------------------------------------
+
+/**
+ * Who paid (PD-016 step 4): per person on the "People who pay" list, what they've paid
+ * (ticked payments) and what's still to come from them. Payments with nobody chosen
+ * are a "Not set" row. Payments only, never promised contributions.
+ */
+function WhoPaidChart({ categories, payers, animate }: { categories: Category[]; payers: Payer[]; animate: boolean }) {
+  const [table, tableButton] = useTableToggle();
+  const rows = useMemo(() => whoPaid(categories, payers), [categories, payers]);
+  const any = rows.some((r) => r.count > 0);
+  const notSet = rows.find((r) => r.id === NOT_SET);
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <p className="text-xs text-on-surface-variant">
+          For each person, what they've paid (payments ticked as paid) and what's still to come from them.
+        </p>
+        {any && tableButton}
+      </div>
+      {!any ? (
+        <p className="text-sm text-on-surface-variant">
+          {payers.length === 0
+            ? "Add the people who pay, then choose who paid on each payment, and it shows here."
+            : "No payments yet. When you add one and choose who paid, it shows here."}
+        </p>
+      ) : (
+        <>
+          {table ? (
+            <div className="overflow-x-auto"><table className="w-full text-sm min-w-[22rem]">
+              <caption className="sr-only">Paid and still to come by who paid</caption>
+              <thead className="border-b border-outline-variant/40">
+                <tr>
+                  <th scope="col" className={`${thClass} text-left`}>Who</th>
+                  <th scope="col" className={`${thClass} text-right`}>Paid</th>
+                  <th scope="col" className={`${thClass} text-right`}>Still to come</th>
+                  <th scope="col" className={`${thClass} text-right`}>Together</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline-variant/20">
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <th scope="row" className="py-2 px-2 text-left font-normal">{r.name}</th>
+                    <td className="py-2 px-2 text-right tabular-nums">{formatCents(r.paidCents)}</td>
+                    <td className="py-2 px-2 text-right tabular-nums">{formatCents(r.toComeCents)}</td>
+                    <td className="py-2 px-2 text-right tabular-nums">{formatCents(r.totalCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table></div>
+          ) : (
+            <>
+              <Legend items={[{ colour: "var(--chart-paid)", label: "Paid" }, { colour: "var(--chart-owed)", label: "Still to come" }]} />
+              <div
+                role="img"
+                aria-label="Stacked bar chart of what each person has paid and what's still to come from them. The same figures are listed below it."
+                style={{ height: rows.length * 36 + 40 }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }} barCategoryGap="30%">
+                    <CartesianGrid horizontal={false} stroke="var(--border)" />
+                    <XAxis type="number" tickFormatter={compactDollars} tick={{ fontSize: 11 }} stroke="var(--border)" />
+                    <YAxis type="category" dataKey="name" width={118} tick={<AxisName />} interval={0} stroke="var(--border)" />
+                    <Tooltip formatter={moneyTooltip} cursor={{ fill: "var(--muted)" }} />
+                    <Bar dataKey="paidCents" name="Paid" stackId="w" fill="var(--chart-paid)" stroke={GAP} strokeWidth={2}
+                      barSize={12} isAnimationActive={animate} />
+                    <Bar dataKey="toComeCents" name="Still to come" stackId="w" fill="var(--chart-owed)" stroke={GAP} strokeWidth={2}
+                      radius={[0, 4, 4, 0]} barSize={12} isAnimationActive={animate} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <ul className="mt-4 divide-y divide-outline-variant/20">
+                {rows.map((r) => (
+                  <li key={r.id} className="py-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
+                    <span className="text-on-surface">{r.name}</span>
+                    <span className="text-on-surface-variant">
+                      {r.count === 0
+                        ? "No payments yet"
+                        : `Paid ${formatCents(r.paidCents)} · ${formatCents(r.toComeCents)} still to come`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <p className="text-xs text-on-surface-variant mt-3">
+            {notSet && `${notSet.count} payment${notSet.count === 1 ? " has" : "s have"} nobody chosen as who paid yet, shown as Not set. `}
+            Refundable deposits and archived expenses aren't counted, as in the other charts. Promises in Who's
+            contributing aren't counted either; this is payments only.
           </p>
         </>
       )}

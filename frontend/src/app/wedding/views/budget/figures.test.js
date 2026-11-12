@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   compactDollars, daysUntil, groupOf, paymentProgress, paymentTag, sharePct, shareText, spendingByCategory, targetVsCommitted,
-  upcomingPayments,
+  upcomingPayments, whoPaid,
 } from "./figures.js";
 
 const today = "2026-11-20";
@@ -124,4 +124,22 @@ test("shares and axis labels", () => {
   assert.equal(compactDollars(95000), "$950");
   assert.equal(compactDollars(1200000), "$12k");
   assert.equal(compactDollars(150000), "$1.5k");
+});
+
+test("who paid: paid and still to come per payer, unset ones last, deposits back and archived left out", () => {
+  const payers = [{ id: "a", name: "Sample Payer A" }, { id: "b", name: "Placeholder Family" }];
+  const p = (amount_cents, payer_id, over = {}) => ({ amount_cents, payer_id, paid: false, refundable: false, ...over });
+  const categories = [
+    { costs: [
+      { archived: false, payments: [p(100, "a", { paid: true }), p(300, "a"), p(50, null), p(200, "b", { refundable: true })] },
+      { archived: true, payments: [p(999, "a", { paid: true })] },
+    ] },
+    { costs: [{ archived: false, payments: [p(20, "gone", { paid: true })] }] },
+  ];
+  assert.deepEqual(whoPaid(categories, payers), [
+    { id: "a", name: "Sample Payer A", paidCents: 100, toComeCents: 300, totalCents: 400, count: 2 },
+    { id: "b", name: "Placeholder Family", paidCents: 0, toComeCents: 0, totalCents: 0, count: 0 },
+    { id: "not_set", name: "Not set", paidCents: 20, toComeCents: 50, totalCents: 70, count: 2 },
+  ]);
+  assert.deepEqual(whoPaid([], payers).map((r) => r.id), ["a", "b"], "no Not set row when nothing's unset");
 });
