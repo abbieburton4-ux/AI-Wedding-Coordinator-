@@ -449,6 +449,28 @@ def check_publish_safety(real_head: str, new_revisions: list) -> None:
         (200_000, 0, None), (600_000, 0, None), (600_000, 0, None)], \
         "existing payments keep their amounts and ticks, with no payer"
 
+    print("6a6. Real migrations: 0012 already published, then 0013 on its own (B79)...")
+    dev13, prod12 = url("dev13"), url("prod12")
+    command.upgrade(config_for(dev13), "0013")
+    command.upgrade(config_for(prod12), LAST_UNGUARDED)
+    seed_wedding(prod12)
+    command.upgrade(config_for(prod12), "0012")
+    added = publish_like_replit(dev13, prod12)
+    assert sorted(added) == sorted([
+        "ADD COLUMN budget_costs.tip_for_cost_id", "ADD COLUMN budget_costs.tip_basis_points",
+        "CREATE INDEX ix_budget_costs_tip_for_cost_id",
+        "ADD CONSTRAINT fk_budget_costs_tip_for_cost_id_budget_costs",
+    ]), f"0013 adds two columns with their index and link, nothing else: {added}"
+    command.upgrade(config_for(prod12), "head")
+    with create_engine(prod12).connect() as conn:
+        diff = compare_metadata(MigrationContext.configure(conn), SQLModel.metadata)
+        costs = conn.execute(text(
+            "SELECT quoted_cents, final_cents, tip_for_cost_id, tip_basis_points "
+            "FROM budget_costs ORDER BY vendor_name")).fetchall()
+    assert not diff, diff
+    assert costs and all(r[2] is None and r[3] is None for r in costs), \
+        f"every existing expense stays a plain line, not a tip: {costs}"
+
     fixture_dir = os.path.join(work, "fixture_versions")
     os.makedirs(fixture_dir)
     with open(os.path.join(fixture_dir, "zz_fixture.py"), "w") as fh:

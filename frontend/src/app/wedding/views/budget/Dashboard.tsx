@@ -141,6 +141,14 @@ export function BudgetDashboard({ overview, children }: { overview: Overview; ch
           sub={within.sub}
           explain={`Your total budget minus what you've committed. "Close to your limit" means you've committed ${d.near_limit_pct}% or more of it.`}
         />
+        <Card
+          label="Tips"
+          value={formatCents(d.tips_cents)}
+          sub={d.tip_count === 0
+            ? "No tips added yet. Use Add tip on an expense."
+            : `${plural(d.tip_count, "tip")}, already part of what you've committed.`}
+          explain="The tips you've added for vendors, each as its own line under the same category as the expense it's for. A percentage tip changes when that expense's cost changes, until a payment on the tip is ticked paid."
+        />
       </div>
 
       <div className="bg-surface-container-lowest rounded-[1.5rem] border border-outline-variant/20 p-5 space-y-4">

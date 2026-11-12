@@ -26,7 +26,7 @@ const STATUS_LABEL: Record<ExpenseStatus, string> = {
   unpaid: "Unpaid", partly_paid: "Partly paid", paid: "Paid", overdue: "Overdue",
 };
 
-const EMPTY = { search: "", categoryId: "", status: "", vendorId: "", due: "", from: "", to: "" };
+const EMPTY = { search: "", categoryId: "", tips: "", status: "", vendorId: "", due: "", from: "", to: "" };
 
 /** Asks the list to show one category's expenses; n changes on each ask. */
 export type CategoryRequest = { id: string; n: number } | null;
@@ -71,6 +71,8 @@ export function ExpenseList({
   }, [all]);
   const shown = sortExpenses(filterExpenses(all, { ...f, showArchived }, today), sortKey, dir);
   const total = all.filter((r) => showArchived || !r.cost.archived).length;
+  // Archived tips aren't in any total, so they aren't in this sum either.
+  const tipSum = shown.reduce((n, r) => n + (r.cost.archived ? 0 : r.cost.committed_cents), 0);
   const filtered = Object.values(f).some(Boolean);
   const onlyCategory = f.categoryId !== "" && Object.entries(f).every(([k, v]) => k === "categoryId" || !v);
 
@@ -118,6 +120,10 @@ export function ExpenseList({
           <option value="">All categories</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
+        <Select id="exp-tips" label="Show" value={f.tips} onChange={set("tips")}>
+          <option value="">Every expense and tip</option>
+          <option value="only">Tips only</option>
+        </Select>
         <Select id="exp-status" label="Status" value={f.status} onChange={set("status")}>
           <option value="">Any status</option>
           {(Object.keys(STATUS_LABEL) as ExpenseStatus[]).map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
@@ -162,6 +168,7 @@ export function ExpenseList({
       <div className="flex flex-wrap items-center gap-4 mb-3 text-sm">
         <p aria-live="polite" className="text-on-surface-variant">
           {onlyCategory && `${categories.find((c) => c.id === f.categoryId)?.name ?? "This category"} only: `}
+          {f.tips === "only" && shown.length > 0 && `Tips come to ${formatCents(tipSum)}. `}
           {shown.length === total ? `${plural(total)}` : `Showing ${shown.length} of ${plural(total)}`}
         </p>
         {filtered && <button type="button" onClick={() => setF(EMPTY)} className={linkButton}>Clear filters</button>}
@@ -176,7 +183,11 @@ export function ExpenseList({
 
       {shown.length === 0 ? (
         <p className="text-sm text-on-surface-variant">
-          {onlyCategory ? "No expenses in this category yet." : "No expenses match. Try clearing the filters."}
+          {onlyCategory
+            ? "No expenses in this category yet."
+            : f.tips === "only" && Object.entries(f).every(([k, v]) => k === "tips" || !v)
+              ? "No tips yet. Use Add tip on an expense to add one."
+              : "No expenses match. Try clearing the filters."}
         </p>
       ) : (
         <>
@@ -203,6 +214,9 @@ export function ExpenseList({
                         className="text-left text-on-surface hover:text-primary underline-offset-4 hover:underline">
                         {cost.vendor_name}
                       </button>
+                      {cost.tip_state && (
+                        <span className="block text-xs text-on-surface-variant">Tip{cost.tip_for_name ? ` for ${cost.tip_for_name}` : ""}</span>
+                      )}
                       {cost.archived && <span className="block text-xs text-on-surface-variant">Archived</span>}
                     </td>
                     <td className="py-2 px-2 text-on-surface-variant">{categoryName}</td>
@@ -229,7 +243,9 @@ export function ExpenseList({
                     <StatusBadge status={cost.status} />
                   </span>
                   <span className="block text-xs text-on-surface-variant mt-1">
-                    {categoryName}{cost.vendor ? ` · ${cost.vendor.name}` : ""}{cost.archived ? " · Archived" : ""}
+                    {categoryName}{cost.vendor ? ` · ${cost.vendor.name}` : ""}
+                    {cost.tip_state ? ` · Tip${cost.tip_for_name ? ` for ${cost.tip_for_name}` : ""}` : ""}
+                    {cost.archived ? " · Archived" : ""}
                   </span>
                   <span className="block text-sm text-on-surface-variant mt-1">
                     Committed {formatCents(cost.committed_cents)} · Paid {formatCents(cost.paid_cents)} · Still to pay{" "}

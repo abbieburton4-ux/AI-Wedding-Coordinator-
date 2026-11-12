@@ -1739,6 +1739,216 @@ def test_api_suite():
         print("   * Export: each payment says who paid")
 
         clear_category(pay_cat)
+
+        print("7c7. Verifying tips as their own expense lines (PD-017)...")
+        from app.utils.budget_math import percent_of
+        assert percent_of(800_000, 2000) == 160_000, "20% of $8,000 is $1,600"
+        assert percent_of(1, 5000) == 1 and percent_of(3, 5000) == 2, "half a cent rounds up"
+        assert percent_of(33_333, 1875) == 6250 and percent_of(3, 1500) == 0
+        assert percent_of(0, 2000) == 0
+
+        tip_cat = c.post(f"{b_url}/categories", json={"name": "Placeholder Food"},
+                         headers=headers).json()["id"]
+        caterer = c.post(f"{b_url}/categories/{tip_cat}/costs", headers=headers, json={
+            "vendor_name": "Sample Caterer", "quoted_cents": 800_000}).json()["id"]
+        no_cost = c.post(f"{b_url}/categories/{tip_cat}/costs", headers=headers, json={
+            "vendor_name": "Sample Bar"}).json()["id"]
+
+        def tip_costs():
+            return {k["id"]: k for k in costs_in(tip_cat)}
+
+        for who in (viewer_headers, unauth_headers):
+            assert c.post(f"{b_url}/costs/{caterer}/tips", json={"amount_cents": 100},
+                          headers=who).status_code == 403
+            assert c.patch(f"{b_url}/tips/nope", json={"amount_cents": 100},
+                           headers=who).status_code == 403
+        for bad in ({}, {"percent_basis_points": 2000, "amount_cents": 100},
+                    {"percent_basis_points": 0}, {"percent_basis_points": 10_001},
+                    {"amount_cents": 0}, {"amount_cents": 1, "payer_id": "nope"}):
+            res = c.post(f"{b_url}/costs/{caterer}/tips", json=bad, headers=headers)
+            assert res.status_code in (404, 422), (bad, res.text)
+        assert set(tip_costs()) == {caterer, no_cost}, "a refused tip saves nothing"
+
+        res = c.post(f"{b_url}/costs/{caterer}/tips", headers=editor_headers,
+                     json={"percent_basis_points": 2000, "notes": "On the day"})
+        assert res.status_code == 201, res.text
+        pct_tip = res.json()["id"]
+        res = c.post(f"{b_url}/costs/{caterer}/tips", headers=headers, json={
+            "amount_cents": 25_000, "due_on": "2027-06-01", "payer_id": payer_a})
+        assert res.status_code == 201, res.text
+        cash_tip = res.json()["id"]
+        k = tip_costs()
+        t = k[pct_tip]
+        assert (t["vendor_name"], t["category_id"], t["tip_for_cost_id"], t["tip_for_name"],
+                t["tip_basis_points"], t["tip_state"], t["tip_base_cents"], t["committed_cents"],
+                t["committed_basis"], t["notes"], t["payments"]) == (
+            "Tip: Sample Caterer", tip_cat, caterer, "Sample Caterer", 2000, "following",
+            800_000, 160_000, "quote", "On the day", []), t
+        t = k[cash_tip]
+        assert (t["tip_state"], t["committed_cents"], t["committed_basis"],
+                t["tip_basis_points"]) == ("amount", 25_000, "final", None), t
+        [cash_pay] = t["payments"]
+        assert (cash_pay["amount_cents"], cash_pay["due_on"], cash_pay["paid"],
+                cash_pay["payer_id"]) == (25_000, "2027-06-01", False, payer_a), \
+            "a due date or payer adds the tip's first payment, unpaid (rule 4)"
+        assert k[caterer]["tip_ids"] == [pct_tip, cash_tip] and k[caterer]["tip_state"] is None
+        ov = c.get(f"{b_url}/overview", headers=viewer_headers).json()
+        assert (ov["dashboard"]["tips_cents"], ov["dashboard"]["tip_count"]) == (185_000, 2)
+        cat = next(x for x in ov["categories"] if x["id"] == tip_cat)
+        assert cat["committed_cents"] == 800_000 + 185_000, "tips count in the category"
+        assert any(d["payment_id"] == cash_pay["id"] and d["vendor_name"] == "Tip: Sample Caterer"
+                   for d in ov["next_due"]), "a tip's payment is in Upcoming payments"
+        print("   * Add tip: a percentage or an amount, as its own line in the same category, "
+              "counted in every total; viewers and outsiders can't")
+
+        assert c.post(f"{b_url}/costs/{pct_tip}/tips", json={"amount_cents": 100},
+                      headers=headers).status_code == 422, "a tip can't have a tip"
+        res = c.post(f"{b_url}/costs/{no_cost}/tips", json={"percent_basis_points": 1500,
+                     "due_on": "2027-06-01"}, headers=headers)
+        assert res.status_code == 422 and "no cost yet" in res.json()["detail"], res.text
+        res = c.post(f"{b_url}/costs/{no_cost}/tips", json={"percent_basis_points": 1500},
+                     headers=headers)
+        assert res.status_code == 201
+        bar_tip = res.json()["id"]
+        t = tip_costs()[bar_tip]
+        assert (t["tip_state"], t["committed_cents"], t["committed_basis"]) == (
+            "waiting", 0, "none"), "a percentage of no cost waits, counting $0"
+        assert c.patch(f"{b_url}/costs/{pct_tip}", json={"quoted_cents": 1},
+                       headers=headers).status_code == 422
+        assert c.patch(f"{b_url}/costs/{pct_tip}", json={"category_id": pay_cat},
+                       headers=headers).status_code in (404, 422)
+        assert c.patch(f"{b_url}/tips/{caterer}", json={"amount_cents": 1},
+                       headers=headers).status_code == 422, "a plain expense isn't a tip"
+        print("   * No tip on a tip; a percentage of no cost waits at $0; a tip's amount "
+              "changes only as a tip")
+
+        assert c.patch(f"{b_url}/costs/{caterer}", json={"final_cents": 900_000},
+                       headers=headers).status_code == 200
+        assert c.patch(f"{b_url}/costs/{no_cost}", json={"estimated_cents": 10_001},
+                       headers=headers).status_code == 200
+        k = tip_costs()
+        assert (k[pct_tip]["committed_cents"], k[pct_tip]["committed_basis"],
+                k[pct_tip]["tip_base_cents"]) == (180_000, "final", 900_000), \
+            "a percentage tip follows the actual cost"
+        assert k[cash_tip]["committed_cents"] == 25_000, "a dollar tip stays as typed"
+        assert (k[bar_tip]["tip_state"], k[bar_tip]["committed_cents"]) == ("following", 1500)
+        print("   * A percentage tip follows its expense's cost; a dollar tip never moves")
+
+        res = c.post(f"{b_url}/costs/{pct_tip}/payments", json={"amount_cents": 180_000},
+                     headers=headers)
+        pct_pay = res.json()["id"]
+        assert c.put(f"{b_url}/payments/{pct_pay}/paid", json={"paid": True},
+                     headers=headers).json()["paid"] is True
+        assert c.patch(f"{b_url}/costs/{caterer}", json={"final_cents": 1_000_000},
+                       headers=headers).status_code == 200
+        t = tip_costs()[pct_tip]
+        assert (t["tip_state"], t["committed_cents"], t["status"]) == ("frozen", 180_000, "paid"), \
+            "once a payment on it is paid, the tip stays at the amount it was"
+        assert c.put(f"{b_url}/payments/{pct_pay}/paid", json={"paid": False},
+                     headers=headers).json()["paid"] is False
+        t = tip_costs()[pct_tip]
+        assert (t["tip_state"], t["committed_cents"], t["final_cents"]) == (
+            "following", 200_000, None), "unticked, it follows the cost again"
+        assert c.put(f"{b_url}/payments/{pct_pay}/paid", json={"paid": True},
+                     headers=headers).status_code == 200
+        assert c.delete(f"{b_url}/payments/{pct_pay}", headers=headers).status_code == 204
+        assert tip_costs()[pct_tip]["tip_state"] == "following", \
+            "removing its only paid payment lets it follow again"
+        print("   * Ticking a tip's payment paid fixes its amount; unticking lets it follow again")
+
+        res = c.patch(f"{b_url}/tips/{pct_tip}", json={"amount_cents": 30_000}, headers=headers)
+        assert res.status_code == 200 and res.json()["tip_basis_points"] is None
+        assert tip_costs()[pct_tip]["committed_cents"] == 30_000
+        res = c.patch(f"{b_url}/tips/{pct_tip}", json={"percent_basis_points": 1850,
+                      "notes": None}, headers=headers)
+        assert res.status_code == 200, res.text
+        t = tip_costs()[pct_tip]
+        assert (t["tip_state"], t["committed_cents"], t["notes"]) == ("following", 185_000, None)
+        assert c.patch(f"{b_url}/tips/{pct_tip}", json={"percent_basis_points": 1000,
+                       "amount_cents": 1}, headers=headers).status_code == 422
+        assert c.patch(f"{b_url}/tips/{pct_tip}", json={"amount_cents": 1},
+                       headers=viewer_headers).status_code == 403
+        print("   * Edit tip: switch between a percentage and an amount")
+
+        moved_cat = c.post(f"{b_url}/categories", json={"name": "Placeholder Feast"},
+                           headers=headers).json()["id"]
+        assert c.patch(f"{b_url}/costs/{caterer}", json={"vendor_name": "Sample Kitchen",
+                       "category_id": moved_cat}, headers=headers).status_code == 200
+        moved = {x["id"]: x for x in costs_in(moved_cat)}
+        assert set(moved) == {caterer, pct_tip, cash_tip}, "tips move with their expense"
+        assert moved[pct_tip]["vendor_name"] == "Tip: Sample Kitchen", "and are renamed with it"
+        assert c.patch(f"{b_url}/costs/{caterer}", json={"category_id": tip_cat},
+                       headers=headers).status_code == 200
+        print("   * Moving or renaming an expense takes its tips along")
+
+        got, heads = sections(export())
+        assert "Tip for" in heads["Expenses"] and "Tip (%)" in heads["Expenses"]
+        [row] = [r for r in got["Expenses"] if r["Tip (%)"] == "18.5"]
+        assert (row["Expense"], row["Tip for"], row["Cost (USD)"]) == (
+            "Tip: Sample Kitchen", "Sample Kitchen", "1850.00"), row
+        assert [r["Tip for"] for r in got["Expenses"] if r["Expense"] == "Sample Kitchen"] == [""]
+        summary = {r["Item"]: r["Value"] for r in got["Summary"]}
+        assert summary["Tips (USD, already part of committed)"] == "2115.00"
+        print("   * Export: each tip says what it's for; the summary gives the tips total")
+
+        before = tip_costs()
+        res = c.patch(f"{b_url}/costs/{caterer}", json={"archived": True}, headers=headers)
+        assert res.status_code == 409 and "2 tips" in res.json()["detail"], res.text
+        assert tip_costs() == before, "asking changes nothing"
+        assert c.patch(f"{b_url}/costs/{caterer}?tips=maybe", json={"archived": True},
+                       headers=headers).status_code == 422
+        assert c.patch(f"{b_url}/costs/{caterer}?tips=remove", json={"archived": True},
+                       headers=headers).status_code == 200
+        k = tip_costs()
+        assert k[caterer]["archived"] and k[pct_tip]["archived"] and k[cash_tip]["archived"]
+        assert k[cash_tip]["payments"] == before[cash_tip]["payments"], "archiving keeps payments"
+        res = c.patch(f"{b_url}/costs/{pct_tip}", json={"archived": False}, headers=headers)
+        assert res.status_code == 422 and "Restore it first" in res.json()["detail"], \
+            "a tip isn't counted again while its expense is archived"
+        assert c.post(f"{b_url}/costs/{pct_tip}/duplicate",
+                      headers=headers).status_code == 422, "nor copied onto it"
+        assert c.patch(f"{b_url}/costs/{caterer}", json={"archived": False},
+                       headers=headers).status_code == 200
+        for tid in (pct_tip, cash_tip):
+            assert c.patch(f"{b_url}/costs/{tid}", json={"archived": False},
+                           headers=headers).status_code == 200
+        res = c.delete(f"{b_url}/costs/{caterer}", headers=headers)
+        assert res.status_code == 409 and "remove them too" in res.json()["detail"], res.text
+        assert c.delete(f"{b_url}/costs/{caterer}?tips=keep", headers=headers).status_code == 204
+        k = tip_costs()
+        assert caterer not in k
+        for tid, cents in ((pct_tip, 185_000), (cash_tip, 25_000)):
+            assert (k[tid]["tip_state"], k[tid]["tip_for_cost_id"], k[tid]["final_cents"],
+                    k[tid]["committed_cents"], k[tid]["vendor_name"]) == (
+                None, None, cents, cents, "Tip: Sample Kitchen"), k[tid]
+        assert k[cash_tip]["payments"] == before[cash_tip]["payments"], "kept with its payment"
+        assert c.patch(f"{b_url}/costs/{no_cost}", json={"estimated_cents": None},
+                       headers=headers).status_code == 200
+        assert tip_costs()[bar_tip]["tip_state"] == "waiting"
+        res = c.post(f"{b_url}/costs/{bar_tip}/payments", json={"amount_cents": 1500},
+                     headers=headers)
+        assert res.status_code == 201
+        assert c.put(f"{b_url}/payments/{res.json()['id']}/paid", json={"paid": True},
+                     headers=headers).status_code == 200
+        assert c.patch(f"{b_url}/costs/{no_cost}", json={"estimated_cents": 100_000},
+                       headers=headers).status_code == 200
+        t = tip_costs()[bar_tip]
+        assert (t["tip_state"], t["committed_cents"]) == ("frozen", 0), \
+            "a tip paid while waiting for a cost is fixed (at $0) and doesn't start following"
+        assert c.delete(f"{b_url}/costs/{no_cost}?tips=remove",
+                        headers=headers).status_code == 204
+        assert set(tip_costs()) == {pct_tip, cash_tip}, "removed with its tip"
+        with Session(sync_engine) as s:
+            assert s.exec(sync_select(BudgetPayment).where(
+                BudgetPayment.cost_id == bar_tip)).first() is None, \
+                "the tip's payments went with it, as the couple chose"
+        ov = c.get(f"{b_url}/overview", headers=headers).json()
+        assert (ov["dashboard"]["tips_cents"], ov["dashboard"]["tip_count"]) == (0, 0)
+        print("   * Archiving or removing an expense with tips asks: remove them too, or keep "
+              "them as plain lines with their dollar figure and payments")
+
+        clear_category(tip_cat)
+        clear_category(moved_cat)
         assert c.delete(f"{p_url}/{payer_a}", headers=headers).status_code == 204
 
         print("7d. Verifying vendor cards compare quotes with the couple's own budget (B42)...")

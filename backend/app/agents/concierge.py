@@ -9,7 +9,7 @@ from app.db.models import (
     Wedding, BudgetCategory, BudgetCost, BudgetPayment, ChecklistTask, Booking, Quote, Supplier,
     Venue,
 )
-from app.utils.budget_math import add_up, cost_figures, format_cents, is_overdue
+from app.utils.budget_math import add_up, expense_figures, format_cents, is_overdue
 from app.utils.checklist import STAGE_BY_KEY, STAGE_KEYS, stage_due, wedding_today
 from app.agents.orchestrator import run_agent
 from app.agents.base import get_client, model_for, get_prompt_version
@@ -65,9 +65,12 @@ async def _budget_context(db: AsyncSession, wedding: Wedding) -> list:
     categories = (await db.exec(
         select(BudgetCategory).where(BudgetCategory.wedding_id == wid)
         .order_by(BudgetCategory.created_at, BudgetCategory.id))).all()
-    costs = [c for c in (await db.exec(
+    every_cost = (await db.exec(
         select(BudgetCost).where(BudgetCost.wedding_id == wid)
-        .order_by(BudgetCost.created_at, BudgetCost.id))).all() if not c.archived]
+        .order_by(BudgetCost.created_at, BudgetCost.id))).all()
+    # A tip (PD-017) is worked out from the expense it's for, archived or not.
+    by_id = {c.id: c for c in every_cost}
+    costs = [c for c in every_cost if not c.archived]
     payments = (await db.exec(
         select(BudgetPayment).where(BudgetPayment.wedding_id == wid)
         .order_by(BudgetPayment.due_on, BudgetPayment.created_at, BudgetPayment.id))).all()
@@ -84,7 +87,8 @@ async def _budget_context(db: AsyncSession, wedding: Wedding) -> list:
         figures = []
         rows = []
         for cost in (c for c in costs if c.category_id == cat.id):
-            f = cost_figures(cost, by_cost.get(cost.id, []), today)
+            f, _ = expense_figures(cost, by_id.get(cost.tip_for_cost_id),
+                                   by_cost.get(cost.id, []), today)
             figures.append(f)
             names[cost.id] = cost.vendor_name
             rows.append(f"    - {cost.vendor_name}: {format_cents(f.committed_cents)} "

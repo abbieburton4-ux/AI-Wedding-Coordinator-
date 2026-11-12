@@ -4,7 +4,7 @@ import { Icon } from "../../../shared/Icon";
 import { useApi, USE_FASTAPI_BACKEND } from "../../../api";
 import { useActiveWedding } from "../../WeddingProvider";
 import { committedLabel, formatCents, formatDay, safeHttpUrl } from "./money";
-import { linkButton, primaryButton } from "./parts";
+import { linkButton, primaryButton, tipWorking } from "./parts";
 import type { Cost, ExpenseStatus, Overview, Payment, TargetState } from "./types";
 
 const STATUS: Record<ExpenseStatus, string> = {
@@ -205,7 +205,9 @@ export function BudgetPrint() {
 function ExpenseBlock({ cost, vendor }: { cost: Cost; vendor?: VendorInfo }) {
   const site = safeHttpUrl(vendor?.website);
   const link = safeHttpUrl(cost.link_url);
-  const facts = [
+  const facts = cost.tip_state ? [
+    `Tip${cost.tip_for_name ? ` for ${cost.tip_for_name}` : ""}: ${tipWorking(cost)}`,
+  ] : [
     cost.estimated_cents !== null && `Estimate ${formatCents(cost.estimated_cents)}`,
     cost.quoted_cents !== null && `Quote ${formatCents(cost.quoted_cents)}`,
     cost.final_cents !== null && `Actual cost ${formatCents(cost.final_cents)}`,

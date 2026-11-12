@@ -12,13 +12,14 @@ import { BudgetExport } from "./budget/Export";
 import { Payers } from "./budget/Payers";
 import { AMOUNT_HINT, centsToInput, formatCents, parseDollars } from "./budget/money";
 import {
-  AddCategoryForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, fieldClass, inputClass, linkButton, primaryButton,
-  type OpenRequest,
+  AddCategoryForm, AddTipForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, fieldClass, inputClass, linkButton,
+  primaryButton, type OpenRequest, type Req,
 } from "./budget/parts";
+import { tipTargets } from "./budget/tips";
 import {
   FoldBody, FoldProvider, JumpBar, SECTIONS, SECTION_SCROLL, SectionHeading, scrollToElement, sectionId, useFolds,
 } from "./budget/sections";
-import type { Category, Overview, Run, SplitSuggestion, VendorRef } from "./budget/types";
+import type { Category, Overview, Payer, Run, SplitSuggestion, VendorRef } from "./budget/types";
 import { useReviewedRequest } from "../../api/review";
 
 const SUGGESTIONS_ID = "budget-suggestions";
@@ -144,6 +145,11 @@ function BudgetScreen() {
             categories={overview.categories}
             hasSuggestions={overview.missing_default_categories.length > 0 || overview.removed_default_categories.length > 0}
             onPick={addExpenseTo}
+          />
+        )}
+        {canEdit && overview && overview.categories.some((c) => c.costs.length > 0) && (
+          <AddTipStart
+            base={base} categories={overview.categories} payers={overview.payers} run={run} request={request} busy={busy}
           />
         )}
       </div>
@@ -512,6 +518,35 @@ function AddExpenseStart({
       <button type="submit" className={primaryButton}>Continue</button>
       <button type="button" onClick={() => setAsking(false)} className={linkButton}>Cancel</button>
     </form>
+  );
+}
+
+/**
+ * The main "Add tip" (PD-017), beside Add expense: asks which expense the tip is for,
+ * then a percentage or an amount. Each expense also has its own Add tip.
+ */
+function AddTipStart({
+  base, categories, payers, run, request, busy,
+}: { base: string; categories: Category[]; payers: Payer[]; run: Run; request: Req; busy: boolean }) {
+  const [open, setOpen] = useState(false);
+  const targets = categories.flatMap((cat) => tipTargets(cat.costs).map((cost) => ({ cost, categoryName: cat.name })));
+  return (
+    <div className="mt-3">
+      <button
+        type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
+        className="inline-flex items-center gap-1 rounded-full border border-primary px-4 py-2.5 sm:py-1.5 text-sm text-primary hover:bg-primary hover:text-on-primary"
+      >
+        <Icon name="volunteer_activism" size={16} /> Add tip
+      </button>
+      {open && (
+        <div className="mt-3 bg-surface-container-lowest rounded-[1.5rem] border border-outline-variant/20 p-4">
+          <AddTipForm
+            base={base} targets={targets} payers={payers} run={run} request={request} busy={busy}
+            idPrefix="main-tip" onDone={() => setOpen(false)}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 

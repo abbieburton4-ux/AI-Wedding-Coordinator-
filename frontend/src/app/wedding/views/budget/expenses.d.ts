@@ -11,6 +11,8 @@ export interface ExpenseRow {
 export interface ExpenseFilters {
   showArchived?: boolean;
   categoryId?: string;
+  /** "" for every line, "only" for tips only. */
+  tips?: string;
   status?: string;
   /** "" for any, "none" for not linked, else a vendor id. */
   vendorId?: string;

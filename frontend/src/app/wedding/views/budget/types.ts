@@ -76,8 +76,25 @@ export interface Cost {
   next_due_on: string | null;
   /** The payer of its most recently added payment, which a new payment starts with. */
   last_payer_id: string | null;
+  /** A tip (PD-017): the expense it's for. All the tip_ fields are null on a plain expense. */
+  tip_for_cost_id: string | null;
+  tip_for_name: string | null;
+  /** A percentage tip, in hundredths of a percent (2000 is 20%); null for a tip in dollars. */
+  tip_basis_points: number | null;
+  tip_state: TipState | null;
+  /** The cost a following percentage tip is worked out from. */
+  tip_base_cents: number | null;
+  /** The tips on this expense, archived ones too. */
+  tip_ids: string[];
   payments: Payment[];
 }
+
+/**
+ * How a tip's amount is worked out: typed in dollars; a percentage following its
+ * expense's cost; a percentage fixed because a payment on it is ticked paid; or a
+ * percentage waiting for its expense to have a cost (counted as $0).
+ */
+export type TipState = "amount" | "following" | "frozen" | "waiting";
 
 export interface Category {
   id: string;
@@ -130,6 +147,9 @@ export interface Dashboard {
   upcoming_count: number;
   overdue_count: number;
   contingency_id: string | null;
+  /** What the tips that count come to; already part of committed, not on top of it. */
+  tips_cents: number;
+  tip_count: number;
 }
 
 export interface Contribution {

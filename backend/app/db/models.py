@@ -486,6 +486,17 @@ class BudgetCost(SQLModel, table=True):
         default=False,
         sa_column=Column(Boolean, nullable=False, server_default=false()),
     )
+    # A tip (PD-017) is an expense linked to the one it's for, in the same category.
+    # The link is cleared when the couple keep it as a plain line after removing or
+    # archiving that expense, and then it's no longer a tip.
+    tip_for_cost_id: Optional[str] = Field(
+        default=None, foreign_key="budget_costs.id", index=True, ondelete="SET NULL"
+    )
+    # A percentage tip, in hundredths of a percent (2000 is 20%); None for a tip typed
+    # in dollars, whose amount is final_cents. A percentage tip's amount is worked out
+    # on read from the linked expense's cost; final_cents holds it only once a payment
+    # on the tip is ticked paid, so a paid figure never moves by itself.
+    tip_basis_points: Optional[int] = None
     created_at: datetime.datetime = Field(default_factory=utcnow)
     updated_at: datetime.datetime = Field(default_factory=utcnow)
 
