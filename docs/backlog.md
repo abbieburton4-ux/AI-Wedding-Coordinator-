@@ -11,19 +11,20 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-13 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B90** — check the workspace catches up by itself after a Pull (seen failing on the first publish after #105). `waiting` (can only be checked on the next Pull that brings a database change; #112 and #114 had none)
-2. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
-3. **B89** — send the budget straight to Google Sheets (PD-019 option C). `on hold` (owner: "maybe c later"; needs its own PD)
-4. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
-5. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-6. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `in progress`
-7. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
-8. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `owner step` (#116 merged; the owner turns on "Email enumeration protection" in the Firebase console)
-9. **B8** — record missing token counts as empty, not 0. `ready`
-10. **B17** — stop tracking the test database files. `ready`
-11. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44); and a frontend-traps line: gold text uses the darker text token from #102, never `--primary` (B83), and clay text uses `text-soft-clay-text` (B85, #104). `needs-owner: guardrail files need a session the owner runs`
-12. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
-13. **B77** — an older test fails by chance (looks for "555" among random IDs). `ready`
+1. **B98** — checklist category buttons, plus the owner's Chicago list merged in (12 new tasks, Cook County license wording) (PD-021, ratified). `in review` (#123; merge #122 first or together, then Pull and Publish on Replit; check the screen once published)
+2. **B90** — check the workspace catches up by itself after a Pull (seen failing on the first publish after #105). `waiting` (can only be checked on the next Pull that brings a database change; #112 and #114 had none)
+3. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
+4. **B89** — send the budget straight to Google Sheets (PD-019 option C). `on hold` (owner: "maybe c later"; needs its own PD)
+5. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
+6. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+7. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `in progress`
+8. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
+9. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `owner step` (#116 merged; the owner turns on "Email enumeration protection" in the Firebase console)
+10. **B8** — record missing token counts as empty, not 0. `ready`
+11. **B17** — stop tracking the test database files. `ready`
+12. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), checklist categories and the Chicago tasks C1–C12 (PD-021, #123), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44); and a frontend-traps line: gold text uses the darker text token from #102, never `--primary` (B83), and clay text uses `text-soft-clay-text` (B85, #104). `needs-owner: guardrail files need a session the owner runs`
+13. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
+14. **B77** — an older test fails by chance (looks for "555" among random IDs). `ready`
 
 ## Open
 
@@ -66,6 +67,8 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B73 — A test fails now and then.** Found in #78 (B68): one existing check fails at random when a generated id contains "555" (it looks like a phone number to the privacy filter). Not caused by #78. *Fix:* make the test ids fixed, or teach the check to ignore ids. *Depends on:* nothing; small.
 
+
+- **B98 — Checklist categories and the owner's Chicago list (PD-021).** The owner, 2026-11-13, asked for category buttons on the checklist, alongside Not done and Overdue, and for her pasted Chicago list to be added where it isn't already there, with dates for 23 Oct 2027. *Fix:* nine category buttons with counts, combined with the status filter; a category on every task (set from PD-021's item-id list; old AI-planner and couple-added tasks show as Other until the couple picks); category picked when adding or editing a task; the 12 new tasks C1–C12 added once; the license task reworded only if unchanged. Database migration needed (rule 6); nothing already ticked or edited by the couple changes. *Depends on:* PD-021 (ratified 2026-11-13).
 
 ### Housekeeping
 
