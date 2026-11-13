@@ -3,8 +3,10 @@
 In one transaction it:
 1. optionally sets the wedding date (the owner's choice, never a default);
 2. loads the owner's list from their own file, kept outside git (call (e));
-3. adds the approved Jewish traditions, J2 taking the place of item 11m-3, and the
-   Wildman BT contract's payment tasks V1-V3 (PD-011), whose dates are in their wording;
+3. adds the approved Jewish traditions, J2 taking the place of item 11m-3, the
+   Wildman BT contract's payment tasks V1-V3 (PD-011), whose dates are in their wording,
+   and the owner's Chicago tasks C1-C12 (PD-021), each list task with its category;
+   item 1m-3 gets its Chicago wording if the file's title is the original;
 4. merges the AI planner's old timeline rows: each goes into the stage nearest its
    due date, unless its title matches a task already on the list, in which case its
    tick and notes move onto that task;
@@ -42,6 +44,7 @@ class ImportReport:
     owner_tasks: int = 0
     tradition_tasks: int = 0
     venue_tasks: int = 0
+    chicago_tasks: int = 0
     ai_added: List[str] = field(default_factory=list)
     ai_skipped: List[str] = field(default_factory=list)
     timeline_rows_removed: int = 0
@@ -159,6 +162,7 @@ def import_checklist(
         task = ChecklistTask(
             wedding_id=wedding.id, stage=stage, title=_clean(title), notes=notes,
             position=next_position[stage], source=source, source_ref=ref, done=done,
+            category=rules.category_for(source, ref),
         )
         session.add(task)
         refs.add(ref)
@@ -171,6 +175,12 @@ def import_checklist(
     venue = {}
     for ref, stage, title in rules.VENUE_TASKS:
         venue.setdefault(stage, []).append((ref, title))
+    # Titles anywhere on her list, so a Chicago task she already has in a later stage
+    # isn't added too.
+    file_titles = {rules.title_key(item) for raw in owner_list for item in raw["items"]}
+    chicago = {}
+    for ref, stage, title in rules.CHICAGO_TASKS:
+        chicago.setdefault(stage, []).append((ref, title))
 
     for stage, raw in zip(rules.STAGES, owner_list):
         stage_traditions = list(traditions.get(stage.key, []))
@@ -185,12 +195,19 @@ def import_checklist(
                 stage_traditions.remove(j2)
                 report.tradition_tasks += add(stage.key, j2[1], "tradition", j2[0])
                 continue
+            if ref == rules.LICENSE_REF and rules.is_original_license_title(title):
+                title = rules.LICENSE_CHICAGO_TITLE
             report.owner_tasks += add(stage.key, title, "owner_list", ref)
         for ref, title in stage_traditions:
             report.tradition_tasks += add(stage.key, title, "tradition", ref)
         # The owner asked for these (PD-011), so they count as hers, not as traditions.
         for ref, title in venue.get(stage.key, []):
             report.venue_tasks += add(stage.key, title, "owner_list", ref)
+        # The owner's Chicago tasks (PD-021); one already on her list isn't doubled.
+        for ref, title in chicago.get(stage.key, []):
+            if rules.title_key(title) in by_title or rules.title_key(title) in file_titles:
+                continue
+            report.chicago_tasks += add(stage.key, title, "owner_list", ref)
 
     timeline = session.exec(
         select(TimelineItem).where(TimelineItem.wedding_id == wedding.id)
