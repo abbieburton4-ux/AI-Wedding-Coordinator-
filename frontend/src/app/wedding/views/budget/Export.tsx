@@ -6,10 +6,8 @@ import { useAuth } from "../../../auth/AuthProvider";
 import { linkButton, primaryButton } from "./parts";
 import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId } from "./sections";
 
-type Format = "xlsx" | "csv";
-
 /**
- * Download the budget as an Excel file with tabs (PD-019) or a CSV, or open the print
+ * Download the budget as an Excel file with tabs (PD-019), or open the print
  * page to save it as a PDF (PD-013 step 5). The API builds the file from the same
  * figures as the screen, and it goes straight to this person's own device: nothing is
  * sent to anyone.
@@ -18,11 +16,11 @@ export function BudgetExport({ weddingId, today }: { weddingId: string; today: s
   const { getToken } = useAuth();
   const [archived, setArchived] = useState(false);
   const [contacts, setContacts] = useState(false);
-  const [busy, setBusy] = useState<Format | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const download = async (format: Format) => {
-    setBusy(format);
+  const download = async () => {
+    setBusy(true);
     setError(null);
     try {
       const params = new URLSearchParams();
@@ -31,7 +29,7 @@ export function BudgetExport({ weddingId, today }: { weddingId: string; today: s
       const token = await getToken();
       const query = params.toString();
       const res = await fetch(
-        `${API_BASE_URL}/api/v1/weddings/${weddingId}/budget/export.${format}${query ? `?${query}` : ""}`,
+        `${API_BASE_URL}/api/v1/weddings/${weddingId}/budget/export.xlsx${query ? `?${query}` : ""}`,
         { headers: token ? { Authorization: `Bearer ${token}` } : {}, cache: "no-store" },
       );
       if (!res.ok) throw new Error(`The download didn't work (status ${res.status}). Please try again.`);
@@ -40,10 +38,10 @@ export function BudgetExport({ weddingId, today }: { weddingId: string; today: s
       a.href = url;
       // The server's name carries its own Chicago date; the page's is the fallback when
       // the browser can't read that header.
-      const named = /filename="(wedding-budget-\d{4}-\d{2}-\d{2}\.(?:csv|xlsx))"/.exec(
+      const named = /filename="(wedding-budget-\d{4}-\d{2}-\d{2}\.xlsx)"/.exec(
         res.headers.get("Content-Disposition") ?? "",
       );
-      a.download = named && named[1].endsWith(`.${format}`) ? named[1] : `wedding-budget-${today}.${format}`;
+      a.download = named ? named[1] : `wedding-budget-${today}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -52,7 +50,7 @@ export function BudgetExport({ weddingId, today }: { weddingId: string; today: s
     } catch (err) {
       setError(err instanceof Error ? err.message : "The download didn't work. Please try again.");
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
 
@@ -68,7 +66,7 @@ export function BudgetExport({ weddingId, today }: { weddingId: string; today: s
       <p className="text-sm text-on-surface-variant mb-4">
         Download the budget as an Excel file with a tab for each part: summary, categories, expenses, payments,
         coming up, who paid and tips. It opens in Excel, and in Google Sheets when you upload it to Drive. You
-        can also download a plain CSV file, or print. Each file is a snapshot of the figures right now, and it
+        can also print it or save it as a PDF. Each file is a snapshot of the figures right now, and it
         goes to this device only; nothing is sent to anyone.
       </p>
       <div className="space-y-2 mb-4">
@@ -90,18 +88,11 @@ export function BudgetExport({ weddingId, today }: { weddingId: string; today: s
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <button
-          type="button" onClick={() => download("xlsx")} disabled={busy !== null}
+          type="button" onClick={download} disabled={busy}
           className={`${primaryButton} flex items-center gap-2`}
         >
           <Icon name="download" size={18} />
-          {busy === "xlsx" ? "Preparing the file…" : "Download Excel"}
-        </button>
-        <button
-          type="button" onClick={() => download("csv")} disabled={busy !== null}
-          className={`${linkButton} flex items-center gap-1`}
-        >
-          <Icon name="download" size={18} />
-          {busy === "csv" ? "Preparing the file…" : "Download CSV"}
+          {busy ? "Preparing the file…" : "Download Excel"}
         </button>
         <Link to="/wedding/budget/print" className={`${linkButton} flex items-center gap-1`}>
           <Icon name="print" size={18} /> Print / save as PDF

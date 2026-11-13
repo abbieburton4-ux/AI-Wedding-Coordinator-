@@ -2,8 +2,8 @@
 device.
 
 Every figure is read from the budget overview (``budget._overview``), which works them
-out on read in ``utils/budget_math.py``, so the file agrees with the Budget screen and
-with the CSV (``utils/budget_export.py``). The two screen views that the browser groups
+out on read in ``utils/budget_math.py``, so the file agrees with the Budget screen; its
+labels come from ``utils/budget_export.py``. The two screen views that the browser groups
 for itself, "Who paid" and the upcoming-payments groups, are grouped here by the same
 rules as ``frontend/.../budget/figures.js`` (``whoPaid`` and ``groupOf``), from the
 same overview rows; nothing is summed differently.
