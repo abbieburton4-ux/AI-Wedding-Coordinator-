@@ -11,23 +11,21 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-13 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B91** — remove the "Download CSV" button once the Excel download is in (PD-019 follow-up). `in review` (#112; owner, 2026-11-12: "it looks good, you can delete the csv button")
-2. **B92** — Add expense and Add payment forms stay closed until clicked (PD-020, ratified: close after saving, with "Add another"). `in progress`
-3. **B90** — check the workspace catches up by itself after a Pull (seen failing on the first publish after #105). `ready`
-4. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
-5. **B89** — send the budget straight to Google Sheets (PD-019 option C). `on hold` (owner: "maybe c later"; needs its own PD)
-6. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
-7. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-8. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-9. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
-10. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
-11. **B34** — database-level guard against the same email being added twice. `ready`
-12. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
-13. **B8** — record missing token counts as empty, not 0. `ready`
-14. **B17** — stop tracking the test database files. `ready`
-15. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44); and a frontend-traps line: gold text uses the darker text token from #102, never `--primary` (B83), and clay text uses `text-soft-clay-text` (B85, #104). `needs-owner: guardrail files need a session the owner runs`
-16. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
-17. **B77** — an older test fails by chance (looks for "555" among random IDs). `ready`
+1. **B90** — check the workspace catches up by itself after a Pull (seen failing on the first publish after #105). `waiting` (can only be checked on the next Pull that brings a database change; #112 and #114 had none)
+2. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
+3. **B89** — send the budget straight to Google Sheets (PD-019 option C). `on hold` (owner: "maybe c later"; needs its own PD)
+4. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
+5. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+6. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
+7. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
+8. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `ready`
+9. **B34** — database-level guard against the same email being added twice. `ready`
+10. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `ready`
+11. **B8** — record missing token counts as empty, not 0. `ready`
+12. **B17** — stop tracking the test database files. `ready`
+13. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44); and a frontend-traps line: gold text uses the darker text token from #102, never `--primary` (B83), and clay text uses `text-soft-clay-text` (B85, #104). `needs-owner: guardrail files need a session the owner runs`
+14. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
+15. **B77** — an older test fails by chance (looks for "555" among random IDs). `ready`
 
 ## Open
 
@@ -56,7 +54,6 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 ### Making it fit this wedding
 
-- **B92 — Add forms on the Budget page are always open.** In `frontend/src/app/wedding/views/budget/parts.tsx`, an open category always shows the full Add expense form, and every expense always shows a full Add payment form, so after adding something the page is mostly empty forms (owner, 2026-11-13). *Fix:* PD-020. Ratified 2026-11-13 ("a").
 
 - **B55 — Questions for Wildman BT before signing.** From the product lane's review of the draft contract (2026-11-09; facts in `wedding.md`). The deposit ($6,000, non-refundable) is due Wed 11 Nov 2026, and once signed the date can't move except for events like storms or a pandemic, and then only once. Questions, most urgent first: (1) hold the date a few more days while we review? (2) a full refund if Wildman BT cancels, closes or can't host, in writing; (3) add the groom as a second Contracting Party (only the owner is named, so only she is liable); (4) pay by check to avoid the 3% card fee; (5) how many extra valet attendants for 220 guests, and the cost (60 cars included); (6) chuppah set-up and attaching to the beams or floor; (7) how the ceremony-to-reception flip works and whether it counts toward the 7 live hours; (8) rehearsal time and wedding-suite access; (9) is event insurance required, and how much; (10) opt out of the venue's photos, or no guests' faces; (11) how security deposit deductions are decided, with a walkthrough before and after; (12) bringing our own alcohol through an approved caterer, and any fees. Also for later: whether to buy the $1,500 day-of coordinator package; the contract asks for a named day-of contact either way. *Fix:* the couple send the questions (people send, never the app: rule 1). *Depends on:* the owner.
 
@@ -105,6 +102,8 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-13 | **B92** — Add expense and Add payment open only when clicked; Cancel or saving closes them; "Add another" after saving an expense; one add form open at a time, asking before discarding typed text (PD-020). No database change | #114 |
+| 2026-11-13 | **B91** — the "Download CSV" button removed; Excel download and Print / save as PDF stay (PD-019 follow-up). No database change | #112 |
 | 2026-11-12 | **B88** — "Download Excel": an .xlsx with seven tabs (Summary, Categories, Expenses, Payments, Upcoming, Who paid, Tips), dollar and date cells, formula guard (PD-019). Owner checked the live download: "it looks good" | #110 |
 | 2026-11-12 | **B87** — faded grey text deepened to at least 4.5:1 on every page (about 20 failures before, none after) | #108 |
 | 2026-11-12 | **B86** — publish build fails when the workspace database is behind; one Shell command brings it up to date. First publish after merge passed (owner, 2026-11-12: "it worked!") after she ran `python db_status.py upgrade` by hand | #105 |
