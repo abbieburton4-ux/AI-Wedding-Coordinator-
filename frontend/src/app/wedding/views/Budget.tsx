@@ -236,7 +236,7 @@ function BudgetScreen() {
             </div>
             {canEdit && <AddCategoryForm base={base} run={run} request={request} busy={busy} />}
             {canEdit && (
-              <MoveMoney base={base} categories={overview.categories} run={run} request={request} busy={busy} />
+              <MoveMoney weddingId={weddingId} base={base} categories={overview.categories} run={run} request={request} busy={busy} />
             )}
             {canEdit && <MethodSuggestions />}
             </FoldBody>
