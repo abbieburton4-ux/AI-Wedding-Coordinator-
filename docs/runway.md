@@ -138,7 +138,7 @@ Twelve weeks. Each week has: ship list, dependencies, blockers, decision gate. R
 | Owner | Ship | Hours |
 |---|---|---|
 | Atharva | **Feature freeze on new agents.** Only ships allowed: bug fixes, prompt iteration (track via `prompt_version` hash), log quality improvements. Run the Day 25 hallucination war-room playbook proactively: pick 20 random log rows, audit for plausibility. | 24 |
-| Alan | Outreach #2 wave: contact Sandra @ Infusion, Daragh, Andrea W, Roisin — frame as "early access, Founder rate ends Jul 15." Push for 2 more sign-ups by EOW (target: 5 planners total). | 28 |
+| Alan | Outreach #2 wave: contact four planners from the target list — frame as "early access, Founder rate ends Jul 15." Push for 2 more sign-ups by EOW (target: 5 planners total). | 28 |
 
 **Blocker:** Prompt iteration breaks an existing planner's workflow. Action: keep last-known-good prompt hash in `prompt_versions.md` and revert if log confidence drops <0.7 across the cohort.
 **Gate (Sun EOD):** ☐ 5 paying planners (target) ☐ 0 reverts in production prompts this week ☐ €700+ MRR.

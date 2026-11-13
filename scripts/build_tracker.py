@@ -234,7 +234,7 @@ def build_weekly_plan(wb):
         ("W6", "Jun 29 – Jul 5", "Atharva", "FEATURE FREEZE on new agents — only bugs + prompts", 0, "☐ TODO", ""),
         ("W6", "Jun 29 – Jul 5", "Atharva", "Hallucination war-room: audit 20 random logs", 8, "☐ TODO", ""),
         ("W6", "Jun 29 – Jul 5", "Atharva", "Prompt iteration with prompt_version hash tracking", 16, "☐ TODO", ""),
-        ("W6", "Jun 29 – Jul 5", "Alan", "Outreach Wave 2: Sandra, Daragh, Andrea W, Roisin", 14, "☐ TODO", ""),
+        ("W6", "Jun 29 – Jul 5", "Alan", "Outreach Wave 2: four planners from the target list", 14, "☐ TODO", ""),
         ("W6", "Jun 29 – Jul 5", "Alan", "Push for 2 more sign-ups (target: 5 total)", 14, "☐ TODO", ""),
         # Week 7
         ("W7", "Jul 6 – Jul 12", "Atharva", "Polish judge-facing demo path; clean DB", 12, "☐ TODO", ""),
