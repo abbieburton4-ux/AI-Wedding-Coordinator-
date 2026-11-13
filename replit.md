@@ -249,6 +249,14 @@ publish should list **no** database changes.
   `ALTER COLUMN`, no `DROP CONSTRAINT` and no new table. Every expense and payment
   already entered keeps its amounts, dates and paid ticks, and none of them
   becomes a tip; tips are added in the app later.
+- `0014` (B98, checklist categories and the Chicago tasks): one new column on an
+  existing table. Expect one line, `ADD COLUMN category` on `checklist_tasks`,
+  optional text (no `NOT NULL`, no default), so the pane shouldn't turn orange. If
+  `0013` goes out in the same publish, its lines are listed too. There should be no
+  `DROP`, no `ALTER COLUMN`, no new constraint and no new table. The categories,
+  the 12 Chicago tasks and the marriage-license wording are added when the
+  published app starts, not by Publish; no tick, rename or task the couple added
+  changes.
   [ASSUMPTION] This is what Alembic's PostgreSQL SQL looks like; Replit's own
   screen hasn't been seen for it.
 

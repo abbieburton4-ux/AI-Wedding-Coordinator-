@@ -1,10 +1,10 @@
 """The wedding's shared planning checklist (PD-007).
 
 One list per wedding: when either partner ticks a task, everyone sees it. Anyone on
-the access list can read it; only owners and editors can tick, add, rename, delete,
-change the wedding date or mark it confirmed. Ticking a task changes nothing else: no
-payment is marked paid and no booking confirmed (rule 4), and nothing here contacts
-anyone (rule 1).
+the access list can read it and filter it by category; only owners and editors can
+tick, add, rename, re-categorise, delete, change the wedding date or mark it
+confirmed. Ticking a task changes nothing else: no payment is marked paid and no
+booking confirmed (rule 4), and nothing here contacts anyone (rule 1).
 Due dates, "catch up" and "overdue" come from ``app.utils.checklist``.
 
 "Load my checklist" (PD-011) runs the one-off import from ``app.utils.checklist_import``
@@ -52,11 +52,15 @@ class TaskIn(BaseModel):
     stage: str
     title: str = Field(min_length=1, max_length=TITLE_MAX)
     notes: Optional[str] = Field(default=None, max_length=NOTES_MAX)
+    # A key from CategoryOut; null is "Other" (PD-021).
+    category: Optional[str] = None
 
 
 class TaskPatch(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=TITLE_MAX)
     notes: Optional[str] = Field(default=None, max_length=NOTES_MAX)
+    # Sent as null, the task moves to "Other"; left out, its category stays.
+    category: Optional[str] = None
 
 
 class DoneIn(BaseModel):
@@ -76,6 +80,13 @@ class TaskOut(BaseModel):
     done_by_name: Optional[str]
     # "catch_up" or "overdue" for an unfinished task; null otherwise.
     label: Optional[Literal["catch_up", "overdue"]]
+    # A key from ChecklistOut.categories; null shows as "Other" (PD-021).
+    category: Optional[str]
+
+
+class CategoryOut(BaseModel):
+    key: str
+    label: str
 
 
 class GroupOut(BaseModel):
@@ -103,6 +114,9 @@ class ChecklistOut(BaseModel):
     overdue: int
     # Whether the one-off "Load my checklist" import has run (PD-011).
     imported: bool
+    # The category filter's buttons, in order; a task with no category is "Other".
+    categories: List[CategoryOut]
+    other_label: str
     groups: List[GroupOut]
 
 
@@ -114,6 +128,7 @@ class ImportOut(BaseModel):
     owner_tasks: int
     tradition_tasks: int
     venue_tasks: int
+    chicago_tasks: int
     ai_added: int
     ai_skipped: int
     timeline_rows_removed: int
@@ -140,6 +155,12 @@ def _clean_notes(text: Optional[str]) -> Optional[str]:
     return text or None
 
 
+def _category(key: Optional[str]) -> Optional[str]:
+    if key is not None and key not in rules.CATEGORY_KEYS:
+        raise HTTPException(status_code=422, detail="That category isn't on the checklist")
+    return key
+
+
 async def _task(db: AsyncSession, task_id: str, wedding_id: str) -> ChecklistTask:
     row = (await db.exec(
         select(ChecklistTask).where(ChecklistTask.id == task_id,
@@ -162,7 +183,7 @@ def _task_out(row: ChecklistTask, group, names: dict) -> TaskOut:
         id=row.id, stage=row.stage, title=row.title, notes=row.notes, position=row.position,
         done=row.done, done_at=row.done_at if row.done else None,
         done_by_name=names.get(row.done_by_user_id) if row.done else None,
-        label=rules.task_label(group, row.done),
+        label=rules.task_label(group, row.done), category=row.category,
     )
 
 
@@ -203,6 +224,8 @@ async def _checklist(db: AsyncSession, wedding) -> ChecklistOut:
         done=sum(g.done for g in groups), total=sum(g.total for g in groups),
         overdue=sum(1 for g in groups for t in g.tasks if t.label == "overdue"),
         imported=wedding.checklist_imported_at is not None,
+        categories=[CategoryOut(key=k, label=label) for k, label in rules.CATEGORIES],
+        other_label=rules.OTHER_LABEL,
         groups=groups,
     )
 
@@ -314,10 +337,11 @@ async def add_task(
     wedding_id: str, payload: TaskIn,
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
-    """Adds the couple's own task to the end of a stage."""
+    """Adds the couple's own task to the end of a stage, in the category they pick."""
     wedding = await _editor(db, wedding_id, current_user)
     if payload.stage not in rules.STAGE_BY_KEY:
         raise HTTPException(status_code=422, detail="That stage isn't on the checklist")
+    category = _category(payload.category)
     last = (await db.exec(
         select(func.max(ChecklistTask.position)).where(
             ChecklistTask.wedding_id == wedding_id, ChecklistTask.stage == payload.stage)
@@ -325,6 +349,7 @@ async def add_task(
     row = ChecklistTask(
         wedding_id=wedding_id, stage=payload.stage, title=_clean(payload.title),
         notes=_clean_notes(payload.notes), position=(last or 0) + 1, source="couple",
+        category=category,
     )
     db.add(row)
     await db.commit()
@@ -337,10 +362,12 @@ async def edit_task(
     wedding_id: str, task_id: str, payload: TaskPatch,
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
-    """Renames a task or changes its notes."""
+    """Renames a task, or changes its notes or category."""
     wedding = await _editor(db, wedding_id, current_user)
     row = await _task(db, task_id, wedding_id)
     updates = payload.model_dump(exclude_unset=True)
+    if "category" in updates:
+        row.category = _category(updates["category"])
     if "title" in updates:
         row.title = _clean(updates["title"] or "")
     if "notes" in updates:
@@ -428,6 +455,7 @@ async def import_owner_checklist(
     return ImportOut(
         saved=apply, wedding_date=report.wedding_date, owner_tasks=report.owner_tasks,
         tradition_tasks=report.tradition_tasks, venue_tasks=report.venue_tasks,
+        chicago_tasks=report.chicago_tasks,
         ai_added=len(report.ai_added), ai_skipped=len(report.ai_skipped),
         timeline_rows_removed=report.timeline_rows_removed,
     )

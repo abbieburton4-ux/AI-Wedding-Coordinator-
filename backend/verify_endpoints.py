@@ -2324,6 +2324,46 @@ def test_api_suite():
         assert rules.title_key("  Book the  VENUE. ") == rules.title_key("book the venue")
         print("   * Catch up vs overdue: past-when-set stages are 'catch up', later ones 'overdue'")
 
+        # PD-021's categories, by source_ref.
+        cat_refs = rules._CATEGORY_REFS
+        assert set(cat_refs) == set(rules.CATEGORY_KEYS) and len(rules.CATEGORIES) == 8
+        assert sum(len(v) for v in cat_refs.values()) == len(rules.CATEGORY_BY_REF), \
+            "each task has one category"
+        owner_refs = [r for r in rules.CATEGORY_BY_REF if "-" in r]
+        assert all(r.rsplit("-", 1)[0] in rules.STAGE_BY_KEY for r in owner_refs), owner_refs
+        # The owner's 98 items, all mapped but post-6 (11m-3 is mapped though J2 replaces it).
+        assert len(owner_refs) == 97 and "post-6" not in rules.CATEGORY_BY_REF
+        assert all(rules.CATEGORY_BY_REF[ref] == "ceremony" for ref, _, _ in rules.TRADITIONS)
+        assert [rules.CATEGORY_BY_REF[r] for r in ("V1", "V2", "V3")] == ["budget"] * 3
+        assert {ref: rules.CATEGORY_BY_REF[ref] for ref, _, _ in rules.CHICAGO_TASKS} == {
+            "C1": "venue_vendors", "C2": "venue_vendors", "C3": "venue_vendors",
+            "C4": "attire_beauty", "C5": "venue_vendors", "C6": "guests",
+            "C7": "attire_beauty", "C8": "guests", "C9": "venue_vendors", "C10": "guests",
+            "C11": "budget", "C12": "day_of"}
+        assert [(r, st) for r, st, _ in rules.CHICAGO_TASKS] == [
+            ("C1", "12m"), ("C2", "10m"), ("C3", "8m"), ("C4", "3m"), ("C5", "2m"),
+            ("C6", "2m"), ("C7", "1m"), ("C8", "1m"), ("C9", "1m"), ("C10", "1w"),
+            ("C11", "1w"), ("C12", "1w")]
+        assert rules.category_for("owner_list", "12m-1") == "budget"
+        assert rules.category_for("tradition", "J23") == "ceremony"
+        assert rules.category_for("couple", "12m-1") is None, "only list tasks are mapped"
+        assert rules.category_for("ai_timeline", "ti:12m-1") is None
+        assert rules.category_for("owner_list", "post-6") is None
+        assert not rules.is_original_license_title("Placeholder license task")
+        # The migration keeps its own copy of the lists; in this release they're the same.
+        import importlib.util as _ilu
+        _spec = _ilu.spec_from_file_location("m0014", os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "migrations", "versions",
+            "0014_checklist_categories.py"))
+        m0014 = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(m0014)
+        assert {k: set(v) for k, v in m0014.CATEGORY_REFS.items()} == {
+            k: set(v) for k, v in cat_refs.items()}
+        assert m0014.CHICAGO_TASKS == rules.CHICAGO_TASKS
+        assert (m0014.LICENSE_REF, m0014.LICENSE_ORIGINAL_SHA256, m0014.LICENSE_CHICAGO_TITLE) \
+            == (rules.LICENSE_REF, rules.LICENSE_ORIGINAL_SHA256, rules.LICENSE_CHICAGO_TITLE)
+        print("   * Categories: one per list task by source_ref (PD-021); Chicago tasks C1-C12")
+
         cl_url = f"/api/v1/weddings/{wedding_id}/checklist"
         real_today = checklist_module._today
         checklist_module._today = lambda: D(2026, 11, 5)
@@ -2398,6 +2438,40 @@ def test_api_suite():
             assert c.delete(t_url, headers=editor_headers).status_code == 204
             assert c.delete(t_url, headers=editor_headers).status_code == 404
             print("   * Edit: editors rename, note and delete; viewers can't")
+
+            body = c.get(cl_url, headers=viewer_headers).json()
+            assert [cat["key"] for cat in body["categories"]] == list(rules.CATEGORY_KEYS)
+            assert body["categories"][1]["label"] == "Venue & vendors"
+            assert body["other_label"] == "Other"
+            assert all(t["category"] is None for g in body["groups"] for t in g["tasks"]), \
+                "the couple's own tasks start as Other"
+            res = c.post(f"{cl_url}/tasks", json={"stage": "9m", "title": "Placeholder guests",
+                                                  "category": "guests"}, headers=editor_headers)
+            assert res.status_code == 201 and res.json()["category"] == "guests", res.text
+            t_cat = res.json()
+            assert c.post(f"{cl_url}/tasks", json={"stage": "9m", "title": "Placeholder x",
+                                                   "category": "other"},
+                          headers=editor_headers).status_code == 422, "Other is null, not a key"
+            assert c.post(f"{cl_url}/tasks", json={"stage": "9m", "title": "Placeholder x",
+                                                   "category": "guests"},
+                          headers=viewer_headers).status_code == 403
+            cat_url = f"{cl_url}/tasks/{t_cat['id']}"
+            assert c.patch(cat_url, json={"category": "budget"},
+                           headers=viewer_headers).status_code == 403, "viewers only filter"
+            assert c.patch(cat_url, json={"category": "Budget"},
+                           headers=editor_headers).status_code == 422
+            res = c.patch(cat_url, json={"title": "Placeholder renamed guests"},
+                          headers=editor_headers).json()
+            assert res["category"] == "guests", "left out, the category stays"
+            res = c.patch(cat_url, json={"category": "day_of"}, headers=editor_headers).json()
+            assert (res["category"], res["title"]) == ("day_of", "Placeholder renamed guests")
+            res = c.patch(cat_url, json={"category": None}, headers=editor_headers).json()
+            assert res["category"] is None, "null moves it to Other"
+            with Session(sync_engine) as s:
+                assert s.get(ChecklistTask, t_cat["id"]).category is None
+            assert c.delete(cat_url, headers=editor_headers).status_code == 204
+            print("   * Categories: editors pick one when adding and change it when editing; "
+                  "viewers can't; unknown keys refused")
 
             # Seven weeks on, 9m's unfinished task is overdue; catch up stays catch up.
             checklist_module._today = lambda: D(2026, 12, 25)
@@ -2537,8 +2611,8 @@ def test_api_suite():
             report = import_checklist(s, s.get(Wedding, "w_import"), owner_list, D(2027, 8, 21),
                                       today=D(2026, 11, 5))
             s.commit()
-        assert (report.owner_tasks, report.tradition_tasks, report.venue_tasks) == (
-            19 * 3 - 1, 18, 3), report
+        assert (report.owner_tasks, report.tradition_tasks, report.venue_tasks,
+                report.chicago_tasks) == (19 * 3 - 1, 18, 3, 12), report
         assert report.ai_added == ["Fictional AI task -> 6 Months Before",
                                    "Fictional rehearsal -> 2–3 Days Before"], report.ai_added
         assert report.ai_skipped == [
@@ -2552,8 +2626,22 @@ def test_api_suite():
                 TimelineItem.wedding_id == "w_import")).all() == []
             tasks = s.exec(sync_select(ChecklistTask).where(
                 ChecklistTask.wedding_id == "w_import")).all()
-            # 56 placeholder tasks, 18 traditions, the 3 Wildman BT tasks, 2 AI tasks.
-            assert len(tasks) == 56 + 18 + 3 + 2
+            # 56 placeholder tasks, 18 traditions, the 3 Wildman BT tasks, the 12 Chicago
+            # tasks (PD-021), 2 AI tasks.
+            assert len(tasks) == 56 + 18 + 3 + 12 + 2
+            by_ref = {t.source_ref: t for t in tasks}
+            assert {r: (by_ref[r].stage, by_ref[r].source, by_ref[r].done, by_ref[r].category)
+                    for r in ("C1", "C7", "C12")} == {
+                "C1": ("12m", "owner_list", False, "venue_vendors"),
+                "C7": ("1m", "owner_list", False, "attire_beauty"),
+                "C12": ("1w", "owner_list", False, "day_of")}
+            assert by_ref["C7"].title == "Hair and makeup trial"
+            assert (by_ref["12m-1"].category, by_ref["J2"].category, by_ref["V2"].category,
+                    by_ref["post-3"].category, by_ref["ti:ti_imp_new"].category) == (
+                "budget", "ceremony", "budget", "venue_vendors", None)
+            assert by_ref["1m-3"].title == "Placeholder 1m task 3", "not the original: kept"
+            ones = sorted((t for t in tasks if t.stage == "1m"), key=lambda t: t.position)
+            assert [t.source_ref for t in ones][-3:] == ["C7", "C8", "C9"], "at the stage's end"
             venue = {t.source_ref: t for t in tasks if t.source_ref in ("V1", "V2", "V3")}
             assert {r: (t.stage, t.source, t.done) for r, t in venue.items()} == {
                 "V1": ("12m", "owner_list", False), "V2": ("1m", "owner_list", False),
@@ -2619,6 +2707,35 @@ def test_api_suite():
             assert later[0].stage_keys == ["12m", "11m", "10m"], "catch up doesn't grow"
             assert [p.key for p in later if p.past] == ["9m", "8m"], "passed since: overdue"
             assert s.get(TimelineItem, "ti_imp2") is None
+
+        # PD-021 part 4: 1m-3 gets the Chicago wording only when the file has the original
+        # title. The real original stays out of git, so a placeholder stands in for it.
+        import hashlib
+        real_sha = rules.LICENSE_ORIGINAL_SHA256
+        rules.LICENSE_ORIGINAL_SHA256 = hashlib.sha256(
+            rules.title_key("Placeholder 1m task 3").encode()).hexdigest()
+        try:
+            assert rules.is_original_license_title("  placeholder 1M task 3. ")
+            # A Chicago task whose wording is already on her list isn't added twice.
+            list3 = [dict(st, items=["Hair and makeup trial."] + st["items"][1:])
+                     if st["id"] == "1m" else st for st in owner_list]
+            with Session(sync_engine) as s:
+                s.add(Wedding(id="w_import3", couple_user_id="u_import", region="Sligo",
+                              ceremony_type="Civil", guest_count_estimate=10, budget_total=1.0))
+                s.commit()
+                report3 = import_checklist(s, s.get(Wedding, "w_import3"), list3,
+                                           D(2027, 8, 21), today=D(2026, 11, 5))
+                s.commit()
+                rows3 = {t.source_ref: t for t in s.exec(sync_select(ChecklistTask).where(
+                    ChecklistTask.wedding_id == "w_import3")).all()}
+        finally:
+            rules.LICENSE_ORIGINAL_SHA256 = real_sha
+        assert report3.chicago_tasks == 11 and "C7" not in rows3, report3
+        assert rows3["1m-1"].title == "Hair and makeup trial."
+        assert rows3["1m-3"].title == rules.LICENSE_CHICAGO_TITLE
+        assert rows3["1m-3"].category == "ceremony"
+        print("   * Import: the Chicago tasks once, each in its stage and category; 1m-3 gets the "
+              "Cook County wording only if its title is the original")
         print("   * Import with the date already set records the day, so later stages go overdue; "
               "the pre-delete check refuses rows that aren't on the checklist")
         print("   * Import: owner's list (11m-3 replaced by J2), 18 traditions, AI timeline merged "
@@ -2687,7 +2804,8 @@ def test_api_suite():
             practice = res.json()
             assert practice["saved"] is False
             assert (practice["owner_tasks"], practice["tradition_tasks"],
-                    practice["venue_tasks"]) == (56, 18, 3), practice
+                    practice["venue_tasks"], practice["chicago_tasks"]) == (56, 18, 3, 12), \
+                practice
             assert practice["wedding_date"] == "2027-08-21"
             assert (practice["ai_added"], practice["ai_skipped"],
                     practice["timeline_rows_removed"]) == (1, 1, 2), practice
@@ -2707,7 +2825,7 @@ def test_api_suite():
                 == {k: v for k, v in practice.items() if k != "saved"}, "same as the practice"
             body = c.get(cl_url, headers=viewer_headers).json()
             assert body["imported"] is True
-            assert body["total"] == tasks_before + 56 + 18 + 3 + saved["ai_added"]
+            assert body["total"] == tasks_before + 56 + 18 + 3 + 12 + saved["ai_added"]
             again = load({"text": owner_text, "apply": False})
             assert again.status_code == 409, "runs once, even as a practice run"
             with Session(sync_engine) as s:

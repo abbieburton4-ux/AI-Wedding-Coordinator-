@@ -471,6 +471,31 @@ def check_publish_safety(real_head: str, new_revisions: list) -> None:
     assert costs and all(r[2] is None and r[3] is None for r in costs), \
         f"every existing expense stays a plain line, not a tip: {costs}"
 
+    print("6a7. Real migrations: 0013 already published, then 0014 on its own (B98)...")
+    dev14, prod13 = url("dev14"), url("prod13")
+    command.upgrade(config_for(dev14), "0014")
+    command.upgrade(config_for(prod13), LAST_UNGUARDED)
+    seed_wedding(prod13)
+    command.upgrade(config_for(prod13), "0013")
+    with create_engine(prod13).begin() as conn:
+        conn.execute(text("UPDATE weddings SET checklist_imported_at = '2026-11-10'"))
+        conn.execute(text(
+            "INSERT INTO checklist_tasks (id, wedding_id, stage, title, position, done, "
+            "source, source_ref, created_at, updated_at) VALUES ('k1', 'w1', '12m', "
+            "'Placeholder', 1, 1, 'owner_list', '12m-1', '2026-01-01', '2026-01-01')"))
+    added = publish_like_replit(dev14, prod13)
+    assert added == ["ADD COLUMN checklist_tasks.category"], \
+        f"0014 adds one column, nothing else: {added}"
+    command.upgrade(config_for(prod13), "head")
+    with create_engine(prod13).connect() as conn:
+        diff = compare_metadata(MigrationContext.configure(conn), SQLModel.metadata)
+        rows = conn.execute(text(
+            "SELECT source_ref, done, category FROM checklist_tasks")).fetchall()
+    assert not diff, diff
+    refs = {r[0]: (bool(r[1]), r[2]) for r in rows}
+    assert refs["12m-1"] == (True, "budget"), "the data step runs after Publish added the column"
+    assert len(refs) == 13 and refs["C12"] == (False, "day_of"), refs
+
     fixture_dir = os.path.join(work, "fixture_versions")
     os.makedirs(fixture_dir)
     with open(os.path.join(fixture_dir, "zz_fixture.py"), "w") as fh:
@@ -912,6 +937,85 @@ def main() -> None:
         for cid in ("cat_b", "cat_c", "cat_z", "cat_new"):
             conn.execute(text("DELETE FROM budget_categories WHERE id = :c"), {"c": cid})
         conn.execute(text("DELETE FROM weddings WHERE id = 'w7'"))
+
+    print("3j. Checking that 0014 adds categories and the Chicago tasks once (B98, PD-021)...")
+    command.downgrade(cfg, "0013")
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM checklist_tasks"))
+        # w8's checklist is loaded; w1's isn't, so the import adds the tasks there later.
+        conn.execute(text(
+            "INSERT INTO weddings (id, couple_user_id, region, ceremony_type, "
+            "guest_count_estimate, currency, status, created_at, checklist_imported_at) "
+            "VALUES ('w8', 'u1', 'Placeholder', 'Jewish', 10, 'USD', 'intake', '2026-01-01', "
+            "'2026-11-10')"))
+        for tid, wid, stage, title, pos, done, source, ref in (
+                ("k1", "w8", "12m", "Placeholder budget task", 1, 1, "owner_list", "12m-1"),
+                ("k2", "w8", "10m", "Placeholder tradition", 2, 0, "tradition", "J3"),
+                ("k3", "w8", "2m", "Placeholder 2m task", 4, 0, "owner_list", "2m-4"),
+                ("k4", "w8", "1m", "Placeholder renamed license", 3, 0, "owner_list", "1m-3"),
+                ("k5", "w8", "post", "Placeholder last task", 6, 0, "owner_list", "post-6"),
+                ("k6", "w8", "6m", "Placeholder AI task", 9, 1, "ai_timeline", "ti:t1"),
+                ("k7", "w8", "1w", "Placeholder own task", 1, 0, "couple", None),
+                # The couple typed one of the Chicago tasks themselves: it isn't doubled.
+                ("k8", "w8", "1m", "hair and makeup trial.", 5, 1, "couple", None),
+                ("k9", "w1", "12m", "Placeholder w1 task", 1, 0, "owner_list", "12m-4"),
+                ("k10", "w8", "1w", "Placeholder payment", 2, 0, "owner_list", "V1")):
+            conn.execute(text(
+                "INSERT INTO checklist_tasks (id, wedding_id, stage, title, position, done, "
+                "source, source_ref, created_at, updated_at) VALUES (:id, :w, :st, :t, :p, :d, "
+                ":src, :ref, '2026-01-01', '2026-01-01')"),
+                {"id": tid, "w": wid, "st": stage, "t": title, "p": pos, "d": done,
+                 "src": source, "ref": ref})
+        before = {r[0]: tuple(r[1:]) for r in conn.execute(text(
+            "SELECT id, stage, title, position, done, source_ref FROM checklist_tasks"))}
+    command.upgrade(cfg, "head")
+
+    def tasks_of(conn):
+        return {r[0]: tuple(r[1:]) for r in conn.execute(text(
+            "SELECT COALESCE(source_ref, id), stage, title, position, done, category, source "
+            "FROM checklist_tasks"))}
+    with engine.connect() as conn:
+        after = tasks_of(conn)
+        kept = {r[0]: tuple(r[1:]) for r in conn.execute(text(
+            "SELECT id, stage, title, position, done, source_ref FROM checklist_tasks "
+            "WHERE id LIKE 'k%'"))}
+    assert kept == before, "no tick, title, stage or position changes"
+    cats = {ref: row[4] for ref, row in after.items()}
+    assert (cats["12m-1"], cats["J3"], cats["2m-4"], cats["1m-3"], cats["V1"]) == (
+        "budget", "ceremony", "guests", "ceremony", "budget"), cats
+    assert (cats["post-6"], cats["ti:t1"], cats["k7"], cats["k8"]) == (None,) * 4, \
+        "post-6, the AI planner's and the couple's own tasks stay Other"
+    assert cats["12m-4"] == "venue_vendors", "categories reach a wedding not yet loaded"
+    chicago = {ref: row for ref, row in after.items() if re.fullmatch(r"C\d+", ref)}
+    assert sorted(chicago, key=lambda r: int(r[1:])) == [
+        f"C{n}" for n in range(1, 13) if n != 7], "added once to w8 only; C7 was typed already"
+    assert all(row[3] == 0 and row[5] == "owner_list" for row in chicago.values()), \
+        "unticked, from the owner's list"
+    assert (chicago["C5"][0], chicago["C5"][2], chicago["C6"][2]) == ("2m", 5, 6), \
+        "after the stage's last task, in order"
+    assert (chicago["C10"][2], chicago["C12"][2], chicago["C12"][4]) == (3, 5, "day_of")
+    assert (chicago["C1"][2], chicago["C3"][2]) == (2, 1), "after k1; first in an empty stage"
+    assert after["1m-3"][1] == "Placeholder renamed license", "a renamed license task is kept"
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "m0014", os.path.join(HERE, "migrations", "versions", "0014_checklist_categories.py"))
+    m0014 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m0014)
+    with engine.begin() as conn:
+        m0014.apply_pd021(conn)
+        assert tasks_of(conn) == after, "running the data step again changes nothing"
+        # With the original title (a placeholder stands in for the owner's wording), the
+        # license task gets the Cook County wording; its tick and category stay.
+        import hashlib
+        m0014.LICENSE_ORIGINAL_SHA256 = hashlib.sha256(
+            b"placeholder renamed license").hexdigest()
+        m0014.apply_pd021(conn)
+        renamed = tasks_of(conn)
+        assert renamed["1m-3"][1] == m0014.LICENSE_CHICAGO_TITLE, renamed["1m-3"]
+        assert {k: v for k, v in renamed.items() if k != "1m-3"} == {
+            k: v for k, v in after.items() if k != "1m-3"}, "nothing else changes"
+        conn.execute(text("DELETE FROM checklist_tasks"))
+        conn.execute(text("DELETE FROM weddings WHERE id = 'w8'"))
 
     print("4. Downgrading to the start and back up again...")
     command.downgrade(cfg, "base")

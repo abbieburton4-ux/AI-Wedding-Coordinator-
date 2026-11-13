@@ -59,6 +59,7 @@ def main() -> None:
         print(f"Owner's list tasks added: {report.owner_tasks}")
         print(f"Jewish tradition tasks added: {report.tradition_tasks}")
         print(f"Wildman BT payment tasks added: {report.venue_tasks}")
+        print(f"Chicago tasks added: {report.chicago_tasks}")
         print(f"AI timeline tasks added: {len(report.ai_added)}")
         for line in report.ai_added:
             print(f"  + {line}")

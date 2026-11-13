@@ -18,6 +18,7 @@ The rule for past stages, in full:
 """
 import calendar
 import datetime
+import hashlib
 import re
 from dataclasses import dataclass
 from typing import Iterable, List, Optional
@@ -111,6 +112,99 @@ VENUE_TASKS = (
     ("V3", "post", "Check that Wildman BT has returned the $2,000 security deposit, minus any "
                    "itemised deductions. Expected by about 22 Nov 2027"),
 )
+
+# The owner's Chicago tasks (PD-021 part 3), in the product lane's wording, added once.
+# C8 and C10 carry the contract's dates in their wording, as V1-V3 do.
+CHICAGO_TASKS = (
+    ("C1", "12m", "Decide whether to hire a wedding planner or day-of coordinator. Wildman "
+                  "BT offers a $1,500 day-of package, and the contract asks for a named "
+                  "day-of contact either way"),
+    ("C2", "10m", "Choose your caterer from Wildman BT's preferred list"),
+    ("C3", "8m", "Reserve rentals (tables, chairs, linens, tableware) if the venue or caterer "
+                 "doesn't supply them"),
+    ("C4", "3m", "First fittings for the dress and suits (bring your wedding shoes and "
+                 "undergarments)"),
+    ("C5", "2m", "Give your DJ or band the music plan: processional, recessional, first dance, "
+                 "must-play and do-not-play songs"),
+    ("C6", "2m", "Keep track of meal choices and dietary needs from the RSVPs, for the caterer"),
+    ("C7", "1m", "Hair and makeup trial"),
+    ("C8", "1m", "Give Wildman BT your estimated guest count. Due Thu 23 Sep 2027"),
+    ("C9", "1m", "Final walkthrough at Wildman BT with your planner and caterer"),
+    ("C10", "1w", "Give Wildman BT your final guest count. Due Sat 16 Oct 2027"),
+    ("C11", "1w", "Put vendor tips in labelled envelopes and choose who hands them out on the day"),
+    ("C12", "1w", "Pack a wedding-day emergency kit"),
+)
+
+# The owner's-list marriage-license task, made Chicago-specific (PD-021 part 4) only
+# while its title is still the original. The original is the owner's wording, which
+# stays out of git (PD-007 call (e)), so only a hash of its ``title_key`` is kept. That
+# keeps the text out of the repo but doesn't hide it from someone guessing short titles.
+LICENSE_REF = "1m-3"
+LICENSE_ORIGINAL_SHA256 = "a297a6b7d6d167229f7514ee3a5708a0f776ccc4817647c657f517d13221342b"
+LICENSE_CHICAGO_TITLE = (
+    "Get your marriage license from the Cook County Clerk. It's valid for 60 days and only "
+    "for a ceremony in Chicago or suburban Cook County, so don't get it before late "
+    "August 2027")
+
+
+def is_original_license_title(title: str) -> bool:
+    return hashlib.sha256(title_key(title).encode("utf-8")).hexdigest() \
+        == LICENSE_ORIGINAL_SHA256
+
+
+# The checklist's categories (PD-021), in the order the filter buttons show them. A
+# task with none (stored as NULL) is shown under "Other".
+CATEGORIES = (
+    ("budget", "Budget"),
+    ("venue_vendors", "Venue & vendors"),
+    ("guests", "Guests"),
+    ("stationery", "Stationery"),
+    ("attire_beauty", "Attire & beauty"),
+    ("ceremony", "Ceremony"),
+    ("events_honeymoon", "Events & honeymoon"),
+    ("day_of", "Day-of"),
+)
+CATEGORY_KEYS = tuple(k for k, _ in CATEGORIES)
+OTHER_LABEL = "Other"
+
+
+def _refs(stage: str, *numbers: int) -> List[str]:
+    return [f"{stage}-{n}" for n in numbers]
+
+
+# Each list task's category, by its source_ref (PD-021 part 2). Owner's-list items are
+# "<stage>-<n>"; traditions "J<n>"; Wildman BT payments "V<n>"; Chicago tasks "C<n>".
+# Anything not here (post-6, the AI planner's old tasks, the couple's own) has none.
+_CATEGORY_REFS = {
+    "budget": ["12m-1", "12m-2", "12m-3", "11m-4", "6m-1", "3w-1", "day-3",
+               "V1", "V2", "V3", "C11"],
+    "venue_vendors": ["12m-4", "11m-1", "10m-2", "8m-1", "7m-1", "7m-5", "6m-2", "6m-4",
+                      "2m-7", "3w-3", "2w-1", "post-3",
+                      "C1", "C2", "C3", "C5", "C9"],
+    "guests": ["12m-5", "11m-2", "9m-4", "6m-5", "4m-2", "2m-2", "2m-3", "2m-4", "1m-4",
+               "3w-2", "3w-4", "3w-5", "2w-2", "2-3d-3", "C6", "C8", "C10"],
+    "stationery": ["10m-3", "10m-4", "8m-2", "7m-2", "5m-3", "5m-4", "3m-6", "2m-5", "1m-5",
+                   "1w-6", "post-2"],
+    "attire_beauty": ["11m-5", "10m-1", "7m-3", "7m-4", "5m-1", "5m-2", "4m-1", "3m-3",
+                      "3m-5", "2m-1", "1m-1", "1w-4", "1w-5", "2-3d-5", "1d-3", "post-1",
+                      "C4", "C7"],
+    "ceremony": ["11m-3", "2m-6", "1m-2", "1m-3", "1w-2", "2-3d-2", "1d-2", "post-4"]
+                + [ref for ref, _, _ in TRADITIONS],
+    "events_honeymoon": ["10m-5", "9m-1", "9m-2", "9m-3", "6m-3", "4m-3", "4m-4", "3m-1",
+                         "3m-2", "2m-8", "1m-7", "2w-3", "1w-1", "1w-7", "1d-4", "post-5"],
+    "day_of": ["3m-4", "1m-6", "1w-3", "2-3d-1", "2-3d-4", "1d-1", "day-1", "day-2"]
+              + _refs("day", 4, 5, 6, 7, 8) + ["C12"],
+}
+CATEGORY_BY_REF = {ref: cat for cat, refs in _CATEGORY_REFS.items() for ref in refs}
+
+
+def category_for(source: str, source_ref: Optional[str]) -> Optional[str]:
+    """A list task's category, or None for "Other". Only the owner's list, its Wildman BT
+    and Chicago tasks and the traditions are mapped; refs from elsewhere never are."""
+    if source not in ("owner_list", "tradition") or not source_ref:
+        return None
+    return CATEGORY_BY_REF.get(source_ref)
+
 
 CATCH_UP_KEY = "catch_up"
 

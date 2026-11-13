@@ -12,6 +12,13 @@ export interface ChecklistTask {
   done_at: string | null;
   done_by_name: string | null;
   label: TaskLabel;
+  /** A key from Checklist.categories; null shows as "Other" (PD-021). */
+  category: string | null;
+}
+
+export interface ChecklistCategory {
+  key: string;
+  label: string;
 }
 
 export interface ChecklistGroup {
@@ -38,6 +45,10 @@ export interface Checklist {
   overdue: number;
   /** Whether "Load my checklist" has run (PD-011); it runs once. */
   imported: boolean;
+  /** The category filter's buttons, in order (PD-021). */
+  categories: ChecklistCategory[];
+  /** The label for tasks with no category. */
+  other_label: string;
   groups: ChecklistGroup[];
 }
 
@@ -48,9 +59,14 @@ export interface ImportResult {
   owner_tasks: number;
   tradition_tasks: number;
   venue_tasks: number;
+  chicago_tasks: number;
   ai_added: number;
   ai_skipped: number;
   timeline_rows_removed: number;
 }
 
 export type Filter = "all" | "not_done" | "overdue";
+
+/** "all", a category key, or "other" for tasks with none. */
+export type CategoryFilter = string;
+export const OTHER = "other";

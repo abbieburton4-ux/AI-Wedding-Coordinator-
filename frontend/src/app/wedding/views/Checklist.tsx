@@ -5,7 +5,15 @@ import { useApi, USE_FASTAPI_BACKEND } from "../../api";
 import { useActiveWedding } from "../WeddingProvider";
 import { formatDay, formatInstantDay } from "./budget/money";
 import { tapArea } from "./budget/sections";
-import type { Checklist as ChecklistData, ChecklistGroup, ChecklistTask, Filter } from "./checklist/types";
+import {
+  OTHER,
+  type CategoryFilter,
+  type Checklist as ChecklistData,
+  type ChecklistCategory,
+  type ChecklistGroup,
+  type ChecklistTask,
+  type Filter,
+} from "./checklist/types";
 import { LoadChecklist } from "./checklist/LoadChecklist";
 
 type Req = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
@@ -36,11 +44,23 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "overdue", label: "Overdue" },
 ];
 
-function visibleTasks(group: ChecklistGroup, filter: Filter): ChecklistTask[] {
-  if (filter === "not_done") return group.tasks.filter((t) => !t.done);
-  if (filter === "overdue") return group.tasks.filter((t) => t.label === "overdue");
-  return group.tasks;
+function matchesFilter(t: ChecklistTask, filter: Filter): boolean {
+  if (filter === "not_done") return !t.done;
+  if (filter === "overdue") return t.label === "overdue";
+  return true;
 }
+
+function matchesCategory(t: ChecklistTask, category: CategoryFilter): boolean {
+  if (category === "all") return true;
+  if (category === OTHER) return t.category === null;
+  return t.category === category;
+}
+
+function visibleTasks(group: ChecklistGroup, filter: Filter, category: CategoryFilter): ChecklistTask[] {
+  return group.tasks.filter((t) => matchesFilter(t, filter) && matchesCategory(t, category));
+}
+
+const plural = (n: number) => `${n} ${n === 1 ? "task" : "tasks"}`;
 
 /**
  * The wedding's shared planning checklist (PD-007): stages in order with a count each,
@@ -61,6 +81,7 @@ export function Checklist() {
   const [busy, setBusy] = useState(false);
   const [loadedMessage, setLoadedMessage] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [categoryChoice, setCategory] = useState<CategoryFilter>("all");
   // Groups the couple opened or closed themselves; the rest follow "current".
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
 
@@ -136,9 +157,23 @@ export function Checklist() {
   }
 
   const pct = data.total ? Math.round((data.done * 100) / data.total) : 0;
+  const allTasks = data.groups.flatMap((g) => g.tasks);
+  const hasOther = allTasks.some((t) => t.category === null);
+  const categoryButtons = [
+    { key: "all", label: "All" },
+    ...data.categories,
+    ...(hasOther ? [{ key: OTHER, label: data.other_label }] : []),
+  ];
+  // "Other" goes away once every task has a category; the filter then shows everything.
+  const category = categoryButtons.some((b) => b.key === categoryChoice) ? categoryChoice : "all";
+  // Each button counts the tasks it would show with the status filter as it is.
+  const countFor = (key: CategoryFilter) =>
+    allTasks.filter((t) => matchesFilter(t, filter) && matchesCategory(t, key)).length;
+  const filtering = filter !== "all" || category !== "all";
   const shown = data.groups
-    .map((g) => ({ group: g, tasks: visibleTasks(g, filter) }))
-    .filter(({ tasks }) => filter === "all" || tasks.length > 0);
+    .map((g) => ({ group: g, tasks: visibleTasks(g, filter, category) }))
+    .filter(({ tasks }) => !filtering || tasks.length > 0);
+  const categoryLabel = categoryButtons.find((b) => b.key === category)?.label ?? "All";
   // "Catch up" is due on the same day as the first stage still ahead when the date was set.
   const catchUpDue = data.groups.find((g) => g.kind === "catch_up")?.due_on ?? null;
   const dueWith = catchUpDue ? data.groups.find((g) => g.kind === "stage" && g.due_on === catchUpDue)?.label ?? null : null;
@@ -183,6 +218,37 @@ export function Checklist() {
         </div>
       </section>
 
+      {/* Scrolls sideways on a phone rather than wrapping into several rows. */}
+      <div
+        role="group"
+        aria-label="Category"
+        className="flex gap-2 mb-3 overflow-x-auto sm:flex-wrap sm:overflow-visible -mx-margin-mobile px-margin-mobile sm:mx-0 sm:px-0 py-1"
+      >
+        {categoryButtons.map((b) => {
+          const n = countFor(b.key);
+          const selected = category === b.key;
+          return (
+            <button
+              key={b.key}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => setCategory(b.key)}
+              className={
+                `shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-sm font-button-text border ${phoneTall} ${focusRing} ` +
+                (selected
+                  ? "bg-primary text-on-primary border-primary"
+                  : "bg-surface-container-low text-on-surface border-outline-variant/40 hover:border-primary")
+              }
+            >
+              {selected && <Icon name="check" size={16} className="inline-block align-[-3px] mr-1" />}
+              {b.label}{" "}
+              <span className={selected ? "" : "text-on-surface-variant"}>{n}</span>
+              <span className="sr-only">{n === 1 ? " task" : " tasks"}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <div role="group" aria-label="Show" className="flex flex-wrap gap-2 mb-6">
         {FILTERS.map((f) => (
           <button
@@ -210,15 +276,27 @@ export function Checklist() {
             : "There are no tasks yet."}
         </p>
       )}
-      {filter !== "all" && shown.length === 0 && (
+      {data.total > 0 && (
+        <p role="status" className="sr-only">
+          {`Showing ${plural(shown.reduce((sum, { tasks }) => sum + tasks.length, 0))}: ` +
+            `${categoryLabel}, ${FILTERS.find((f) => f.key === filter)?.label ?? "All"}.`}
+        </p>
+      )}
+      {data.total > 0 && filtering && shown.length === 0 && (
         <p className="text-sm text-on-surface-variant mb-6">
-          {filter === "overdue" ? "Nothing is overdue." : "Everything is done."}
+          {category === "all"
+            ? filter === "overdue" ? "Nothing is overdue." : "Everything is done."
+            : filter === "overdue"
+              ? `Nothing in ${categoryLabel} is overdue.`
+              : filter === "not_done"
+                ? `Everything in ${categoryLabel} is done.`
+                : `There are no tasks in ${categoryLabel}.`}
         </p>
       )}
 
       <div className="space-y-4">
         {shown.map(({ group, tasks }) => {
-          const open = filter !== "all" ? true : toggled[group.key] ?? group.current;
+          const open = filtering ? true : toggled[group.key] ?? group.current;
           return (
             <GroupCard
               key={group.key}
@@ -230,6 +308,9 @@ export function Checklist() {
               dueWith={group.kind === "catch_up" ? dueWith : null}
               canEdit={canEdit}
               canAdd={canEdit && filter === "all"}
+              categories={data.categories}
+              otherLabel={data.other_label}
+              addCategory={category === "all" || category === OTHER ? null : category}
               run={run}
               request={request}
               busy={busy}
@@ -344,12 +425,16 @@ function DateCard({
 
 // ---- A stage, or the "Catch up" group --------------------------------------------------
 
+type CategoryChoices = { categories: ChecklistCategory[]; otherLabel: string };
+
 function GroupCard({
-  base, group, tasks, open, onToggle, dueWith, canEdit, canAdd, run, request, busy,
+  base, group, tasks, open, onToggle, dueWith, canEdit, canAdd, categories, otherLabel, addCategory,
+  run, request, busy,
 }: {
   base: string; group: ChecklistGroup; tasks: ChecklistTask[]; open: boolean; onToggle: () => void;
-  dueWith: string | null; canEdit: boolean; canAdd: boolean; run: Run; request: Req; busy: boolean;
-}) {
+  dueWith: string | null; canEdit: boolean; canAdd: boolean; addCategory: string | null;
+  run: Run; request: Req; busy: boolean;
+} & CategoryChoices) {
   const panelId = useId();
   const overdue = group.tasks.some((t) => t.label === "overdue");
   const catchUp = group.kind === "catch_up";
@@ -394,11 +479,15 @@ function GroupCard({
         ) : (
           <ul className="divide-y divide-outline-variant/10">
             {tasks.map((t) => (
-              <TaskRow key={t.id} base={base} task={t} canEdit={canEdit} run={run} request={request} busy={busy} />
+              <TaskRow key={t.id} base={base} task={t} canEdit={canEdit} categories={categories}
+                otherLabel={otherLabel} run={run} request={request} busy={busy} />
             ))}
           </ul>
         )}
-        {canAdd && <AddTask base={base} stage={group.add_to_stage} groupLabel={group.label} run={run} request={request} busy={busy} />}
+        {canAdd && (
+          <AddTask base={base} stage={group.add_to_stage} groupLabel={group.label} categories={categories}
+            otherLabel={otherLabel} initialCategory={addCategory} run={run} request={request} busy={busy} />
+        )}
       </div>
     </section>
   );
@@ -415,20 +504,37 @@ function Badge({ tone, children }: { tone: "error" | "primary" | "catch"; childr
 
 // ---- One task ---------------------------------------------------------------------------
 
+/** The category picker for adding or editing a task; "" means Other. */
+function CategorySelect({
+  id, value, onChange, categories, otherLabel,
+}: { id: string; value: string; onChange: (v: string) => void } & CategoryChoices) {
+  return (
+    <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={inputClass}>
+      {categories.map((c) => (
+        <option key={c.key} value={c.key}>{c.label}</option>
+      ))}
+      <option value="">{otherLabel}</option>
+    </select>
+  );
+}
+
 function TaskRow({
-  base, task, canEdit, run, request, busy,
-}: { base: string; task: ChecklistTask; canEdit: boolean; run: Run; request: Req; busy: boolean }) {
+  base, task, canEdit, categories, otherLabel, run, request, busy,
+}: {
+  base: string; task: ChecklistTask; canEdit: boolean; run: Run; request: Req; busy: boolean;
+} & CategoryChoices) {
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? "");
+  const [category, setCategory] = useState(task.category ?? "");
   const id = useId();
   const url = `${base}/tasks/${task.id}`;
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    const ok = await run(() => request(url, json("PATCH", { title, notes })));
+    const ok = await run(() => request(url, json("PATCH", { title, notes, category: category || null })));
     if (ok) setEditing(false);
   };
 
@@ -447,6 +553,9 @@ function TaskRow({
             onChange={(e) => setNotes(e.target.value)}
             className={`${inputClass} rounded-[1.25rem]`}
           />
+          <label htmlFor={`${id}-c`} className="text-xs text-on-surface-variant">Category</label>
+          <CategorySelect id={`${id}-c`} value={category} onChange={setCategory} categories={categories}
+            otherLabel={otherLabel} />
           <span className="flex items-center gap-3">
             <button type="submit" disabled={busy || !title.trim()} className={primaryButton}>Save</button>
             <button
@@ -454,6 +563,7 @@ function TaskRow({
               onClick={() => {
                 setTitle(task.title);
                 setNotes(task.notes ?? "");
+                setCategory(task.category ?? "");
                 setEditing(false);
               }}
               className={linkButton}
@@ -518,7 +628,17 @@ function TaskRow({
               </span>
             ) : (
               <>
-                <button type="button" onClick={() => setEditing(true)} className={linkButton} aria-label={`Edit "${task.title}"`}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTitle(task.title);
+                    setNotes(task.notes ?? "");
+                    setCategory(task.category ?? "");
+                    setEditing(true);
+                  }}
+                  className={linkButton}
+                  aria-label={`Edit "${task.title}"`}
+                >
                   Edit
                 </button>
                 <button type="button" onClick={() => setConfirm(true)} className={dangerLink} aria-label={`Delete "${task.title}"`}>
@@ -534,15 +654,26 @@ function TaskRow({
 }
 
 function AddTask({
-  base, stage, groupLabel, run, request, busy,
-}: { base: string; stage: string; groupLabel: string; run: Run; request: Req; busy: boolean }) {
+  base, stage, groupLabel, categories, otherLabel, initialCategory, run, request, busy,
+}: {
+  base: string; stage: string; groupLabel: string; initialCategory: string | null;
+  run: Run; request: Req; busy: boolean;
+} & CategoryChoices) {
   const [title, setTitle] = useState("");
+  const [category, setCategory] = useState(initialCategory ?? "");
   const id = useId();
+
+  // Follows the category filter, so a task added while one is picked lands in it.
+  useEffect(() => {
+    setCategory(initialCategory ?? "");
+  }, [initialCategory]);
 
   const add = async (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    const ok = await run(() => request(`${base}/tasks`, json("POST", { stage, title })));
+    const ok = await run(() =>
+      request(`${base}/tasks`, json("POST", { stage, title, category: category || null })),
+    );
     if (ok) setTitle("");
   };
 
@@ -558,6 +689,11 @@ function AddTask({
           onChange={(e) => setTitle(e.target.value)}
           className={inputClass}
         />
+      </span>
+      <span className="flex flex-col gap-1">
+        <label htmlFor={`${id}-c`} className="text-xs text-on-surface-variant">Category</label>
+        <CategorySelect id={`${id}-c`} value={category} onChange={setCategory} categories={categories}
+          otherLabel={otherLabel} />
       </span>
       <button type="submit" disabled={busy || !title.trim()} className={primaryButton}>Add</button>
     </form>

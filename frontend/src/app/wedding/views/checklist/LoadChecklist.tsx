@@ -85,7 +85,7 @@ export function LoadChecklist({
     try {
       const result = await send(text, true);
       reset();
-      await onLoaded(result.owner_tasks + result.tradition_tasks + result.venue_tasks + result.ai_added);
+      await onLoaded(result.owner_tasks + result.tradition_tasks + result.venue_tasks + result.chicago_tasks + result.ai_added);
     } catch (err) {
       // If the connection dropped after saving, the reload below shows the tasks.
       setError(`${message(err)}. Look at the checklist below before trying again.`);
@@ -101,6 +101,7 @@ export function LoadChecklist({
         plural(preview.tradition_tasks, "Jewish-tradition task", "Jewish-tradition tasks"),
         `${plural(preview.venue_tasks, "Wildman BT payment task", "Wildman BT payment tasks")}, with ` +
           "the due date in the wording. Nothing is marked as paid.",
+        plural(preview.chicago_tasks, "Chicago and Wildman BT planning task", "Chicago and Wildman BT planning tasks"),
         ...(preview.ai_added
           ? [`${plural(preview.ai_added, "task", "tasks")} from the AI planner's old timeline, each put in the nearest stage`]
           : []),
