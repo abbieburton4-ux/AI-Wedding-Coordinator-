@@ -392,3 +392,46 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - (a) **After saving an expense.** *Recommended:* the form closes and the new expense shows, with a small "Add another" link if you want to keep going. Alternative: the form stays open, emptied, ready for the next one. **Answer: "a".**
 **Decision:** all four points, and after saving an expense the form closes, the new expense shows, and a small "Add another" link reopens the form.
 **Out of scope:** the Edit forms on existing expenses and payments, which already open only when you click Edit.
+
+## PD-021 — Checklist categories to filter by, and the owner's Chicago list merged in
+
+**Date:** 2026-11-13 · **Status:** ratified (by the owner, one of the couple, 2026-11-13: "yes approve and start building")
+**Context:** Backlog B98. The owner, 2026-11-13: "in the checklist add categories that we can filter by (buttons on top) in addition to not done and over due. add these to the checklist if they are not already there and consolidate the dates for Oct 23, 2027", with a pasted 42-task Chicago planning list ("Months 12-13" to "Wedding Day", each with a category and a Chicago note). The product lane compared it, task by task, with what's already on the checklist: the owner's loverly.com list (PD-007, part 1, 97 tasks), the 18 Jewish-tradition tasks (part 2) and the Wildman BT payment tasks V1–V3 (part 3). Most are already there; 12 new tasks cover the rest. The new tasks below are reworded by the product lane, so they can live in this public project. Every date is counted back from Sat 23 Oct 2027 with the app's existing stages, so nothing gets a date of its own.
+
+**Proposed:**
+1. **Category buttons** across the top of the checklist: **All · Budget · Venue & vendors · Guests · Stationery · Attire & beauty · Ceremony · Events & honeymoon · Day-of**, plus **Other** when a task has none. Each shows its count. They work together with the existing All / Not done / Overdue filter (for example "Venue & vendors" + "Not done"). Each task has one category. The couple can change a task's category when editing it, and pick one when adding a task; family (viewers) can filter but not change anything.
+2. **Categories for the tasks already there**, by item id (wording stays out of git, PD-007 call (e)):
+   - Budget: 12m-1, 12m-2, 12m-3, 11m-4, 6m-1, 3w-1, day-3, and V1–V3.
+   - Venue & vendors: 12m-4, 11m-1, 10m-2, 8m-1, 7m-1, 7m-5, 6m-2, 6m-4, 2m-7, 3w-3, 2w-1, post-3.
+   - Guests (guest list, wedding party, RSVPs, seating, hotel blocks, welcome bags): 12m-5, 11m-2, 9m-4, 6m-5, 4m-2, 2m-2, 2m-3, 2m-4, 1m-4, 3w-2, 3w-4, 3w-5, 2w-2, 2-3d-3.
+   - Stationery (and the website): 10m-3, 10m-4, 8m-2, 7m-2, 5m-3, 5m-4, 3m-6, 2m-5, 1m-5, 1w-6, post-2.
+   - Attire & beauty (and rings): 11m-5, 10m-1, 7m-3, 7m-4, 5m-1, 5m-2, 4m-1, 3m-3, 3m-5, 2m-1, 1m-1, 1w-4, 1w-5, 2-3d-5, 1d-3, post-1.
+   - Ceremony (officiant, vows, marriage license, name change): 11m-3, 2m-6, 1m-2, 1m-3, 1w-2, 2-3d-2, 1d-2, post-4, and all 18 Jewish-tradition tasks.
+   - Events & honeymoon (engagement, registry, bach parties, rehearsal dinner, honeymoon): 10m-5, 9m-1, 9m-2, 9m-3, 6m-3, 4m-3, 4m-4, 3m-1, 3m-2, 2m-8, 1m-7, 2w-3, 1w-1, 1w-7, 1d-4, post-5.
+   - Day-of: 3m-4, 1m-6, 1w-3, 2-3d-1, 2-3d-4, 1d-1, day-1, day-2, day-4 to day-8.
+   - Other: post-6, the old AI-planner tasks merged in under PD-007 call (c), and any task the couple added themselves, until they pick a category. *(decided-by-agent: the team doesn't guess categories for tasks it can't see)*
+3. **12 new tasks**, added once, each into the stage nearest the pasted timing:
+
+| # | Stage (due) | Task | Category |
+| :- | :- | :- | :- |
+| C1 | Catch up (Mon 23 Nov 2026) | Decide whether to hire a wedding planner or day-of coordinator. Wildman BT offers a $1,500 day-of package, and the contract asks for a named day-of contact either way | Venue & vendors |
+| C2 | 10 Months Before (Wed 23 Dec 2026) | Choose your caterer from Wildman BT's preferred list | Venue & vendors |
+| C3 | 8 Months Before (Tue 23 Feb 2027) | Reserve rentals (tables, chairs, linens, tableware) if the venue or caterer doesn't supply them | Venue & vendors |
+| C4 | 3 Months Before (Fri 23 Jul 2027) | First fittings for the dress and suits (bring your wedding shoes and undergarments) | Attire & beauty |
+| C5 | 2 Months Before (Mon 23 Aug 2027) | Give your DJ or band the music plan: processional, recessional, first dance, must-play and do-not-play songs | Venue & vendors |
+| C6 | 2 Months Before (Mon 23 Aug 2027) | Keep track of meal choices and dietary needs from the RSVPs, for the caterer | Guests |
+| C7 | 1 Month Before (Thu 23 Sep 2027) | Hair and makeup trial | Attire & beauty |
+| C8 | 1 Month Before (Thu 23 Sep 2027) | Give Wildman BT your estimated guest count. Due Thu 23 Sep 2027 | Guests |
+| C9 | 1 Month Before (Thu 23 Sep 2027) | Final walkthrough at Wildman BT with your planner and caterer | Venue & vendors |
+| C10 | 1 Week Before (Sat 16 Oct 2027) | Give Wildman BT your final guest count. Due Sat 16 Oct 2027 | Guests |
+| C11 | 1 Week Before (Sat 16 Oct 2027) | Put vendor tips in labelled envelopes and choose who hands them out on the day | Budget |
+| C12 | 1 Week Before (Sat 16 Oct 2027) | Pack a wedding-day emergency kit | Day-of |
+
+   C8 and C10 come from the Wildman BT contract (estimated count 30 days before, final count 7 days before; `wedding.md`), so their dates are in the wording, like V1–V3.
+4. **One task made Chicago-specific:** the marriage-license task (1m-3, due Thu 23 Sep 2027) becomes "Get your marriage license from the Cook County Clerk. It's valid for 60 days and only for a ceremony in Chicago or suburban Cook County, so don't get it before late August 2027" ([Cook County Clerk](https://cookcountyclerkil.gov/service/marriage-licenses), checked 2026-11-13). Only if the couple haven't already renamed it. The pasted list's "Months 2-3" timing would have been too early: a license from late July would expire before the wedding.
+5. **Already there, so not added:** budget, guest list, venue research and booking, date, photographer, hotel blocks, dress shopping, DJ or band, florist, engagement shoot, wedding party, save-the-dates, website, wedding-party attire, registry, menu tasting (covered by confirming the menus), cake, transport, invitations (ordering and mailing), officiant and ceremony (J2, J3), rehearsal dinner, rings, booking hair and makeup, playlists, picking up the license, RSVPs, seating chart and signage, final head count, final payments, welcome bags, picking up attire, rehearsal, and the day itself. Where the two lists' timings differ (transport, invitations, booking hair and makeup), the existing timing stays. The pasted list's Chicago notes aren't added, apart from point 4, because most are general tips and some state figures we haven't checked.
+**Technical choices settled by the team:** the new tasks and the category labels go in once, safely, on the live app: a task already there is never added twice, nothing already ticked, renamed or added by the couple is changed, and the change needs a database migration (rule 6). Ticking a task never marks a payment paid (rule 4).
+**Couple's call:**
+- (a) Are the nine category buttons, the 12 new tasks and the license wording right? *Recommended: yes, as written.* The couple can rename or move any task afterwards. **Answer (2026-11-13): "yes approve and start building".**
+**Decision:** points 1–5 as written.
+**Rejected because:** adding all 42 would put most of them on the list twice; letting the AI sort the couple's own and old AI tasks into categories would mean guessing.
