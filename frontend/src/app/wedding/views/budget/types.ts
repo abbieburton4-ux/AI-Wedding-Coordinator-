@@ -222,5 +222,8 @@ export interface SplitSuggestion {
   reasons_removed?: number;
 }
 
-/** Runs a change against the API, then reloads the budget. Resolves true on success. */
-export type Run = (fn: () => Promise<unknown>) => Promise<boolean>;
+/**
+ * Runs a change against the API, then reloads the budget. Resolves true on success.
+ * A refusal goes to ``onError``, so it shows by the form or button that asked (B96).
+ */
+export type Run = (fn: () => Promise<unknown>, onError: (message: string) => void) => Promise<boolean>;

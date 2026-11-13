@@ -5,6 +5,7 @@ import { MoneyInput, fieldClass, inputClass, linkButton, overpaidNote, primaryBu
 import { FoldChevron, useRememberedFolds } from "../folds";
 import { FoldBody, SECTION_SCROLL, SectionHeading, scrollToElement, sectionId, tapArea, useFolds } from "./sections";
 import { Bar, Chip, type Tone } from "./status";
+import { FormError, useFormError } from "./formError";
 import type { Category, Overview, Run } from "./types";
 
 type Req = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
@@ -248,7 +249,7 @@ export function MoveMoney({
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, clear } = useFormError();
   const [done, setDone] = useState<string | null>(null);
 
   const withMoney = categories.filter((c) => (c.planned_cents ?? 0) > 0);
@@ -268,11 +269,12 @@ export function MoveMoney({
     if (cents === undefined) { setError(AMOUNT_HINT); return; }
     if (!cents) { setError("Please enter how much to move."); return; }
     if (tooMuch) { setError(`${source.name} only has ${formatCents(available)} in its target.`); return; }
-    const ok = await run(() =>
-      request(`${base}/move`, {
+    const ok = await run(
+      () => request(`${base}/move`, {
         method: "POST",
         body: JSON.stringify({ from_category_id: source.id, to_category_id: dest.id, amount_cents: cents }),
       }),
+      setError,
     );
     if (ok) {
       setDone(`Moved ${formatCents(cents)} from ${source.name} to ${dest.name}.`);
@@ -290,7 +292,7 @@ export function MoveMoney({
           type="button"
           aria-expanded={isOpen}
           aria-controls={bodyId}
-          onClick={() => remembered.toggle("move")}
+          onClick={() => { clear(); remembered.toggle("move"); }}
           className="flex w-full items-center justify-between gap-2 text-left hover:text-primary-text rounded-md min-h-11 sm:min-h-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
         >
           Move money between categories
@@ -305,7 +307,7 @@ export function MoveMoney({
         {withMoney.length === 0 ? (
           <p className="text-sm text-on-surface-variant">Give a category a target first, then you can move money out of it.</p>
         ) : (
-          <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+          <form onSubmit={submit} onChange={clear} className="flex flex-wrap items-end gap-3">
             <MoneyInput id="move-amount" label="Move" value={amount} onChange={(v) => { setAmount(v); setDone(null); }} required />
             <span className={fieldClass}>
               <label htmlFor="move-from" className="text-xs text-on-surface-variant">From</label>
@@ -339,7 +341,7 @@ export function MoveMoney({
                 {source.name} only has {formatCents(available)} in its target, so you can move up to that.
               </p>
             )}
-            {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
+            <FormError error={error} />
             {done && <p role="status" className="w-full text-sm text-on-surface">{done}</p>}
           </form>
         )}
