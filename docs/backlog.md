@@ -12,20 +12,21 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B95** — move "Move money between categories" to the bottom of the Categories section, folded by default. `in review` (#117; owner, 2026-11-13)
-2. **B90** — check the workspace catches up by itself after a Pull (seen failing on the first publish after #105). `waiting` (can only be checked on the next Pull that brings a database change; #112 and #114 had none)
-3. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
-4. **B89** — send the budget straight to Google Sheets (PD-019 option C). `on hold` (owner: "maybe c later"; needs its own PD)
-5. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
-6. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-7. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
-8. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
-9. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `in review` (#116)
-10. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `in review` (#116)
-11. **B8** — record missing token counts as empty, not 0. `ready`
-12. **B17** — stop tracking the test database files. `ready`
-13. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44); and a frontend-traps line: gold text uses the darker text token from #102, never `--primary` (B83), and clay text uses `text-soft-clay-text` (B85, #104). `needs-owner: guardrail files need a session the owner runs`
-14. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
-15. **B77** — an older test fails by chance (looks for "555" among random IDs). `ready`
+2. **B96** — Budget page errors show next to the form that caused them. `in progress` (owner, 2026-11-13: "move the error messages next to the form first")
+3. **B90** — check the workspace catches up by itself after a Pull (seen failing on the first publish after #105). `waiting` (can only be checked on the next Pull that brings a database change; #112 and #114 had none)
+4. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
+5. **B89** — send the budget straight to Google Sheets (PD-019 option C). `on hold` (owner: "maybe c later"; needs its own PD)
+6. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
+7. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+8. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `ready`
+9. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
+10. **B33** — stop the backend accepting calls from the original VenueFlow author's website. `in review` (#116)
+11. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `in review` (#116)
+12. **B8** — record missing token counts as empty, not 0. `ready`
+13. **B17** — stop tracking the test database files. `ready`
+14. **B36** — refresh "What's actually there today" in `.agents/AGENTS.md` and its AI Studio copy, plus the B48 date switch, the B49 check-before-sending rule, Aurelia off (PD-010) the in-app checklist load (PD-011), the new `db_status.py` check (#58) and the Vendors page as the couple's own sections (PD-012), and the B60 migration rule (`migrations/safe_ops.py`), the budget's new expense and payment fields (PD-013, #72) (also the `agent-features` skill; wording suggested in #44); and a frontend-traps line: gold text uses the darker text token from #102, never `--primary` (B83), and clay text uses `text-soft-clay-text` (B85, #104). `needs-owner: guardrail files need a session the owner runs`
+15. **B52** — move Replit and the automatic checks from Node 20 to Node 22. `ready`
+16. **B77** — an older test fails by chance (looks for "555" among random IDs). `ready`
 
 ## Open
 
@@ -95,7 +96,7 @@ Not carried over from the audit, because the restored backend already covers the
 
 - **B33 — The backend allows calls from VenueFlow's original website.** Found in PR #14. The list of websites allowed to call the backend still includes the upstream author's address. *Fix:* remove it, and add the real address once hosting is decided (B14).
 - **B95 — "Move money between categories" sits at the top of the Categories section.** The owner, 2026-11-13: "move the \"Move money between categories\" down to the bottom of that section". In `frontend/src/app/wedding/views/Budget.tsx` it comes first, above the suggested categories, the order list and the category cards. *Fix:* make it the last thing in the section, after the category cards and the Add a category form. The owner added: "and it can be minimized by default", so it starts folded (just its heading, click to open), and each device remembers if it was opened, like the page's other folds (PD-015; decided-by-agent, reversible). Layout only; no database change. *Depends on:* nothing.
-- **B96 — Budget page errors show at the top of the page, far from the form.** Found in #114 and #117: if a save or a money move is refused, the message appears at the top of the Budget page, so after using a form lower down (an expense, a payment, the move-money box at the bottom) it's easy to miss, especially on a phone. *Fix:* show the message next to the form that caused it. Layout only. *Depends on:* the owner's go-ahead.
+- **B96 — Budget page errors show at the top of the page, far from the form.** Found in #114 and #117: if a save or a money move is refused, the message appears at the top of the Budget page, so after using a form lower down (an expense, a payment, the move-money box at the bottom) it's easy to miss, especially on a phone. *Fix:* show the message next to the form that caused it. Layout only. Go-ahead from the owner, 2026-11-13.
 - **B93 — Two access-list rows on one wedding can link to the same account.** Found in #116. The database stops the same email twice, but not two different emails both linked to one signed-in account. *Fix:* engineering to assess; a schema change on real access data, so check with the owner first. *Depends on:* nothing.
 - **B94 — The old GitHub Pages publish workflow is still there.** Found in #116. The app is hosted on Replit (PD-008), so the leftover workflow is unused. *Fix:* remove it in a session the owner runs (agents don't change `.github/`). *Depends on:* the owner.
 - **B35 — Sign-in setup should turn on email-enumeration protection.** Found in PR #14. Firebase can hide whether an email has an account. *Fix:* add the step to `docs/setup-sign-in.md`.
