@@ -272,8 +272,9 @@ export function MoveMoney({
     }
   };
 
+  // Top margin only: it sits last in Categories, after the add form, which has no bottom margin.
   return (
-    <section aria-labelledby="move-heading" className="mb-8 bg-surface-container-lowest rounded-[1.5rem] border border-outline-variant/20 p-5">
+    <section aria-labelledby="move-heading" className="mt-8bg-surface-container-lowest rounded-[1.5rem] border border-outline-variant/20 p-5">
       <h3 id="move-heading" className="font-headline-sm text-lg text-on-surface mb-1">Move money between categories</h3>
       <p className="text-xs text-on-surface-variant mb-3">
         Lowers one category's target and raises another's by the same amount. Your total, expenses and payments stay as they are.
