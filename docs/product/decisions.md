@@ -378,3 +378,17 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 **Settled by the team (reversible):** the same two ticks (archived expenses, vendor contacts) apply to the Excel file; the formula guard from B69 applies to every cell; amounts come from whole cents and show as dollars. A new library to write the file is allowed, with a one-line reason in the commit (rule 9).
 **Rejected because:** B doesn't give the tabs and formatting; C is a bigger access decision, left for later at the owner's word.
 **Follow-up, ratified (owner, 2026-11-12: "we can remove the download .csv button when we have the download excel"):** once the Excel download is live, the "Download CSV" button is removed (B91). "Print / save as PDF" stays.
+
+## PD-020 — Add expense and Add payment forms stay closed until you ask for them
+
+**Date:** 2026-11-13 · **Status:** ratified (by the owner, one of the couple, 2026-11-13: "a")
+**Context:** Backlog B92. The owner, 2026-11-13: "why do when I add an expense all of this still shows up? i feel like i should only see this when i click add expense or add payment". Inspected 2026-11-13: once a category is open, the full Add expense form always sits at the bottom of it, and every expense always shows a full Add payment form under its payments. After saving, the category stays open, so both forms stay on screen. With several expenses the page becomes mostly empty forms.
+**Proposed:**
+1. **Add expense** is a button only. Clicking it (on the category, or the main one at the top) opens the form; a **Cancel** closes it. Saving closes it and shows the new expense.
+2. **Add payment** is a small button under each expense's payments. Clicking it opens the payment form for that expense only; Cancel or saving closes it.
+3. Only one add form is open at a time, so opening another closes the first (anything half-typed in it is lost, so it asks first if something was typed). *(decided-by-agent; reversible)*
+4. Viewers still see no add buttons. Nothing about what's saved changes; no database change.
+**Couple's calls:**
+- (a) **After saving an expense.** *Recommended:* the form closes and the new expense shows, with a small "Add another" link if you want to keep going. Alternative: the form stays open, emptied, ready for the next one. **Answer: "a".**
+**Decision:** all four points, and after saving an expense the form closes, the new expense shows, and a small "Add another" link reopens the form.
+**Out of scope:** the Edit forms on existing expenses and payments, which already open only when you click Edit.
