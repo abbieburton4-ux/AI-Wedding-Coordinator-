@@ -10,6 +10,7 @@ import { costBox, expenseCost, wouldGoOver } from "./forecast";
 import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId, tapArea, useFolds } from "./sections";
 import { Bar, Chip, TargetChip, targetTone } from "./status";
 import { focusFirstField, useAddForm, useReportDirty } from "./addForms";
+import { FormError, useFormError } from "./formError";
 import type {
   Category, ContractStatus, Contribution, Cost, ExpenseStatus, Payer, Payment, Run, Totals, VendorRef,
 } from "./types";
@@ -161,7 +162,7 @@ export function CategoryCard({
   const [name, setName] = useState(category.name);
   const [planned, setPlanned] = useState(centsToInput(category.planned_cents));
   const [confirm, setConfirm] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, clear } = useFormError();
   const [open, setOpen] = useState(category.costs.length > 0);
   const [showArchived, setShowArchived] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -214,7 +215,8 @@ export function CategoryCard({
   }, [addRequest?.n]);
 
   const renameToVenue = async () => {
-    const ok = await run(() => request(`${base}/categories/${category.id}`, json("PATCH", { name: "Venue" })));
+    clear();
+    const ok = await run(() => request(`${base}/categories/${category.id}`, json("PATCH", { name: "Venue" })), setError);
     // The button is gone once renamed, so focus moves to the category's new name.
     if (ok) headingRef.current?.focus();
   };
@@ -242,8 +244,9 @@ export function CategoryCard({
     setError(null);
     const cents = amountOrError(planned, setError);
     if (cents === undefined) return;
-    const ok = await run(() =>
-      request(`${base}/categories/${category.id}`, json("PATCH", { name, planned_cents: cents })),
+    const ok = await run(
+      () => request(`${base}/categories/${category.id}`, json("PATCH", { name, planned_cents: cents })),
+      setError,
     );
     if (ok) setEditing(false);
   };
@@ -251,11 +254,12 @@ export function CategoryCard({
   return (
     <section className="bg-surface-container-lowest p-6 rounded-[2rem] border border-outline-variant/20 shadow-sm">
       {editing ? (
-        <form onSubmit={save} className="flex flex-wrap items-end gap-3 mb-4">
+        <form onSubmit={save} onChange={clear} className="flex flex-wrap items-end gap-3 mb-4">
           <TextInput id={`cat-name-${category.id}`} label="Category" value={name} onChange={setName} wide />
           <MoneyInput id={`cat-plan-${category.id}`} label="Target" value={planned} onChange={setPlanned} />
           <button type="submit" disabled={busy} className={primaryButton}>Save</button>
-          <button type="button" onClick={() => setEditing(false)} className={linkButton}>Cancel</button>
+          <button type="button" disabled={busy} onClick={() => { clear(); setEditing(false); }} className={linkButton}>Cancel</button>
+          <FormError error={error} />
         </form>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
@@ -288,18 +292,18 @@ export function CategoryCard({
                 )}
                 <button
                   type="button"
-                  onClick={() => { setName(category.name); setPlanned(centsToInput(planned_cents)); setEditing(true); }}
+                  onClick={() => { clear(); setName(category.name); setPlanned(centsToInput(planned_cents)); setEditing(true); }}
                   className={linkButton}
                 >
                   Edit
                 </button>
-                <button type="button" onClick={() => setConfirm(true)} className={dangerLink}>Remove</button>
+                <button type="button" onClick={() => { clear(); setConfirm(true); }} className={dangerLink}>Remove</button>
               </span>
             )
           )}
         </div>
       )}
-      {error && <p role="alert" className="text-sm text-error mb-3">{error}</p>}
+      {!editing && <FormError error={error} className="mb-3" />}
 
       {category.is_contingency && (
         <p className="text-sm text-on-surface-variant mb-3">
@@ -429,14 +433,22 @@ function RemoveCategory({
   const target = others.some((c) => c.id === picked) ? picked : others[0]?.id ?? "";
   const count = category.costs.length;
   const kept = "Contributions towards it are kept, towards the whole budget.";
-  const remove = (moveTo?: string) =>
+  const { error, setError, clear } = useFormError();
+  const remove = (moveTo?: string) => {
+    clear();
     run(() => request(
       `${base}/categories/${category.id}${moveTo ? `?move_to=${encodeURIComponent(moveTo)}` : ""}`,
       json("DELETE"),
-    ));
+    ), setError);
+  };
 
   if (count === 0) {
-    return <Confirm busy={busy} text={`Remove ${category.name}? ${kept}`} onYes={() => remove()} onNo={onCancel} />;
+    return (
+      <>
+        <Confirm busy={busy} text={`Remove ${category.name}? ${kept}`} onYes={() => remove()} onNo={onCancel} />
+        <FormError error={error} />
+      </>
+    );
   }
   const payments = category.costs.reduce((n, c) => n + c.payments.length, 0);
   const paid = category.costs.reduce((n, c) => n + c.payments.filter((p) => p.paid).length, 0);
@@ -461,7 +473,7 @@ function RemoveCategory({
       </span>
       <span className={fieldClass}>
         <label htmlFor={selectId} className="text-xs text-on-surface-variant">Move them to</label>
-        <select id={selectId} value={target} onChange={(e) => setTarget(e.target.value)} className={inputClass}>
+        <select id={selectId} value={target} onChange={(e) => { clear(); setTarget(e.target.value); }} className={inputClass}>
           {others.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </span>
@@ -470,6 +482,7 @@ function RemoveCategory({
         Move them and remove {category.name}
       </button>
       <button type="button" disabled={busy} onClick={onCancel} className={`${linkButton} pb-2`}>Cancel</button>
+      <FormError error={error} />
     </span>
   );
 }
@@ -477,21 +490,21 @@ function RemoveCategory({
 export function AddCategoryForm({ base, run, request, busy }: { base: string; run: Run; request: Req; busy: boolean }) {
   const [name, setName] = useState("");
   const [planned, setPlanned] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, clear } = useFormError();
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     const cents = amountOrError(planned, setError);
     if (cents === undefined) return;
-    const ok = await run(() => request(`${base}/categories`, json("POST", { name, planned_cents: cents })));
+    const ok = await run(() => request(`${base}/categories`, json("POST", { name, planned_cents: cents })), setError);
     if (ok) { setName(""); setPlanned(""); }
   };
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+    <form onSubmit={submit} onChange={clear} className="flex flex-wrap items-end gap-3">
       <TextInput id="new-cat-name" label="Category name" value={name} onChange={setName} placeholder="For example, Venue" wide />
       <MoneyInput id="new-cat-plan" label="Target (optional)" value={planned} onChange={setPlanned} />
       <button type="submit" disabled={busy} className={primaryButton}>Add category</button>
-      {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
+      <FormError error={error} />
     </form>
   );
 }
@@ -682,6 +695,8 @@ function CostBlock({
   const [confirm, setConfirm] = useState(false);
   const [confirmCopy, setConfirmCopy] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
+  // Refusals of this expense's own buttons (archive, remove, copy); its forms have their own.
+  const { error, setError, clear } = useFormError();
   const tipAdder = useAddForm(`tip:${cost.id}`);
   const payAdder = useAddForm(`payment:${cost.id}`);
   const tipBox = useRef<HTMLDivElement>(null);
@@ -691,10 +706,14 @@ function CostBlock({
   const tips = siblings.filter((c) => cost.tip_ids.includes(c.id));
   const activeTips = tips.filter((c) => !c.archived);
   const linked = isTip ? siblings.find((c) => c.id === cost.tip_for_cost_id) : undefined;
+  const act = (fn: () => Promise<unknown>) => { clear(); return run(fn, setError); };
   const archive = (choice?: "remove" | "keep") =>
-    run(() => request(`${base}/costs/${cost.id}${choice ? `?tips=${choice}` : ""}`, json("PATCH", { archived: !cost.archived })));
+    act(() => request(`${base}/costs/${cost.id}${choice ? `?tips=${choice}` : ""}`, json("PATCH", { archived: !cost.archived })));
   const remove = (choice?: "remove" | "keep") =>
-    run(() => request(`${base}/costs/${cost.id}${choice ? `?tips=${choice}` : ""}`, json("DELETE")));
+    act(() => request(`${base}/costs/${cost.id}${choice ? `?tips=${choice}` : ""}`, json("DELETE")));
+  // Opening or cancelling one of this expense's questions clears an old refusal.
+  const ask = (open: (v: boolean) => void) => () => { clear(); open(true); };
+  const cancel = (close: (v: boolean) => void) => () => { clear(); close(false); };
 
   // Focus moves into an add form when it opens (its button gets it back on close).
   useEffect(() => { if (tipAdder.isOpen) focusFirstField(tipBox.current); }, [tipAdder.isOpen]);
@@ -737,17 +756,17 @@ function CostBlock({
             </p>
             {canEdit && (confirm ? (
               tips.length > 0 ? (
-                <TipsQuestion cost={cost} tips={tips} archiving={false} busy={busy} onChoose={remove} onNo={() => setConfirm(false)} />
+                <TipsQuestion cost={cost} tips={tips} archiving={false} busy={busy} onChoose={remove} onNo={cancel(setConfirm)} />
               ) : (
                 <Confirm busy={busy} text={`Remove ${cost.vendor_name} and its payments?`}
                   onYes={() => remove()}
-                  onNo={() => setConfirm(false)} />
+                  onNo={cancel(setConfirm)} />
               )
             ) : confirmArchive ? (
               <TipsQuestion
                 cost={cost} tips={activeTips} archiving busy={busy}
                 onChoose={async (choice) => { if (await archive(choice)) setConfirmArchive(false); }}
-                onNo={() => setConfirmArchive(false)}
+                onNo={cancel(setConfirmArchive)}
               />
             ) : confirmCopy ? (
               <Confirm
@@ -757,18 +776,18 @@ function CostBlock({
                   ? `Make a copy of ${cost.vendor_name}? It's another tip for ${cost.tip_for_name ?? "the same expense"}, with the same percentage or amount and notes. It starts with no payments and counts in your totals straight away.`
                   : `Make a copy of ${cost.vendor_name}? It copies the costs, payment method, notes, link and vendor. It starts with no payments and no contract, and counts in your totals straight away.`}
                 onYes={async () => {
-                  const ok = await run(() => request(`${base}/costs/${cost.id}/duplicate`, json("POST")));
+                  const ok = await act(() => request(`${base}/costs/${cost.id}/duplicate`, json("POST")));
                   if (ok) setConfirmCopy(false);
                 }}
-                onNo={() => setConfirmCopy(false)}
+                onNo={cancel(setConfirmCopy)}
               />
             ) : (
               <span className="flex flex-wrap gap-4">
-                <button type="button" onClick={() => setEditing(true)} className={linkButton}>Edit</button>
-                <button type="button" onClick={() => setConfirmCopy(true)} className={linkButton}>Duplicate</button>
+                <button type="button" onClick={ask(setEditing)} className={linkButton}>Edit</button>
+                <button type="button" onClick={ask(setConfirmCopy)} className={linkButton}>Duplicate</button>
                 {!isTip && !cost.archived && (
                   <button
-                    ref={tipAdder.opener} type="button" onClick={tipAdder.toggle} aria-expanded={tipAdder.isOpen}
+                    ref={tipAdder.opener} type="button" onClick={() => { clear(); tipAdder.toggle(); }} aria-expanded={tipAdder.isOpen}
                     className={linkButton}
                   >
                     Add tip<span className="sr-only"> for {cost.vendor_name}</span>
@@ -777,12 +796,12 @@ function CostBlock({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => (!cost.archived && activeTips.length > 0 ? setConfirmArchive(true) : archive())}
+                  onClick={() => (!cost.archived && activeTips.length > 0 ? ask(setConfirmArchive)() : archive())}
                   className={linkButton}
                 >
                   {cost.archived ? "Restore" : "Archive"}
                 </button>
-                <button type="button" onClick={() => setConfirm(true)} className={dangerLink}>Remove</button>
+                <button type="button" onClick={ask(setConfirm)} className={dangerLink}>Remove</button>
               </span>
             ))}
           </div>
@@ -820,7 +839,7 @@ function CostBlock({
           {canEdit && !cost.archived && tips.length > activeTips.length && (
             <button
               type="button" disabled={busy} className={`${linkButton} mt-1`}
-              onClick={() => run(async () => {
+              onClick={() => act(async () => {
                 for (const t of tips.filter((x) => x.archived)) {
                   await request(`${base}/costs/${t.id}`, json("PATCH", { archived: false }));
                 }
@@ -850,6 +869,7 @@ function CostBlock({
               ({formatCents(cost.committed_cents)}). Check the amounts, or update the cost.
             </p>
           )}
+          <FormError error={error} className="mt-2" />
         </div>
       )}
 
@@ -873,7 +893,7 @@ function CostBlock({
       {canEdit && !cost.archived && (
         <>
           <button
-            ref={payAdder.opener} type="button" onClick={payAdder.toggle} aria-expanded={payAdder.isOpen}
+            ref={payAdder.opener} type="button" onClick={() => { clear(); payAdder.toggle(); }} aria-expanded={payAdder.isOpen}
             className="mt-1 inline-flex items-center gap-1 rounded-full border border-outline-variant/60 px-4 py-3 sm:py-1 text-sm text-on-surface hover:border-primary hover:text-primary-text"
           >
             <Icon name="add" size={16} /> Add payment<span className="sr-only"> for {cost.vendor_name}</span>
@@ -1085,7 +1105,7 @@ export function AddTipForm({
   const [due, setDue] = useState("");
   const [payer, setPayer] = useState("");
   const [notes, setNotes] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, clear } = useFormError();
   useReportDirty(formKey, !!(picked || percent || amount || due || payer || notes) || mode !== "percent");
   // The list can reload while this is open; never send an expense that's gone.
   const targetId = fixedId ?? (targets.some((t) => t.cost.id === picked) ? picked : targets[0]?.cost.id ?? "");
@@ -1111,10 +1131,11 @@ export function AddTipForm({
       setError(`${target.vendor_name} has no cost yet, so the tip is $0 for now. Leave the due date and who pays empty, or add its cost first.`);
       return;
     }
-    const ok = await run(() =>
-      request(`${base}/costs/${target.id}/tips`, json("POST", {
+    const ok = await run(
+      () => request(`${base}/costs/${target.id}/tips`, json("POST", {
         ...value, due_on: due || null, payer_id: payerId, notes: notes || null,
       })),
+      setError,
     );
     if (ok) onDone();
   };
@@ -1128,7 +1149,7 @@ export function AddTipForm({
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-3" aria-label={target && fixedId ? `Add a tip for ${target.vendor_name}` : "Add a tip"}>
+    <form onSubmit={submit} onChange={clear} className="flex flex-wrap items-end gap-3" aria-label={target && fixedId ? `Add a tip for ${target.vendor_name}` : "Add a tip"}>
       {!fixedId && (
         <span className={`${fieldClass} sm:min-w-[14rem]`}>
           <label htmlFor={`${idPrefix}-for`} className="text-xs text-on-surface-variant">Which expense is the tip for?</label>
@@ -1169,8 +1190,8 @@ export function AddTipForm({
         />
       )}
       <button type="submit" disabled={busy} className={primaryButton}>Add tip</button>
-      <button type="button" onClick={onDone} className={linkButton}>Cancel</button>
-      {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
+      <button type="button" disabled={busy} onClick={onDone} className={linkButton}>Cancel</button>
+      <FormError error={error} />
     </form>
   );
 }
@@ -1190,7 +1211,7 @@ function TipEditForm({
   const [percent, setPercent] = useState(percentText(cost.tip_basis_points));
   const [amount, setAmount] = useState(cost.tip_basis_points === null ? centsToInput(cost.committed_cents) : "");
   const [notes, setNotes] = useState(cost.notes ?? "");
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, clear } = useFormError();
   const id = `tip-edit-${cost.id}`;
   const paid = cost.payments.some((p) => p.paid);
   const base_cents = cost.tip_base_cents ?? null;
@@ -1214,12 +1235,12 @@ function TipEditForm({
     if (!name.trim()) { setError("Please type a name for the tip."); return; }
     const ok = await run(() => request(`${base}/tips/${cost.id}`, json("PATCH", {
       vendor_name: name, ...value, notes: notes || null,
-    })));
+    })), setError);
     if (ok) onDone();
   };
 
   return (
-    <form onSubmit={save} className="flex flex-wrap items-end gap-3 mb-3" aria-label={`Edit ${cost.vendor_name}`}>
+    <form onSubmit={save} onChange={clear} className="flex flex-wrap items-end gap-3 mb-3" aria-label={`Edit ${cost.vendor_name}`}>
       {cost.tip_for_name && <p className="w-full text-sm text-on-surface">A tip for {cost.tip_for_name}</p>}
       <TextInput id={`${id}-name`} label="Line item name" value={name} onChange={setName} wide />
       <TipModePicker name={`${id}-mode`} mode={mode} onChange={setMode} />
@@ -1248,8 +1269,8 @@ function TipEditForm({
         />
       )}
       <button type="submit" disabled={busy} className={primaryButton}>Save</button>
-      <button type="button" onClick={onDone} className={linkButton}>Cancel</button>
-      {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
+      <button type="button" disabled={busy} onClick={onDone} className={linkButton}>Cancel</button>
+      <FormError error={error} />
     </form>
   );
 }
@@ -1273,7 +1294,7 @@ function CostEditForm({
   const [method, setMethod] = useState(cost.payment_method ?? "");
   const [link, setLink] = useState(cost.link_url ?? "");
   const [notes, setNotes] = useState(cost.notes ?? "");
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, clear } = useFormError();
   const id = cost.id;
 
   const save = async (e: FormEvent) => {
@@ -1286,7 +1307,7 @@ function CostEditForm({
       vendor_name: vendor, [box.field]: figure_cents, final_cents, contract_status: contract,
       payment_method: method || null, link_url: link || null, notes: notes || null,
       couple_vendor_id: vendorId || null,
-    })));
+    })), setError);
     if (ok) onDone();
   };
   const typedBoxes: (string | null)[] = box.field === "quoted_cents"
@@ -1304,7 +1325,7 @@ function CostEditForm({
   };
 
   return (
-    <form onSubmit={save} className="flex flex-wrap items-end gap-3 mb-3">
+    <form onSubmit={save} onChange={clear} className="flex flex-wrap items-end gap-3 mb-3">
       <TextInput id={`cost-name-${id}`} label="Line item name" value={vendor} onChange={setVendor} wide />
       <VendorSelect id={`cost-vendor-${id}`} vendors={vendors} value={vendorId} onChange={pickVendor} />
       <MoneyInput id={`cost-figure-${id}`} label="Estimate or quote" value={figure} onChange={setFigure} />
@@ -1343,8 +1364,8 @@ function CostEditForm({
         </p>
       )}
       <button type="submit" disabled={busy} className={primaryButton}>Save</button>
-      <button type="button" onClick={onDone} className={linkButton}>Cancel</button>
-      {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
+      <button type="button" disabled={busy} onClick={onDone} className={linkButton}>Cancel</button>
+      <FormError error={error} />
     </form>
   );
 }
@@ -1376,7 +1397,7 @@ function AddCostForm({
   const [due, setDue] = useState("");
   const [payer, setPayer] = useState("");
   const [notes, setNotes] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, clear } = useFormError();
   useReportDirty(
     `expense:${categoryId}`,
     !!(vendor || vendorId || figure || typedAmount || due || payer || notes) || kind !== "payment",
@@ -1392,14 +1413,15 @@ function AddCostForm({
       setError("Please enter the amount of this payment, or clear its due date and who paid to add the expense without one.");
       return;
     }
-    const ok = await run(() =>
-      request(`${base}/categories/${categoryId}/costs`, json("POST", {
+    const ok = await run(
+      () => request(`${base}/categories/${categoryId}/costs`, json("POST", {
         vendor_name: vendor, estimated_cents: figureCents, couple_vendor_id: vendorId || null,
         notes: notes || null,
         first_payment: amountCents
           ? { kind, amount_cents: amountCents, due_on: due || null, payer_id: payerId }
           : null,
       })),
+      setError,
     );
     if (ok) onAdded(vendor.trim());
   };
@@ -1418,7 +1440,7 @@ function AddCostForm({
   const ideas = suggestions.filter((s) => !used.has(s.toLowerCase()));
   const ideasId = `ideas-${categoryId}`;
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-3" aria-label={`Add an expense to ${categoryName}`}>
+    <form onSubmit={submit} onChange={clear} className="flex flex-wrap items-end gap-3" aria-label={`Add an expense to ${categoryName}`}>
       {ideas.length > 0 && (
         <div className="w-full">
           <p id={ideasId} className="text-xs text-on-surface-variant mb-1">Ideas for this category: tap one to use it as the name</p>
@@ -1428,7 +1450,7 @@ function AddCostForm({
                 key={idea}
                 type="button"
                 aria-pressed={vendor === idea}
-                onClick={() => setVendor(idea)}
+                onClick={() => { clear(); setVendor(idea); }}
                 className={`rounded-full border px-3 py-3 sm:py-1 text-xs ${vendor === idea ? "bg-primary text-on-primary border-primary" : "border-outline-variant/50 text-on-surface hover:border-primary"}`}
               >
                 {idea}
@@ -1463,7 +1485,7 @@ function AddCostForm({
         add more payments under it later, and fill in the actual cost once you know it.
       </p>
       <button type="submit" disabled={busy} className={primaryButton}>Add expense</button>
-      <button type="button" onClick={onCancel} className={linkButton}>Cancel</button>
+      <button type="button" disabled={busy} onClick={onCancel} className={linkButton}>Cancel</button>
       {overFigure > 0 && (
         <p role="status" className="w-full flex items-start gap-1 text-sm text-error">
           <Icon name="warning" size={16} className="mt-0.5" />
@@ -1474,7 +1496,7 @@ function AddCostForm({
         limits={limits} before={0}
         after={typedCost([null, null, figure], typeof typedAmountCents === "number" ? typedAmountCents : 0)}
       />
-      {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
+      <FormError error={error} />
     </form>
   );
 }
@@ -1557,8 +1579,11 @@ const KIND_LABEL = { deposit: "Deposit", payment: "Payment" } as const;
  * straight away and never ticks the payment paid (rule 4).
  */
 function WhoPaid({
-  base, payment, payers, canEdit, run, request, busy,
-}: { base: string; payment: Payment; payers: Payer[]; canEdit: boolean; run: Run; request: Req; busy: boolean }) {
+  base, payment, payers, canEdit, run, request, busy, onError,
+}: {
+  base: string; payment: Payment; payers: Payer[]; canEdit: boolean; run: Run; request: Req; busy: boolean;
+  onError: (message: string) => void;
+}) {
   if (payment.payer_name) {
     return <span className="block text-xs text-on-surface">{payment.paid ? "Paid by" : "To be paid by"} {payment.payer_name}</span>;
   }
@@ -1574,7 +1599,7 @@ function WhoPaid({
         id={id} value="" disabled={busy}
         onChange={(e) => {
           const picked = payerOrNull(payers, e.target.value);
-          if (picked) run(() => request(`${base}/payments/${payment.id}`, json("PATCH", { payer_id: picked })));
+          if (picked) run(() => request(`${base}/payments/${payment.id}`, json("PATCH", { payer_id: picked })), onError);
         }}
         className="bg-surface-container-low border border-outline-variant/40 rounded-full px-3 py-1 text-xs text-on-surface focus:border-primary focus:outline-none"
       >
@@ -1591,12 +1616,16 @@ function PaymentRow({
   const [confirm, setConfirm] = useState(false);
   const [confirmOverpay, setConfirmOverpay] = useState(false);
   const [editing, setEditing] = useState(false);
+  // Refusals of the row's own controls (the tick, who paid, remove); the edit form has its own.
+  const { error, setError, clear } = useFormError();
   const paidUrl = `${base}/payments/${payment.id}/paid`;
+  const act = (fn: () => Promise<unknown>) => { clear(); return run(fn, setError); };
 
   const tick = (checked: boolean) => {
+    clear();
     // A warning, not a block: the couple may really have paid more than agreed.
     if (checked && payment.would_overpay_cents > 0) { setConfirmOverpay(true); return; }
-    run(() => request(paidUrl, json("PUT", { paid: checked })));
+    act(() => request(paidUrl, json("PUT", { paid: checked })));
   };
 
   if (editing) {
@@ -1624,7 +1653,10 @@ function PaymentRow({
           </span>
         )}
         <span className={`block text-xs ${payment.paid ? "text-primary-text" : "text-on-surface-variant"}`}>{paidNote}</span>
-        <WhoPaid base={base} payment={payment} payers={payers} canEdit={canEdit && !cost.archived} run={run} request={request} busy={busy} />
+        <WhoPaid
+          base={base} payment={payment} payers={payers} canEdit={canEdit && !cost.archived} run={run} request={request} busy={busy}
+          onError={(message) => setError(message)}
+        />
         {payment.refundable && (
           <span className="block text-xs text-on-surface-variant">Tracked here, but not counted in the cost or in paid.</span>
         )}
@@ -1646,10 +1678,10 @@ function PaymentRow({
                 than the cost ({formatCents(cost.committed_cents)}). Tick it anyway?
               </span>
               <button type="button" disabled={busy} className={`text-error font-bold underline-offset-4 hover:underline ${tapArea}`}
-                onClick={async () => { setConfirmOverpay(false); await run(() => request(paidUrl, json("PUT", { paid: true }))); }}>
+                onClick={async () => { setConfirmOverpay(false); await act(() => request(paidUrl, json("PUT", { paid: true }))); }}>
                 Yes, tick it
               </button>
-              <button type="button" disabled={busy} onClick={() => setConfirmOverpay(false)} className={linkButton}>Cancel</button>
+              <button type="button" disabled={busy} onClick={() => { clear(); setConfirmOverpay(false); }} className={linkButton}>Cancel</button>
             </span>
           ) : (
             <label className="flex items-center gap-2 cursor-pointer min-h-11 sm:min-h-0">
@@ -1665,16 +1697,17 @@ function PaymentRow({
           )}
           {confirm ? (
             <Confirm busy={busy} text="Remove this payment?"
-              onYes={() => run(() => request(`${base}/payments/${payment.id}`, json("DELETE")))}
-              onNo={() => setConfirm(false)} />
+              onYes={() => act(() => request(`${base}/payments/${payment.id}`, json("DELETE")))}
+              onNo={() => { clear(); setConfirm(false); }} />
           ) : (
             <span className="flex gap-4">
-              <button type="button" onClick={() => setEditing(true)} className={linkButton}>Edit</button>
-              <button type="button" onClick={() => setConfirm(true)} className={dangerLink}>Remove</button>
+              <button type="button" onClick={() => { clear(); setEditing(true); }} className={linkButton}>Edit</button>
+              <button type="button" onClick={() => { clear(); setConfirm(true); }} className={dangerLink}>Remove</button>
             </span>
           )}
         </>
       )}
+      <FormError error={error} />
     </li>
   );
 }
@@ -1692,7 +1725,7 @@ function PaymentEditForm({
   const [link, setLink] = useState(payment.link_url ?? "");
   const [notes, setNotes] = useState(payment.notes ?? "");
   const [paidOn, setPaidOn] = useState(payment.paid_on ?? "");
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, clear } = useFormError();
   const id = payment.id;
 
   const save = async (e: FormEvent) => {
@@ -1701,19 +1734,20 @@ function PaymentEditForm({
     const cents = amountOrError(amount, setError);
     if (cents === undefined) return;
     if (!cents) { setError("Please enter how much this payment is."); return; }
-    const ok = await run(() =>
-      request(`${base}/payments/${id}`, json("PATCH", {
+    const ok = await run(
+      () => request(`${base}/payments/${id}`, json("PATCH", {
         kind, amount_cents: cents, due_on: dueOn || null, refundable,
         method: method || null, reference: reference || null, link_url: link || null, notes: notes || null,
         payer_id: payerOrNull(payers, payer),
         ...(payment.paid ? { paid_on: paidOn || null } : {}),
       })),
+      setError,
     );
     if (ok) onDone();
   };
 
   return (
-    <form onSubmit={save} className="flex flex-wrap items-end gap-3">
+    <form onSubmit={save} onChange={clear} className="flex flex-wrap items-end gap-3">
       <SelectInput id={`edit-kind-${id}`} label="Type" value={kind} onChange={(v) => setKind(v as "deposit" | "payment")}>
         <option value="deposit">Deposit</option>
         <option value="payment">Payment</option>
@@ -1743,8 +1777,8 @@ function PaymentEditForm({
       <LinkInput id={`edit-link-${id}`} value={link} onChange={setLink} />
       <NotesInput id={`edit-notes-${id}`} value={notes} onChange={setNotes} />
       <button type="submit" disabled={busy} className={primaryButton}>Save</button>
-      <button type="button" onClick={onDone} className={linkButton}>Cancel</button>
-      {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
+      <button type="button" disabled={busy} onClick={onDone} className={linkButton}>Cancel</button>
+      <FormError error={error} />
     </form>
   );
 }
@@ -1761,7 +1795,7 @@ function AddPaymentForm({
   // Starts as whoever paid this expense's latest payment (PD-016), until changed.
   const [pickedPayer, setPickedPayer] = useState<string | null>(null);
   const payer = pickedPayer ?? cost.last_payer_id ?? "";
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, clear } = useFormError();
   const costId = cost.id;
   useReportDirty(`payment:${costId}`, !!(amount || due || pickedPayer !== null) || refundable || kind !== firstKind);
 
@@ -1778,15 +1812,16 @@ function AddPaymentForm({
     const cents = amountOrError(amount, setError);
     if (cents === undefined) return;
     if (!cents) { setError("Please enter how much this payment is."); return; }
-    const ok = await run(() =>
-      request(`${base}/costs/${costId}/payments`, json("POST", {
+    const ok = await run(
+      () => request(`${base}/costs/${costId}/payments`, json("POST", {
         kind, amount_cents: cents, due_on: due || null, refundable, payer_id: payerOrNull(payers, payer),
       })),
+      setError,
     );
     if (ok) onDone();
   };
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-3 pt-2" aria-label={`Add a payment for ${cost.vendor_name}`}>
+    <form onSubmit={submit} onChange={clear} className="flex flex-wrap items-end gap-3 pt-2" aria-label={`Add a payment for ${cost.vendor_name}`}>
       <SelectInput id={`pay-kind-${costId}`} label="Type" value={kind} onChange={(v) => setKind(v as "deposit" | "payment")}>
         <option value="deposit">Deposit</option>
         <option value="payment">Payment</option>
@@ -1804,7 +1839,7 @@ function AddPaymentForm({
         <PayerSelect id={`pay-payer-${costId}`} payers={payers} value={payer} onChange={(v) => setPickedPayer(v)} />
       )}
       <button type="submit" disabled={busy} className={primaryButton}>Add payment</button>
-      <button type="button" onClick={onDone} className={linkButton}>Cancel</button>
+      <button type="button" disabled={busy} onClick={onDone} className={linkButton}>Cancel</button>
       {over > 0 && (
         <p role="status" className="w-full flex items-start gap-1 text-sm text-error">
           <Icon name="warning" size={16} className="mt-0.5" />
@@ -1812,7 +1847,7 @@ function AddPaymentForm({
           You can still add it.
         </p>
       )}
-      {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
+      <FormError error={error} />
     </form>
   );
 }
@@ -1828,18 +1863,21 @@ export function Contributions({
   const [who, setWho] = useState("");
   const [amount, setAmount] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, clear } = useFormError();
   const [confirm, setConfirm] = useState<string | null>(null);
   const catName = (id: string | null) => categories.find((c) => c.id === id)?.name;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    setError(null);
-    const cents = amountOrError(amount, setError);
+    clear();
+    // The add form's messages are "add"; a row's are its id.
+    const failed = (message: string | null) => setError(message, "add");
+    const cents = amountOrError(amount, failed);
     if (cents === undefined) return;
-    if (cents === null) { setError("Please enter how much they're contributing."); return; }
-    const ok = await run(() =>
-      request(`${base}/contributions`, json("POST", { contributor: who, amount_cents: cents, category_id: categoryId || null })),
+    if (cents === null) { failed("Please enter how much they're contributing."); return; }
+    const ok = await run(
+      () => request(`${base}/contributions`, json("POST", { contributor: who, amount_cents: cents, category_id: categoryId || null })),
+      failed,
     );
     if (ok) { setWho(""); setAmount(""); setCategoryId(""); }
   };
@@ -1869,18 +1907,19 @@ export function Contributions({
                 <span className="font-button-text text-on-surface">{formatCents(c.amount_cents)}</span>
                 {canEdit && (confirm === c.id ? (
                   <Confirm busy={busy} text="Remove this contribution?"
-                    onYes={() => run(() => request(`${base}/contributions/${c.id}`, json("DELETE")))}
-                    onNo={() => setConfirm(null)} />
+                    onYes={() => { clear(); run(() => request(`${base}/contributions/${c.id}`, json("DELETE")), (m) => setError(m, c.id)); }}
+                    onNo={() => { clear(); setConfirm(null); }} />
                 ) : (
-                  <button type="button" onClick={() => setConfirm(c.id)} className={dangerLink}>Remove</button>
+                  <button type="button" onClick={() => { clear(); setConfirm(c.id); }} className={dangerLink}>Remove</button>
                 ))}
               </span>
+              <FormError error={error} at={c.id} />
             </li>
           ))}
         </ul>
       )}
       {canEdit && (
-        <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+        <form onSubmit={submit} onChange={clear} className="flex flex-wrap items-end gap-3">
           <TextInput id="contrib-who" label="Who" value={who} onChange={setWho} placeholder="For example, Groom's parents" wide />
           <MoneyInput id="contrib-amount" label="Amount" value={amount} onChange={setAmount} required />
           <span className={fieldClass}>
@@ -1891,7 +1930,7 @@ export function Contributions({
             </select>
           </span>
           <button type="submit" disabled={busy} className={primaryButton}>Add contribution</button>
-          {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
+          <FormError error={error} at="add" />
         </form>
       )}
       </FoldBody>

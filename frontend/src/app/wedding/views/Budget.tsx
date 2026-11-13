@@ -17,6 +17,7 @@ import {
   linkButton, primaryButton, type OpenRequest, type Req,
 } from "./budget/parts";
 import { tipTargets } from "./budget/tips";
+import { FormError, useFormError } from "./budget/formError";
 import {
   FoldBody, FoldProvider, JumpBar, SECTIONS, SECTION_SCROLL, SectionHeading, scrollToElement, sectionId, useFolds,
 } from "./budget/sections";
@@ -61,7 +62,6 @@ function BudgetScreen() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [vendors, setVendors] = useState<VendorRef[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [openRequest, setOpenRequest] = useState<OpenRequest>(null);
   // Opening an expense (from Upcoming payments or All expenses) unfolds Categories first.
@@ -110,15 +110,14 @@ function BudgetScreen() {
   }, [load]);
 
   const run: Run = useCallback(
-    async (fn) => {
+    async (fn, onError) => {
       setBusy(true);
-      setError(null);
       try {
         await fn();
         await load();
         return true;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "That didn't work. Please try again.");
+        onError(err instanceof Error ? err.message : "That didn't work. Please try again.");
         return false;
       } finally {
         setBusy(false);
@@ -163,10 +162,6 @@ function BudgetScreen() {
           present={SECTIONS.map((s) => s.key).filter((k) =>
             (k !== "expenses" || overview.categories.some((c) => c.costs.length > 0)) && (k !== "export" || !!weddingId))}
         />
-      )}
-
-      {error && (
-        <p role="alert" className="mb-6 text-sm text-error">{error}</p>
       )}
 
       {loadError ? (
@@ -271,15 +266,16 @@ function TotalCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, clear } = useFormError();
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     const cents = parseDollars(value);
     if (cents === undefined) { setError(AMOUNT_HINT); return; }
-    const ok = await run(() =>
-      request(`${base}/total`, { method: "PUT", body: JSON.stringify({ total_cents: cents || null }) }),
+    const ok = await run(
+      () => request(`${base}/total`, { method: "PUT", body: JSON.stringify({ total_cents: cents || null }) }),
+      setError,
     );
     if (ok) setEditing(false);
   };
@@ -299,17 +295,17 @@ function TotalCard({
         )}
       </div>
       {editing ? (
-        <form onSubmit={save} className="flex flex-wrap items-end gap-3">
+        <form onSubmit={save} onChange={clear} className="flex flex-wrap items-end gap-3">
           <MoneyInput id="total-budget" label="Total budget (leave empty to clear)" value={value} onChange={setValue} />
           <button type="submit" disabled={busy} className={primaryButton}>Save</button>
-          <button type="button" onClick={() => setEditing(false)} className={linkButton}>Cancel</button>
-          {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
+          <button type="button" disabled={busy} onClick={() => { clear(); setEditing(false); }} className={linkButton}>Cancel</button>
+          <FormError error={error} />
         </form>
       ) : (
         canEdit && (
           <button
             type="button"
-            onClick={() => { setValue(centsToInput(totalCents)); setEditing(true); }}
+            onClick={() => { setValue(centsToInput(totalCents)); clear(); setEditing(true); }}
             className={linkButton}
           >
             {totalCents === null ? "Set your total" : "Change"}
@@ -329,7 +325,7 @@ function SplitPanel({
   const [amounts, setAmounts] = useState<string[]>([]);
   const [left, setLeft] = useState<boolean[]>([]);
   const [asking, setAsking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, clear } = useFormError();
 
   const ask = async () => {
     setAsking(true);
@@ -358,7 +354,7 @@ function SplitPanel({
   const noneLeft = !included.some(Boolean);
   const balanced = !invalid && !noneLeft && sum === total;
 
-  const toggleLine = (i: number) => setLeft((prev) => prev.map((v, j) => (j === i ? !v : v)));
+  const toggleLine = (i: number) => { clear(); setLeft((prev) => prev.map((v, j) => (j === i ? !v : v))); };
 
   const use = async () => {
     if (!suggestion) return;
@@ -367,8 +363,10 @@ function SplitPanel({
     const lines = suggestion.lines
       .map((l, i) => ({ name: l.name, planned_cents: parsed[i] as number }))
       .filter((_, i) => included[i]);
-    const ok = await run(() =>
-      request(`${base}/apply-split`, { method: "POST", body: JSON.stringify({ lines }) }),
+    setError(null);
+    const ok = await run(
+      () => request(`${base}/apply-split`, { method: "POST", body: JSON.stringify({ lines }) }),
+      setError,
     );
     if (ok) setSuggestion(null);
   };
@@ -384,13 +382,13 @@ function SplitPanel({
           The AI suggests how your total could be shared across categories. It only splits your own total and
           doesn't use vendor prices. Nothing changes until you choose to use it.
         </p>
-        {error && <p role="alert" className="text-sm text-error mt-2">{error}</p>}
+        <FormError error={error} className="mt-2" />
       </div>
     );
   }
 
   return (
-    <section aria-labelledby="split-heading" className="mb-10 bg-secondary-fixed/20 border border-secondary-fixed/50 rounded-[2rem] p-5">
+    <section aria-labelledby="split-heading" onChange={clear} className="mb-10 bg-secondary-fixed/20 border border-secondary-fixed/50 rounded-[2rem] p-5">
       <p className="font-label-caps text-[11px] text-secondary mb-1 flex items-center gap-1">
         <Icon name="auto_awesome" size={14} /> AI suggestion, not saved
       </p>
@@ -437,11 +435,11 @@ function SplitPanel({
         Using it sets the target for these categories and adds any new ones. Lines you leave out, other
         categories, vendor costs and payments stay as they are.
       </p>
-      {error && <p role="alert" className="text-sm text-error mb-3">{error}</p>}
       <div className="flex flex-wrap gap-4 items-center">
         <button type="button" onClick={use} disabled={busy || !balanced} className={primaryButton}>Use this split</button>
-        <button type="button" onClick={() => setSuggestion(null)} className={linkButton}>Discard</button>
+        <button type="button" onClick={() => { clear(); setSuggestion(null); }} className={linkButton}>Discard</button>
       </div>
+      <FormError error={error} className="mt-3" />
     </section>
   );
 }

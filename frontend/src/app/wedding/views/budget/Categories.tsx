@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../../shared/Icon";
 import { moveItem } from "./expenses";
 import { linkButton, primaryButton } from "./parts";
+import { FormError, useFormError } from "./formError";
 import type { Category, Run } from "./types";
 
 type Req = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
@@ -19,6 +20,7 @@ export function DefaultCategoriesOffer({
 }) {
   const [picked, setPicked] = useState<string[]>(missing);
   const [hidden, setHidden] = useState(false);
+  const { error, setError, clear } = useFormError();
   const key = missing.join("|");
   // A new list from the API (one was added or removed elsewhere): start fully ticked again.
   useEffect(() => { setPicked(key ? key.split("|") : []); }, [key]);
@@ -29,7 +31,7 @@ export function DefaultCategoriesOffer({
     <button
       type="button"
       disabled={busy}
-      onClick={() => run(() => request(`${base}/categories/defaults/restore`, { method: "POST" }))}
+      onClick={() => { clear(); run(() => request(`${base}/categories/defaults/restore`, { method: "POST" }), setError); }}
       className={`${linkButton} text-xs`}
     >
       Show suggestions you removed ({removed.length})
@@ -37,13 +39,18 @@ export function DefaultCategoriesOffer({
   );
 
   if (missing.length === 0) {
-    return <p className="mb-6">{showRemoved}</p>;
+    return (
+      <div className="mb-6">
+        <p>{showRemoved}</p>
+        <FormError error={error} className="mt-2" />
+      </div>
+    );
   }
 
   if (hidden) {
     return (
       <p className="mb-6">
-        <button type="button" onClick={() => setHidden(false)} className={linkButton}>
+        <button type="button" onClick={() => { clear(); setHidden(false); }} className={linkButton}>
           Show the suggested categories ({missing.length})
         </button>
       </p>
@@ -52,8 +59,10 @@ export function DefaultCategoriesOffer({
 
   const toggle = (name: string) =>
     setPicked((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
-  const add = () =>
-    run(() => request(`${base}/categories/defaults`, { method: "POST", body: JSON.stringify({ names: picked }) }));
+  const add = () => {
+    clear();
+    run(() => request(`${base}/categories/defaults`, { method: "POST", body: JSON.stringify({ names: picked }) }), setError);
+  };
   const count = picked.length;
 
   return (
@@ -66,7 +75,7 @@ export function DefaultCategoriesOffer({
         {" "}Each starts with no target, so set one when you're ready. When you add an expense, each category offers
         ideas such as Photographer or Invitations. Contingency is money kept aside for costs you didn't plan for.
       </p>
-      <fieldset className="mb-4">
+      <fieldset className="mb-4" onChange={clear}>
         <legend className="sr-only">Categories to add</legend>
         <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
           {missing.map((name) => (
@@ -90,9 +99,10 @@ export function DefaultCategoriesOffer({
             ? "Add the suggested categories"
             : `Add ${count} ${count === 1 ? "category" : "categories"}`}
         </button>
-        <button type="button" onClick={() => setHidden(true)} className={linkButton}>Not now</button>
+        <button type="button" onClick={() => { clear(); setHidden(true); }} className={linkButton}>Not now</button>
         {showRemoved}
       </div>
+      <FormError error={error} className="mt-3" />
     </section>
   );
 }
@@ -107,6 +117,7 @@ export function CategoryOrder({
   const [open, setOpen] = useState(false);
   const [dragging, setDragging] = useState<number | null>(null);
   const [announce, setAnnounce] = useState("");
+  const { error, setError, clear } = useFormError();
   const buttons = useRef(new Map<string, HTMLButtonElement | null>());
   const refocus = useRef<string | null>(null);
   const ids = categories.map((c) => c.id);
@@ -129,8 +140,10 @@ export function CategoryOrder({
     const next = moveItem(ids, from, to);
     if (next === ids) return;
     const name = categories[from].name;
-    const ok = await run(() =>
-      request(`${base}/categories/order`, { method: "PUT", body: JSON.stringify({ category_ids: next }) }),
+    clear();
+    const ok = await run(
+      () => request(`${base}/categories/order`, { method: "PUT", body: JSON.stringify({ category_ids: next }) }),
+      setError,
     );
     if (ok) {
       if (dir) refocus.current = `${ids[from]}:${dir}`;
@@ -140,7 +153,7 @@ export function CategoryOrder({
 
   return (
     <div className="mb-6">
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className={linkButton}>
+      <button type="button" onClick={() => { clear(); setOpen((o) => !o); }} aria-expanded={open} className={linkButton}>
         {open ? "Done changing the order" : "Change the order of categories"}
       </button>
       <p aria-live="polite" className="sr-only">{announce}</p>
@@ -186,6 +199,7 @@ export function CategoryOrder({
               </li>
             ))}
           </ol>
+          <FormError error={error} className="mt-2" />
         </>
       )}
     </div>

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import {
   Confirm, PAYERS_INPUT_ID, TextInput, dangerLink, json, linkButton, primaryButton, type Req,
 } from "./parts";
+import { FormError, useFormError } from "./formError";
 import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId } from "./sections";
 import type { Payer, Run } from "./types";
 
@@ -19,16 +20,26 @@ export function Payers({
   const [editing, setEditing] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [confirm, setConfirm] = useState<string | null>(null);
+  // One message at a time: "add" for the add form, or the row (a payer's id) it's about.
+  const { error, setError, clear } = useFormError();
+  const failed = (at: string) => (message: string) => setError(message, at);
 
   const add = async (e: FormEvent) => {
     e.preventDefault();
-    const ok = await run(() => request(`${base}/payers`, json("POST", { name })));
+    clear();
+    const ok = await run(() => request(`${base}/payers`, json("POST", { name })), failed("add"));
     if (ok) setName("");
   };
   const rename = async (e: FormEvent, id: string) => {
     e.preventDefault();
-    const ok = await run(() => request(`${base}/payers/${id}`, json("PATCH", { name: newName })));
+    clear();
+    const ok = await run(() => request(`${base}/payers/${id}`, json("PATCH", { name: newName })), failed(id));
     if (ok) setEditing(null);
+  };
+  const remove = async (id: string) => {
+    clear();
+    const ok = await run(() => request(`${base}/payers/${id}`, json("DELETE")), failed(id));
+    if (ok) setConfirm(null);
   };
 
   return (
@@ -49,10 +60,11 @@ export function Payers({
             {payers.map((p) => (
               <li key={p.id} className="py-3 flex flex-wrap items-center justify-between gap-2">
                 {editing === p.id ? (
-                  <form onSubmit={(e) => rename(e, p.id)} className="flex flex-wrap items-end gap-3 w-full">
+                  <form onSubmit={(e) => rename(e, p.id)} onChange={clear} className="flex flex-wrap items-end gap-3 w-full">
                     <TextInput id={`payer-name-${p.id}`} label="Name" value={newName} onChange={setNewName} wide />
                     <button type="submit" disabled={busy} className={primaryButton}>Save</button>
-                    <button type="button" onClick={() => setEditing(null)} className={linkButton}>Cancel</button>
+                    <button type="button" disabled={busy} onClick={() => { clear(); setEditing(null); }} className={linkButton}>Cancel</button>
+                    <FormError error={error} at={p.id} />
                   </form>
                 ) : (
                   <>
@@ -73,19 +85,20 @@ export function Payers({
                         </span>
                       ) : (
                         <Confirm busy={busy} text={`Remove ${p.name} from the list?`}
-                          onYes={async () => { const ok = await run(() => request(`${base}/payers/${p.id}`, json("DELETE"))); if (ok) setConfirm(null); }}
-                          onNo={() => setConfirm(null)} />
+                          onYes={() => remove(p.id)}
+                          onNo={() => { clear(); setConfirm(null); }} />
                       )
                     ) : (
                       <span className="flex gap-4">
-                        <button type="button" onClick={() => { setNewName(p.name); setEditing(p.id); }} className={linkButton}>
+                        <button type="button" onClick={() => { clear(); setNewName(p.name); setEditing(p.id); }} className={linkButton}>
                           Rename<span className="sr-only"> {p.name}</span>
                         </button>
-                        <button type="button" onClick={() => setConfirm(p.id)} className={dangerLink}>
+                        <button type="button" onClick={() => { clear(); setConfirm(p.id); }} className={dangerLink}>
                           Remove<span className="sr-only"> {p.name}</span>
                         </button>
                       </span>
                     ))}
+                    {confirm === p.id && <FormError error={error} at={p.id} />}
                   </>
                 )}
               </li>
@@ -93,9 +106,10 @@ export function Payers({
           </ul>
         )}
         {canEdit && (
-          <form onSubmit={add} className="flex flex-wrap items-end gap-3">
+          <form onSubmit={add} onChange={clear} className="flex flex-wrap items-end gap-3">
             <TextInput id={PAYERS_INPUT_ID} label="Name" value={name} onChange={setName} placeholder="For example, Both of us" wide />
             <button type="submit" disabled={busy} className={primaryButton}>Add person</button>
+            <FormError error={error} at="add" />
           </form>
         )}
       </FoldBody>
