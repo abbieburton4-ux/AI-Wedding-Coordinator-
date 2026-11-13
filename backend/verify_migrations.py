@@ -629,6 +629,27 @@ def main() -> None:
             "SELECT wedding_id, email, level, user_id FROM wedding_members"
         )).fetchall()
     assert [tuple(r) for r in rows] == [("w1", "couple@example.test", "owner", "u1")], rows
+    # The migrated table, as production has it, refuses the same email twice on one
+    # wedding (uq_wedding_member_email, B34) but allows it on another wedding.
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO wedding_members (id, wedding_id, email, level, created_at) "
+                "VALUES ('dup1', 'w1', 'couple@example.test', 'viewer', '2026-01-02')"))
+        raise AssertionError("wedding_members accepted the same email twice on one wedding")
+    except sa.exc.IntegrityError as exc:
+        assert "unique" in str(exc.orig).lower(), exc.orig
+    with engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO weddings (id, couple_user_id, region, ceremony_type, "
+            "guest_count_estimate, currency, status, created_at) "
+            "VALUES ('w_dup', 'u1', 'Sligo', 'Civil', 10, 'EUR', 'intake', '2026-01-01')"))
+        conn.execute(text(
+            "INSERT INTO wedding_members (id, wedding_id, email, level, created_at) "
+            "VALUES ('dup2', 'w_dup', 'couple@example.test', 'viewer', '2026-01-02')"))
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM wedding_members WHERE id = 'dup2'"))
+        conn.execute(text("DELETE FROM weddings WHERE id = 'w_dup'"))
 
     print("3b. Checking that 0003 leaves existing weddings with no budget total set...")
     with engine.connect() as conn:

@@ -113,11 +113,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS dynamically for local Vite development and deployed GitHub Pages
+# The published app serves the screens and the API from one address, so its own
+# requests are same-origin and need no CORS entry. Only the local Vite dev server
+# (a different port) is allowed to call the API cross-origin.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[] if settings.FRONTEND_DIST_DIR else [
-        "https://alanmaizon.github.io",
         "http://localhost:5173",
         "http://127.0.0.1:5173"
     ],
