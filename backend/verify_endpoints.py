@@ -38,7 +38,22 @@ def test_api_suite():
         res = c.get("/api/v1/health")
         assert res.status_code == 200
         assert res.json()["status"] == "healthy"
-        
+
+        # Only the local dev server may call the API from another address (B33). The
+        # published app serves its screens from the API's own address, so needs no entry.
+        def preflight(origin):
+            return c.options("/api/v1/health", headers={
+                "Origin": origin, "Access-Control-Request-Method": "GET"})
+        for upstream in ("https://alanmaizon.github.io", "https://venueflow.ie"):
+            res = preflight(upstream)
+            assert res.status_code == 400, (upstream, res.status_code)
+            assert "access-control-allow-origin" not in res.headers, upstream
+        for local in ("http://localhost:5173", "http://127.0.0.1:5173"):
+            res = preflight(local)
+            assert res.status_code == 200, (local, res.status_code)
+            assert res.headers["access-control-allow-origin"] == local
+        print("   * CORS: the local dev server is allowed; VenueFlow's original sites aren't")
+
         # 3. Auth Router (the legacy planner login was removed in PD-003)
         print("3. Verifying dev sign-in and that the legacy business routes are gone...")
         token = "mock-couple_test"
@@ -418,6 +433,33 @@ def test_api_suite():
         assert c.delete(f"{members_url}/{uncle_id}", headers=headers).status_code == 404
         assert "uncle@example.test" not in [m["email"] for m in c.get(members_url, headers=headers).json()]
         print("   * Access list: an owner can add, change and remove people; nothing is sent")
+
+        # The database itself refuses a second row for the same email on one wedding
+        # (uq_wedding_member_email, B34), even when a write skips the API's own check.
+        # Every write path stores the address through normalise_email, so equal stored
+        # values are exactly the addresses the app treats as the same.
+        from sqlalchemy.exc import IntegrityError as DbIntegrityError
+        from app.db.models import Wedding
+        with Session(sync_engine) as s:
+            s.add(WeddingMember(wedding_id=wedding_id, email="aunt@example.test",
+                                level="viewer"))
+            try:
+                s.commit()
+                raise AssertionError("the database accepted a duplicate access-list email")
+            except DbIntegrityError as exc:
+                assert "unique" in str(exc.orig).lower(), exc.orig
+                s.rollback()
+            other_wedding = s.exec(sync_select(Wedding.id).where(Wedding.id != wedding_id)).first()
+            assert other_wedding is not None, "the seed has another wedding"
+            elsewhere = WeddingMember(wedding_id=other_wedding, email="aunt@example.test",
+                                      level="viewer")
+            s.add(elsewhere)
+            s.commit()  # the same email on a different wedding is unaffected
+            s.delete(elsewhere)
+            s.commit()
+        assert [m["email"] for m in c.get(members_url, headers=headers).json()].count(
+            "aunt@example.test") == 1
+        print("   * Access list: the database refuses the same email twice on one wedding")
 
         # An owner of another wedding (couple_2, seeded) can't reach this wedding's rows.
         assert c.delete(f"/api/v1/weddings/wedding_planning_test/members/{aunt_id}",
