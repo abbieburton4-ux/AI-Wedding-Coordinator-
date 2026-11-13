@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Icon } from "../../shared/Icon";
 import { SampleDataNotice } from "../../shared/SampleDataNotice";
 import { useApi, USE_FASTAPI_BACKEND } from "../../api";
@@ -10,6 +10,7 @@ import { ExpenseList, type CategoryRequest } from "./budget/ExpenseList";
 import { UpcomingPayments } from "./budget/Upcoming";
 import { BudgetExport } from "./budget/Export";
 import { Payers } from "./budget/Payers";
+import { AddFormsProvider, focusFirstField, useAddForm, useOpenAddForm } from "./budget/addForms";
 import { AMOUNT_HINT, centsToInput, formatCents, parseDollars } from "./budget/money";
 import {
   AddCategoryForm, AddTipForm, CategoryCard, Contributions, MethodSuggestions, MoneyInput, fieldClass, inputClass, limitsFor,
@@ -41,7 +42,9 @@ export function Budget() {
   const { activeWedding } = useActiveWedding();
   return (
     <FoldProvider weddingId={activeWedding?.id ?? null}>
-      <BudgetScreen />
+      <AddFormsProvider>
+        <BudgetScreen />
+      </AddFormsProvider>
     </FoldProvider>
   );
 }
@@ -451,6 +454,7 @@ function AddExpenseStart({
   categories, hasSuggestions, onPick,
 }: { categories: Category[]; hasSuggestions: boolean; onPick: (categoryId: string) => void }) {
   const folds = useFolds();
+  const openForm = useOpenAddForm();
   const [asking, setAsking] = useState(false);
   const [picked, setPicked] = useState("");
   // The list can reload while this is open; never pick a category that's gone.
@@ -502,6 +506,8 @@ function AddExpenseStart({
       onSubmit={(e) => {
         e.preventDefault();
         if (!target) return;
+        // Kept open, with focus where it was, if the couple keep what they typed elsewhere.
+        if (!openForm(`expense:${target}`)) return;
         setAsking(false);
         onPick(target);
       }}
@@ -529,23 +535,25 @@ function AddExpenseStart({
 function AddTipStart({
   base, categories, totals, payers, run, request, busy,
 }: { base: string; categories: Category[]; totals: Totals; payers: Payer[]; run: Run; request: Req; busy: boolean }) {
-  const [open, setOpen] = useState(false);
+  const adder = useAddForm("tip:main");
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (adder.isOpen) focusFirstField(box.current); }, [adder.isOpen]);
   const targets = categories.flatMap((cat) => tipTargets(cat.costs).map((cost) => ({
     cost, categoryName: cat.name, limits: limitsFor(cat, totals),
   })));
   return (
     <div className="mt-3">
       <button
-        type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
+        ref={adder.opener} type="button" onClick={adder.toggle} aria-expanded={adder.isOpen}
         className="inline-flex items-center gap-1 rounded-full border border-primary px-4 py-2.5 sm:py-1.5 text-sm text-primary-text hover:bg-primary hover:text-on-primary"
       >
         <Icon name="volunteer_activism" size={16} /> Add tip
       </button>
-      {open && (
-        <div className="mt-3 bg-surface-container-lowest rounded-[1.5rem] border border-outline-variant/20 p-4">
+      {adder.isOpen && (
+        <div ref={box} className="mt-3 bg-surface-container-lowest rounded-[1.5rem] border border-outline-variant/20 p-4">
           <AddTipForm
             base={base} targets={targets} payers={payers} run={run} request={request} busy={busy}
-            idPrefix="main-tip" onDone={() => setOpen(false)}
+            idPrefix="main-tip" formKey="tip:main" onDone={() => adder.close()}
           />
         </div>
       )}
