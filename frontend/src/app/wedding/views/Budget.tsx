@@ -213,9 +213,6 @@ function BudgetScreen() {
                   : "No categories yet."}
               </p>
             )}
-            {canEdit && (
-              <MoveMoney base={base} categories={overview.categories} run={run} request={request} busy={busy} />
-            )}
             {canEdit && (overview.missing_default_categories.length > 0
               || overview.removed_default_categories.length > 0) && (
               <div id={SUGGESTIONS_ID} tabIndex={-1} className={`${SECTION_SCROLL} focus:outline-none`}>
@@ -238,6 +235,9 @@ function BudgetScreen() {
               ))}
             </div>
             {canEdit && <AddCategoryForm base={base} run={run} request={request} busy={busy} />}
+            {canEdit && (
+              <MoveMoney weddingId={weddingId} base={base} categories={overview.categories} run={run} request={request} busy={busy} />
+            )}
             {canEdit && <MethodSuggestions />}
             </FoldBody>
           </section>

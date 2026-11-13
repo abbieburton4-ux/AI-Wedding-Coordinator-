@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Icon } from "../../../shared/Icon";
 import { AMOUNT_HINT, committedLabel, formatCents, parseDollars } from "./money";
 import { MoneyInput, fieldClass, inputClass, linkButton, overpaidNote, primaryButton } from "./parts";
+import { FoldChevron, useRememberedFolds } from "../folds";
 import { FoldBody, SECTION_SCROLL, SectionHeading, scrollToElement, sectionId, tapArea, useFolds } from "./sections";
 import { Bar, Chip, type Tone } from "./status";
 import type { Category, Overview, Run } from "./types";
@@ -228,13 +229,22 @@ function Warning({ children }: { children: ReactNode }) {
   );
 }
 
+// The move box starts folded (B95), but the shared folds hook lists what's folded and starts
+// everything open. So this one stores the opposite: "move" is listed while it's open.
+const MOVE_KEYS = ["move"] as const;
+
 /**
  * "Move $X from A to B": lowers one target and raises another in one step on the
- * server, so the two always change together. A target can't go below 0.
+ * server, so the two always change together. A target can't go below 0. Folded to
+ * its heading until opened; each device remembers, per wedding. The page's "Expand
+ * all" and "Collapse all" leave it as it is, since they fold whole sections.
  */
 export function MoveMoney({
-  base, categories, run, request, busy,
-}: { base: string; categories: Category[]; run: Run; request: Req; busy: boolean }) {
+  weddingId, base, categories, run, request, busy,
+}: { weddingId: string | null; base: string; categories: Category[]; run: Run; request: Req; busy: boolean }) {
+  const remembered = useRememberedFolds(weddingId ? `venueflow.budgetMoveOpen.${weddingId}` : null, MOVE_KEYS);
+  const isOpen = remembered.folded("move");
+  const bodyId = useId();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
@@ -272,53 +282,68 @@ export function MoveMoney({
     }
   };
 
+  // Top margin only: it sits last in Categories, after the add form, which has no bottom margin.
   return (
-    <section aria-labelledby="move-heading" className="mb-8 bg-surface-container-lowest rounded-[1.5rem] border border-outline-variant/20 p-5">
-      <h3 id="move-heading" className="font-headline-sm text-lg text-on-surface mb-1">Move money between categories</h3>
-      <p className="text-xs text-on-surface-variant mb-3">
-        Lowers one category's target and raises another's by the same amount. Your total, expenses and payments stay as they are.
-      </p>
-      {withMoney.length === 0 ? (
-        <p className="text-sm text-on-surface-variant">Give a category a target first, then you can move money out of it.</p>
-      ) : (
-        <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
-          <MoneyInput id="move-amount" label="Move" value={amount} onChange={(v) => { setAmount(v); setDone(null); }} required />
-          <span className={fieldClass}>
-            <label htmlFor="move-from" className="text-xs text-on-surface-variant">From</label>
-            <select id="move-from" value={from} onChange={(e) => { setFrom(e.target.value); setDone(null); }} className={inputClass} required>
-              <option value="">Choose a category</option>
-              {withMoney.map((c) => (
-                <option key={c.id} value={c.id}>{c.name} ({formatCents(c.planned_cents as number)})</option>
-              ))}
-            </select>
-          </span>
-          <span className={fieldClass}>
-            <label htmlFor="move-to" className="text-xs text-on-surface-variant">To</label>
-            <select id="move-to" value={to} onChange={(e) => setTo(e.target.value)} className={inputClass} required>
-              <option value="">Choose a category</option>
-              {categories.filter((c) => c.id !== from).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.planned_cents === null ? "no target" : formatCents(c.planned_cents)})
-                </option>
-              ))}
-            </select>
-          </span>
-          <button type="submit" disabled={busy} className={primaryButton}>Move money</button>
-          {source && dest && typeof cents === "number" && cents > 0 && !tooMuch && (
-            <p className="w-full text-sm text-on-surface-variant" aria-live="polite">
-              {source.name}: {formatCents(available)} to {formatCents(available - cents)}.{" "}
-              {dest.name}: {formatCents(dest.planned_cents ?? 0)} to {formatCents((dest.planned_cents ?? 0) + cents)}.
-            </p>
-          )}
-          {tooMuch && source && (
-            <p className="w-full text-sm text-error" aria-live="polite">
-              {source.name} only has {formatCents(available)} in its target, so you can move up to that.
-            </p>
-          )}
-          {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
-          {done && <p role="status" className="w-full text-sm text-on-surface">{done}</p>}
-        </form>
-      )}
+    <section aria-labelledby="move-heading" className="mt-8 bg-surface-container-lowest rounded-[1.5rem] border border-outline-variant/20 p-5">
+      <h3 id="move-heading" className="font-headline-sm text-lg text-on-surface">
+        <button
+          type="button"
+          aria-expanded={isOpen}
+          aria-controls={bodyId}
+          onClick={() => remembered.toggle("move")}
+          className="flex w-full items-center justify-between gap-2 text-left hover:text-primary-text rounded-md min-h-11 sm:min-h-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+        >
+          Move money between categories
+          <FoldChevron folded={!isOpen} />
+        </button>
+      </h3>
+      {/* Kept mounted while folded, so a half-filled form survives a fold. */}
+      <div id={bodyId} hidden={!isOpen} className="mt-1">
+        <p className="text-xs text-on-surface-variant mb-3">
+          Lowers one category's target and raises another's by the same amount. Your total, expenses and payments stay as they are.
+        </p>
+        {withMoney.length === 0 ? (
+          <p className="text-sm text-on-surface-variant">Give a category a target first, then you can move money out of it.</p>
+        ) : (
+          <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+            <MoneyInput id="move-amount" label="Move" value={amount} onChange={(v) => { setAmount(v); setDone(null); }} required />
+            <span className={fieldClass}>
+              <label htmlFor="move-from" className="text-xs text-on-surface-variant">From</label>
+              <select id="move-from" value={from} onChange={(e) => { setFrom(e.target.value); setDone(null); }} className={inputClass} required>
+                <option value="">Choose a category</option>
+                {withMoney.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} ({formatCents(c.planned_cents as number)})</option>
+                ))}
+              </select>
+            </span>
+            <span className={fieldClass}>
+              <label htmlFor="move-to" className="text-xs text-on-surface-variant">To</label>
+              <select id="move-to" value={to} onChange={(e) => setTo(e.target.value)} className={inputClass} required>
+                <option value="">Choose a category</option>
+                {categories.filter((c) => c.id !== from).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.planned_cents === null ? "no target" : formatCents(c.planned_cents)})
+                  </option>
+                ))}
+              </select>
+            </span>
+            <button type="submit" disabled={busy} className={primaryButton}>Move money</button>
+            {source && dest && typeof cents === "number" && cents > 0 && !tooMuch && (
+              <p className="w-full text-sm text-on-surface-variant" aria-live="polite">
+                {source.name}: {formatCents(available)} to {formatCents(available - cents)}.{" "}
+                {dest.name}: {formatCents(dest.planned_cents ?? 0)} to {formatCents((dest.planned_cents ?? 0) + cents)}.
+              </p>
+            )}
+            {tooMuch && source && (
+              <p className="w-full text-sm text-error" aria-live="polite">
+                {source.name} only has {formatCents(available)} in its target, so you can move up to that.
+              </p>
+            )}
+            {error && <p role="alert" className="w-full text-sm text-error">{error}</p>}
+            {done && <p role="status" className="w-full text-sm text-on-surface">{done}</p>}
+          </form>
+        )}
+      </div>
     </section>
   );
 }
