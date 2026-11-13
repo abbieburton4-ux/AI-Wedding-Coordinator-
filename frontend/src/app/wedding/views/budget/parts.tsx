@@ -9,6 +9,7 @@ import { PERCENT_HINT, parsePercent, percentOf, percentText, tipBase, tipPayment
 import { costBox, expenseCost, wouldGoOver } from "./forecast";
 import { FoldBody, SECTION_SCROLL, SectionHeading, sectionId, tapArea, useFolds } from "./sections";
 import { Bar, Chip, TargetChip, targetTone } from "./status";
+import { focusFirstField, useAddForm, useReportDirty } from "./addForms";
 import type {
   Category, ContractStatus, Contribution, Cost, ExpenseStatus, Payer, Payment, Run, Totals, VendorRef,
 } from "./types";
@@ -164,15 +165,29 @@ export function CategoryCard({
   const [open, setOpen] = useState(category.costs.length > 0);
   const [showArchived, setShowArchived] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  // Each "Add expense" click counts up, so a click on a card that's already open still
-  // moves to the form (setting open to true again wouldn't re-render).
+  // The Add expense form opens only when asked for (PD-020). Each ask counts up, so an
+  // ask while it's already open still moves to it (opening again wouldn't re-render).
+  const adder = useAddForm(`expense:${category.id}`);
   const [addTick, setAddTick] = useState(0);
+  // After a save the form closes and an "Add another" link stands in for it.
+  const [justAdded, setJustAdded] = useState<string | null>(null);
+  const [addedTick, setAddedTick] = useState(0);
+  const addAnotherRef = useRef<HTMLButtonElement>(null);
   const addInputId = `new-cost-${category.id}`;
   const rename = venueRename(category, categories);
 
-  const startAdding = () => { setOpen(true); setAddTick((t) => t + 1); };
+  const startAdding = () => {
+    if (!adder.open()) return;
+    setJustAdded(null);
+    setOpen(true);
+    setAddTick((t) => t + 1);
+  };
+  const toggleAdding = () => {
+    if (adder.isOpen) adder.close(true);
+    else startAdding();
+  };
   useEffect(() => {
-    if (addTick === 0 || !open) return;
+    if (addTick === 0 || !adder.isOpen) return;
     const input = document.getElementById(addInputId);
     if (!input) return;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -180,6 +195,17 @@ export function CategoryCard({
     input.focus({ preventScroll: true });
     // Only a new click moves focus; other re-renders don't.
   }, [addTick]);
+  useEffect(() => {
+    if (addedTick > 0) addAnotherRef.current?.focus();
+  }, [addedTick]);
+  const added = (name: string) => {
+    // Another form opened while this one was saving: leave that one alone.
+    if (!adder.isCurrent()) return;
+    adder.closeQuietly();
+    setOpen(true);
+    setJustAdded(name);
+    setAddedTick((t) => t + 1);
+  };
   useEffect(() => {
     if (!addRequest || addRequest.id !== category.id) return;
     startAdding();
@@ -333,7 +359,7 @@ export function CategoryCard({
         </button>
         {canEdit && (
           <button
-            type="button" onClick={startAdding}
+            ref={adder.opener} type="button" onClick={toggleAdding} aria-expanded={adder.isOpen}
             className="inline-flex items-center gap-1 rounded-full border border-primary px-4 py-2.5 sm:py-1.5 text-sm text-primary-text hover:bg-primary hover:text-on-primary"
           >
             <Icon name="add" size={16} /> Add expense<span className="sr-only"> to {category.name}</span>
@@ -358,13 +384,29 @@ export function CategoryCard({
               ))}
             </>
           )}
-          {canEdit && (
-            <AddCostForm
-              base={base} categoryId={category.id} limits={limits} vendors={vendors} payers={payers} run={run} request={request} busy={busy}
-              suggestions={category.suggestions} taken={active.map((c) => c.vendor_name)}
-            />
-          )}
         </div>
+      )}
+      {/* Outside the expenses fold, so hiding the expenses never loses a half-typed form. */}
+      {canEdit && adder.isOpen && (
+        <div className="mt-4 border-t border-outline-variant/20 pt-4">
+          <AddCostForm
+            base={base} categoryId={category.id} categoryName={category.name} limits={limits} vendors={vendors} payers={payers}
+            run={run} request={request} busy={busy}
+            suggestions={category.suggestions} taken={active.map((c) => c.vendor_name)}
+            onAdded={added} onCancel={() => adder.close()}
+          />
+        </div>
+      )}
+      {canEdit && !adder.isOpen && justAdded !== null && (
+        <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <span id={`added-${category.id}`} role="status" className="text-on-surface">Added {justAdded}.</span>
+          <button
+            ref={addAnotherRef} type="button" onClick={startAdding} aria-describedby={`added-${category.id}`}
+            className={`${linkButton} text-primary-text font-bold`}
+          >
+            Add another<span className="sr-only"> expense to {category.name}</span>
+          </button>
+        </p>
       )}
     </section>
   );
@@ -640,7 +682,10 @@ function CostBlock({
   const [confirm, setConfirm] = useState(false);
   const [confirmCopy, setConfirmCopy] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
-  const [addingTip, setAddingTip] = useState(false);
+  const tipAdder = useAddForm(`tip:${cost.id}`);
+  const payAdder = useAddForm(`payment:${cost.id}`);
+  const tipBox = useRef<HTMLDivElement>(null);
+  const payBox = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const isTip = cost.tip_state !== null;
   const tips = siblings.filter((c) => cost.tip_ids.includes(c.id));
@@ -650,6 +695,10 @@ function CostBlock({
     run(() => request(`${base}/costs/${cost.id}${choice ? `?tips=${choice}` : ""}`, json("PATCH", { archived: !cost.archived })));
   const remove = (choice?: "remove" | "keep") =>
     run(() => request(`${base}/costs/${cost.id}${choice ? `?tips=${choice}` : ""}`, json("DELETE")));
+
+  // Focus moves into an add form when it opens (its button gets it back on close).
+  useEffect(() => { if (tipAdder.isOpen) focusFirstField(tipBox.current); }, [tipAdder.isOpen]);
+  useEffect(() => { if (payAdder.isOpen) focusFirstField(payBox.current); }, [payAdder.isOpen]);
 
   useEffect(() => {
     if (!focus || !box.current) return;
@@ -719,7 +768,7 @@ function CostBlock({
                 <button type="button" onClick={() => setConfirmCopy(true)} className={linkButton}>Duplicate</button>
                 {!isTip && !cost.archived && (
                   <button
-                    type="button" onClick={() => setAddingTip((a) => !a)} aria-expanded={addingTip}
+                    ref={tipAdder.opener} type="button" onClick={tipAdder.toggle} aria-expanded={tipAdder.isOpen}
                     className={linkButton}
                   >
                     Add tip<span className="sr-only"> for {cost.vendor_name}</span>
@@ -804,11 +853,12 @@ function CostBlock({
         </div>
       )}
 
-      {canEdit && addingTip && !isTip && !cost.archived && (
-        <div className="border-t border-outline-variant/20 pt-3 mb-3">
+      {canEdit && tipAdder.isOpen && !isTip && !cost.archived && (
+        <div ref={tipBox} className="border-t border-outline-variant/20 pt-3 mb-3">
           <AddTipForm
             base={base} targets={[{ cost, categoryName, limits }]} fixedId={cost.id} payers={payers}
-            run={run} request={request} busy={busy} idPrefix={`tip-${cost.id}`} onDone={() => setAddingTip(false)}
+            run={run} request={request} busy={busy} idPrefix={`tip-${cost.id}`} formKey={`tip:${cost.id}`}
+            onDone={() => tipAdder.close()}
           />
         </div>
       )}
@@ -820,7 +870,23 @@ function CostBlock({
           ))}
         </ul>
       )}
-      {canEdit && !cost.archived && <AddPaymentForm base={base} cost={cost} payers={payers} run={run} request={request} busy={busy} />}
+      {canEdit && !cost.archived && (
+        <>
+          <button
+            ref={payAdder.opener} type="button" onClick={payAdder.toggle} aria-expanded={payAdder.isOpen}
+            className="mt-1 inline-flex items-center gap-1 rounded-full border border-outline-variant/60 px-4 py-3 sm:py-1 text-sm text-on-surface hover:border-primary hover:text-primary-text"
+          >
+            <Icon name="add" size={16} /> Add payment<span className="sr-only"> for {cost.vendor_name}</span>
+          </button>
+          {payAdder.isOpen && (
+            <div ref={payBox}>
+              <AddPaymentForm
+                base={base} cost={cost} payers={payers} run={run} request={request} busy={busy} onDone={() => payAdder.close()}
+              />
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -1000,14 +1066,17 @@ function tipValue(mode: TipMode, percent: string, amount: string, setError: (e: 
  * A due date or who pays adds one payment for the tip, not ticked as paid (rule 4).
  */
 export function AddTipForm({
-  base, targets, fixedId, payers, run, request, busy, idPrefix, onDone,
+  base, targets, fixedId, payers, run, request, busy, idPrefix, formKey, onDone,
 }: {
   base: string;
   /** The expenses a tip can be for, with their category's name and limits. */
   targets: { cost: Cost; categoryName: string; limits: Limits }[];
   /** Set when the form opens from one expense, so it doesn't ask which. */
   fixedId?: string;
-  payers: Payer[]; run: Run; request: Req; busy: boolean; idPrefix: string; onDone: () => void;
+  payers: Payer[]; run: Run; request: Req; busy: boolean; idPrefix: string;
+  /** Which add form this is on the screen, for asking before typed input is lost. */
+  formKey: string;
+  onDone: () => void;
 }) {
   const [picked, setPicked] = useState("");
   const [mode, setMode] = useState<TipMode>("percent");
@@ -1017,6 +1086,7 @@ export function AddTipForm({
   const [payer, setPayer] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
+  useReportDirty(formKey, !!(picked || percent || amount || due || payer || notes) || mode !== "percent");
   // The list can reload while this is open; never send an expense that's gone.
   const targetId = fixedId ?? (targets.some((t) => t.cost.id === picked) ? picked : targets[0]?.cost.id ?? "");
   const picks = targets.find((t) => t.cost.id === targetId);
@@ -1046,10 +1116,7 @@ export function AddTipForm({
         ...value, due_on: due || null, payer_id: payerId, notes: notes || null,
       })),
     );
-    if (ok) {
-      setPercent(""); setAmount(""); setDue(""); setPayer(""); setNotes("");
-      onDone();
-    }
+    if (ok) onDone();
   };
 
   if (targets.length === 0) {
@@ -1289,11 +1356,15 @@ function CostEditForm({
  * the expense with no payment yet. The payment is added unpaid (rule 4).
  */
 function AddCostForm({
-  base, categoryId, limits, vendors, payers, run, request, busy, suggestions, taken,
+  base, categoryId, categoryName, limits, vendors, payers, run, request, busy, suggestions, taken, onAdded, onCancel,
 }: {
-  base: string; categoryId: string; limits: Limits; vendors: VendorRef[]; payers: Payer[]; run: Run; request: Req; busy: boolean;
+  base: string; categoryId: string; categoryName: string; limits: Limits; vendors: VendorRef[]; payers: Payer[]; run: Run;
+  request: Req; busy: boolean;
   /** One-tap ideas for this category; those already used here aren't offered. */
   suggestions: string[]; taken: string[];
+  /** Called with the new expense's name once it's saved; the form closes. */
+  onAdded: (name: string) => void;
+  onCancel: () => void;
 }) {
   const [vendor, setVendor] = useState("");
   const [vendorId, setVendorId] = useState("");
@@ -1306,6 +1377,10 @@ function AddCostForm({
   const [payer, setPayer] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
+  useReportDirty(
+    `expense:${categoryId}`,
+    !!(vendor || vendorId || figure || typedAmount || due || payer || notes) || kind !== "payment",
+  );
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -1326,10 +1401,7 @@ function AddCostForm({
           : null,
       })),
     );
-    if (ok) {
-      setVendor(""); setVendorId(""); setFigure(""); setKind("payment"); setTypedAmount(null);
-      setDue(""); setPayer(""); setNotes("");
-    }
+    if (ok) onAdded(vendor.trim());
   };
   const typedAmountCents = parseDollars(amount);
   const typedFigureCents = parseDollars(figure);
@@ -1346,7 +1418,7 @@ function AddCostForm({
   const ideas = suggestions.filter((s) => !used.has(s.toLowerCase()));
   const ideasId = `ideas-${categoryId}`;
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+    <form onSubmit={submit} className="flex flex-wrap items-end gap-3" aria-label={`Add an expense to ${categoryName}`}>
       {ideas.length > 0 && (
         <div className="w-full">
           <p id={ideasId} className="text-xs text-on-surface-variant mb-1">Ideas for this category: tap one to use it as the name</p>
@@ -1391,6 +1463,7 @@ function AddCostForm({
         add more payments under it later, and fill in the actual cost once you know it.
       </p>
       <button type="submit" disabled={busy} className={primaryButton}>Add expense</button>
+      <button type="button" onClick={onCancel} className={linkButton}>Cancel</button>
       {overFigure > 0 && (
         <p role="status" className="w-full flex items-start gap-1 text-sm text-error">
           <Icon name="warning" size={16} className="mt-0.5" />
@@ -1677,9 +1750,11 @@ function PaymentEditForm({
 }
 
 function AddPaymentForm({
-  base, cost, payers, run, request, busy,
-}: { base: string; cost: Cost; payers: Payer[]; run: Run; request: Req; busy: boolean }) {
-  const [kind, setKind] = useState<"deposit" | "payment">("deposit");
+  base, cost, payers, run, request, busy, onDone,
+}: { base: string; cost: Cost; payers: Payer[]; run: Run; request: Req; busy: boolean; onDone: () => void }) {
+  // A first payment is usually the deposit; later ones are payments.
+  const [firstKind] = useState<"deposit" | "payment">(cost.payments.length > 0 ? "payment" : "deposit");
+  const [kind, setKind] = useState(firstKind);
   const [amount, setAmount] = useState("");
   const [due, setDue] = useState("");
   const [refundable, setRefundable] = useState(false);
@@ -1688,6 +1763,7 @@ function AddPaymentForm({
   const payer = pickedPayer ?? cost.last_payer_id ?? "";
   const [error, setError] = useState<string | null>(null);
   const costId = cost.id;
+  useReportDirty(`payment:${costId}`, !!(amount || due || pickedPayer !== null) || refundable || kind !== firstKind);
 
   // Shown before adding, never blocking: does this take the payments past the cost?
   const typed = parseDollars(amount);
@@ -1707,11 +1783,10 @@ function AddPaymentForm({
         kind, amount_cents: cents, due_on: due || null, refundable, payer_id: payerOrNull(payers, payer),
       })),
     );
-    // The new payment is now the latest, so the next one starts with the same payer.
-    if (ok) { setAmount(""); setDue(""); setKind("payment"); setRefundable(false); setPickedPayer(null); }
+    if (ok) onDone();
   };
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-3 pt-2">
+    <form onSubmit={submit} className="flex flex-wrap items-end gap-3 pt-2" aria-label={`Add a payment for ${cost.vendor_name}`}>
       <SelectInput id={`pay-kind-${costId}`} label="Type" value={kind} onChange={(v) => setKind(v as "deposit" | "payment")}>
         <option value="deposit">Deposit</option>
         <option value="payment">Payment</option>
@@ -1729,6 +1804,7 @@ function AddPaymentForm({
         <PayerSelect id={`pay-payer-${costId}`} payers={payers} value={payer} onChange={(v) => setPickedPayer(v)} />
       )}
       <button type="submit" disabled={busy} className={primaryButton}>Add payment</button>
+      <button type="button" onClick={onDone} className={linkButton}>Cancel</button>
       {over > 0 && (
         <p role="status" className="w-full flex items-start gap-1 text-sm text-error">
           <Icon name="warning" size={16} className="mt-0.5" />
