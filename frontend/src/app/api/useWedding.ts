@@ -9,6 +9,10 @@ export interface BudgetSummary {
 
 /** Just what the overview needs from GET /weddings/{id}/checklist (PD-007). */
 export interface ChecklistSummary {
+  wedding_date: string | null;
+  date_confirmed: boolean;
+  /** Today in Chicago, the wedding's own today (the countdown counts from it, PD-023). */
+  today: string;
   done: number;
   total: number;
   groups: {

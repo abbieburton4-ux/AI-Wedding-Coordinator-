@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject,
+} from "react";
 import { Icon } from "../../shared/Icon";
 import { Switch } from "../../components/ui/switch";
 import { useApi, USE_FASTAPI_BACKEND } from "../../api";
@@ -15,6 +17,7 @@ import {
   type Filter,
 } from "./checklist/types";
 import { LoadChecklist } from "./checklist/LoadChecklist";
+import { withCountdown } from "../countdown";
 
 type Req = <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
 type Run = (fn: () => Promise<unknown>) => Promise<boolean>;
@@ -84,6 +87,7 @@ export function Checklist() {
   const [categoryChoice, setCategory] = useState<CategoryFilter>("all");
   // Groups the couple opened or closed themselves; the rest follow "current".
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
+  const dateBoxRef = useRef<HTMLElement>(null);
 
   const load = useCallback(async () => {
     if (!weddingId || !USE_FASTAPI_BACKEND) return;
@@ -178,10 +182,13 @@ export function Checklist() {
   const catchUpDue = data.groups.find((g) => g.kind === "catch_up")?.due_on ?? null;
   const dueWith = catchUpDue ? data.groups.find((g) => g.kind === "stage" && g.due_on === catchUpDue)?.label ?? null : null;
 
+  const dateProps: DateProps = {
+    base, data, canEdit, run, request, busy, onConfirmedSaved: refetchWeddings,
+  };
+
   return shell(
     <>
-      <DateCard base={base} data={data} canEdit={canEdit} run={run} request={request} busy={busy}
-        onConfirmedSaved={refetchWeddings} />
+      <DateCard {...dateProps} boxRef={dateBoxRef} />
 
       {canEdit && !data.imported && (
         <LoadChecklist
@@ -318,68 +325,66 @@ export function Checklist() {
           );
         })}
       </div>
+
+      {canEdit && isConfirmed(data) && (
+        <ChangeDateLink {...dateProps} error={error} onUnconfirmed={() => dateBoxRef.current?.focus()} />
+      )}
     </>,
   );
 }
 
 // ---- The wedding date ------------------------------------------------------------------
 
-function DateCard({
-  base, data, canEdit, run, request, busy, onConfirmedSaved,
-}: {
+type DateProps = {
   base: string; data: ChecklistData; canEdit: boolean; run: Run; request: Req; busy: boolean;
   onConfirmedSaved: () => Promise<void>;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(data.wedding_date ?? "");
-  const id = useId();
-  const confirmedId = useId();
+};
 
-  const save = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!value) return;
-    const ok = await run(() => request(`${base}/date`, json("PUT", { wedding_date: value })));
-    if (ok) setEditing(false);
-  };
+/** A date the couple has set and marked confirmed (B48, PD-023). */
+const isConfirmed = (data: ChecklistData) => data.wedding_date !== null && data.date_confirmed;
+
+/**
+ * The date box at the top. Once the date is confirmed it shows only the date and the
+ * countdown, for everyone (PD-023); changing it then goes through ChangeDateLink at the
+ * bottom of the page. Otherwise it keeps the switch and the date form.
+ */
+function DateCard({ boxRef, ...props }: DateProps & { boxRef: RefObject<HTMLElement> }) {
+  const { base, data, canEdit, run, request, busy } = props;
+  const [editing, setEditing] = useState(false);
+  const confirmed = isConfirmed(data);
+
+  // A form left open when the date was confirmed shouldn't reappear if it's unconfirmed.
+  useEffect(() => {
+    if (confirmed) setEditing(false);
+  }, [confirmed]);
 
   return (
-    <section aria-label="Wedding date" className="mb-6 bg-primary-container/10 border border-primary-container/20 rounded-[2rem] p-5">
+    <section
+      ref={boxRef}
+      // Focus lands here when the switch that held it goes away (confirming here, or
+      // unconfirming from the bottom of the page).
+      tabIndex={-1}
+      aria-label="Wedding date"
+      className={`mb-6 bg-primary-container/10 border border-primary-container/20 rounded-[2rem] p-5 ${focusRing}`}
+    >
       {data.wedding_date ? (
         <>
           <p className="text-xs text-on-surface-variant">Wedding date</p>
-          <p className="font-headline-sm text-headline-sm text-on-surface">{formatDay(data.wedding_date)}</p>
-          <p className="text-sm text-on-surface-variant mt-1 flex items-center gap-1">
-            <Icon name={data.date_confirmed ? "event_available" : "info"} size={16} />
-            {data.date_confirmed
-              ? "Your date is confirmed. If it ever changes, every due date moves with it."
-              : "Dates are provisional. Every due date moves if you change the wedding date."}
+          <p className="font-headline-sm text-headline-sm text-on-surface">
+            {confirmed
+              ? withCountdown(formatDay(data.wedding_date), data.wedding_date, data.today)
+              : formatDay(data.wedding_date)}
           </p>
-          <div className="mt-3 flex items-center gap-3">
-            <Switch
-              id={confirmedId}
-              checked={data.date_confirmed}
-              // Viewers see the state; only owners and editors can change it (the API
-              // checks too). Not disabled while saving, so keyboard focus stays put.
-              disabled={!canEdit}
-              aria-busy={busy}
-              onCheckedChange={(confirmed) => {
-                if (busy) return;
-                run(async () => {
-                  await request(`${base}/date-confirmed`, json("PUT", { confirmed }));
-                  // The setup form's date hint reads the switch from the wedding itself.
-                  await onConfirmedSaved();
-                });
-              }}
-              // Grows the 32x18px switch to 48x44px on a phone.
-              className={`relative before:absolute before:-inset-x-2 before:-inset-y-[13px] sm:before:hidden ${focusRing}`}
-            />
-            <label
-              htmlFor={confirmedId}
-              className={`text-sm text-on-surface ${canEdit ? "cursor-pointer" : ""}`}
-            >
-              This date is confirmed
-            </label>
-          </div>
+          {!confirmed && (
+            <>
+              <p className="text-sm text-on-surface-variant mt-1 flex items-center gap-1">
+                <Icon name="info" size={16} />
+                Dates are provisional. Every due date moves if you change the wedding date.
+              </p>
+              <ConfirmedSwitch {...props}
+                onSaved={(nowConfirmed) => nowConfirmed && boxRef.current?.focus()} />
+            </>
+          )}
         </>
       ) : (
         <p className="text-on-surface">
@@ -387,38 +392,142 @@ function DateCard({
           {!canEdit && " The couple can set it."}
         </p>
       )}
-      {canEdit && !editing && (
-        <button
-          type="button"
-          onClick={() => {
-            setValue(data.wedding_date ?? "");
-            setEditing(true);
-          }}
-          className={`${linkButton} mt-3`}
-        >
+      {canEdit && !confirmed && !editing && (
+        <button type="button" onClick={() => setEditing(true)} className={`${linkButton} mt-3`}>
           {data.wedding_date ? "Change the date" : "Set the date"}
         </button>
       )}
-      {canEdit && editing && (
-        <form onSubmit={save} className="mt-3 flex flex-wrap items-end gap-3">
-          <span className="flex flex-col gap-1">
-            <label htmlFor={id} className="text-xs text-on-surface-variant">Wedding date</label>
-            <input
-              id={id}
-              type="date"
-              required
-              min={data.today}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              className={inputClass}
-            />
-          </span>
-          <span className="flex items-center gap-3">
-            <button type="submit" disabled={busy || !value} className={primaryButton}>Save date</button>
-            <button type="button" onClick={() => setEditing(false)} className={linkButton}>Cancel</button>
-          </span>
-        </form>
+      {canEdit && !confirmed && editing && (
+        <DateForm base={base} data={data} run={run} request={request} busy={busy}
+          onDone={() => setEditing(false)} />
       )}
+    </section>
+  );
+}
+
+/** The "This date is confirmed" switch (B48). Viewers see it but can't change it. */
+function ConfirmedSwitch({
+  base, data, canEdit, run, request, busy, onConfirmedSaved, onSaved,
+}: DateProps & { onSaved?: (confirmed: boolean) => void }) {
+  const confirmedId = useId();
+  return (
+    <div className="mt-3 flex items-center gap-3">
+      <Switch
+        id={confirmedId}
+        checked={data.date_confirmed}
+        // Viewers see the state; only owners and editors can change it (the API
+        // checks too). Not disabled while saving, so keyboard focus stays put.
+        disabled={!canEdit}
+        aria-busy={busy}
+        onCheckedChange={async (confirmed) => {
+          if (busy) return;
+          const ok = await run(async () => {
+            await request(`${base}/date-confirmed`, json("PUT", { confirmed }));
+            // The setup form's date hint reads the switch from the wedding itself.
+            await onConfirmedSaved();
+          });
+          if (ok) onSaved?.(confirmed);
+        }}
+        // Grows the 32x18px switch to 48x44px on a phone.
+        className={`relative before:absolute before:-inset-x-2 before:-inset-y-[13px] sm:before:hidden ${focusRing}`}
+      />
+      <label
+        htmlFor={confirmedId}
+        className={`text-sm text-on-surface ${canEdit ? "cursor-pointer" : ""}`}
+      >
+        This date is confirmed
+      </label>
+    </div>
+  );
+}
+
+/** The date picker; it closes once the date is saved, or on Cancel. */
+function DateForm({
+  base, data, run, request, busy, onDone,
+}: {
+  base: string; data: ChecklistData; run: Run; request: Req; busy: boolean; onDone: () => void;
+}) {
+  const [value, setValue] = useState(data.wedding_date ?? "");
+  const id = useId();
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!value) return;
+    const ok = await run(() => request(`${base}/date`, json("PUT", { wedding_date: value })));
+    if (ok) onDone();
+  };
+
+  return (
+    <form onSubmit={save} className="mt-3 flex flex-wrap items-end gap-3">
+      <span className="flex flex-col gap-1">
+        <label htmlFor={id} className="text-xs text-on-surface-variant">Wedding date</label>
+        <input
+          id={id}
+          type="date"
+          required
+          min={data.today}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className={inputClass}
+        />
+      </span>
+      <span className="flex items-center gap-3">
+        <button type="submit" disabled={busy || !value} className={primaryButton}>Save date</button>
+        <button type="button" onClick={onDone} className={linkButton}>Cancel</button>
+      </span>
+    </form>
+  );
+}
+
+/**
+ * The quiet way to change a confirmed date (PD-023): a link at the very bottom of the
+ * page, for owners and editors, that opens the date form and the confirmed switch.
+ * Turning the switch off puts the full controls back in the date box, so focus goes there.
+ */
+function ChangeDateLink({
+  onUnconfirmed, error, ...props
+}: DateProps & { onUnconfirmed: () => void; error: string | null }) {
+  const { base, data, run, request, busy } = props;
+  const [open, setOpen] = useState(false);
+  const linkRef = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
+
+  // Back on the link after Cancel or a save, so keyboard focus isn't lost.
+  useEffect(() => {
+    if (!open && wasOpen.current) linkRef.current?.focus();
+    wasOpen.current = open;
+  }, [open]);
+
+  if (!open) {
+    return (
+      <p className="mt-10 text-center">
+        <button
+          ref={linkRef}
+          type="button"
+          onClick={() => setOpen(true)}
+          className={`${linkButton} ${phoneTall}`}
+        >
+          Need to change the date?
+        </button>
+      </p>
+    );
+  }
+
+  return (
+    <section
+      aria-label="Change the wedding date"
+      className="mt-10 bg-surface-container-lowest border border-outline-variant/20 rounded-[2rem] p-5"
+    >
+      <p className="text-sm text-on-surface-variant">
+        Every due date moves with the wedding date. Turning off "This date is confirmed" brings
+        the date controls back to the top of the page.
+      </p>
+      <ConfirmedSwitch {...props} onSaved={(confirmed) => !confirmed && onUnconfirmed()} />
+      {/* Repeated here, next to the form, since the page's own alert is far above.
+          Not an alert itself, so a screen reader hears it once. */}
+      {error && <p className="mt-3 text-sm text-error">{error}</p>}
+      <DateForm base={base} data={data} run={run} request={request} busy={busy}
+        onDone={() => setOpen(false)} />
     </section>
   );
 }
