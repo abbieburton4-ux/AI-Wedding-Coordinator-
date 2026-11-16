@@ -469,4 +469,4 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 
 **Date:** 2026-11-16 · **Status:** ratified (by the owner, one of the couple, 2026-11-16: "after this, move the checklist menu item to #2, after overview")
 **Context:** Backlog B101. The menu runs Overview, Vendors, Budget, Guests & Seating, Seating Plan, Checklist; on phones the bottom bar runs Home, Vendors, Budget, Guests, Checklist.
-**Decision:** the menu becomes Overview, Checklist, Vendors, Budget, Guests & Seating, Seating Plan (then "Who has access" for owners, as now). The phone bar follows the same order: Home, Checklist, Vendors, Budget, Guests. *[ASSUMPTION, decided-by-agent, reversible:* the owner said "menu item", read as both the desktop menu and the phone bar.*]* Nothing else changes. Built after B100.
+**Decision:** the menu becomes Overview, Checklist, Vendors, Budget, Guests & Seating, Seating Plan (then "Who has access" for owners, as now). The phone bar follows the same order: Home, Checklist, Vendors, Budget, Guests. The phone bar too (owner, 2026-11-16: "yes, phone bar too"). Nothing else changes. Built after B100.
