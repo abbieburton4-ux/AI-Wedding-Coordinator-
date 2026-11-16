@@ -450,3 +450,17 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - (a) **Remembering what you opened.** *Recommended:* the app remembers which tiles you minimised or expanded on that phone or computer, the same way the "Move money" panel on the Budget page does (B95). Each person's choice is their own, and nothing else changes. Alternative: every tile goes back to its default (Not selected minimised, others expanded) each time the page opens. **Answer: "a, yes".**
 **Decision:** points 1–5 as written, and each tile's minimised or expanded state is remembered per device (a display preference only, not shared data, so rule 11 doesn't apply). Marking a vendor Not selected always minimises it, even if it was expanded before.
 **Rejected because:** B would make the couple re-open or re-close the same tiles every visit.
+
+## PD-023 — A confirmed date shows a countdown instead of the date controls
+
+**Date:** 2026-11-16 · **Status:** ratified (by the owner, one of the couple, 2026-11-16: "a, a. b, a")
+**Context:** Backlog B100. The owner, 2026-11-16: "on the checklist since the date is set we can hide \"Your date is confirmed. If it ever changes, every due date moves with it.\", this date is confirmed button and the change the date. lets also add a countdown of number of days untul the date". The date is final, Sat 23 Oct 2027 (`wedding.md`), and the "This date is confirmed" switch is on (B48). Today the date box on the Checklist shows the date, that sentence, the switch and a "Change the date" link. "Change the date" is the only place in the app to change the date once the wedding exists.
+**Proposed:**
+1. Once the date is confirmed, the date box shows only the date and a countdown, for example "Saturday, October 23, 2027 · 341 days to go". The sentence, the switch and "Change the date" no longer show there, for everyone.
+2. The countdown counts whole days from today in Chicago, the same "today" the checklist already uses for due dates. One day before reads "1 day to go"; on the day, "Today's the day"; after the date, the countdown goes. *(decided-by-agent; reversible)*
+3. While the date isn't confirmed, the box stays as it is today. No database change.
+**Couple's calls:**
+- (a) **If the date ever has to change.** *Recommended:* a small, quiet "Need to change the date?" link at the very bottom of the Checklist page, for you and the groom only. It opens the same date form, and also lets you turn "confirmed" off. Alternative: no way in the app; you ask the team and we change it for you. **Answer: A.**
+- (b) **Where the countdown shows.** *Recommended:* on the Checklist date box and on the home page, so it's the first thing you see when you open the app. Alternative: on the Checklist only, as you asked. **Answer: A.**
+**Decision:** points 1–3; a quiet "Need to change the date?" link at the bottom of the Checklist page, for owners and editors only, opening the date form and the confirmed switch; and the countdown on both the Checklist date box and the home page.
+**Rejected because:** (a) B leaves the couple unable to fix the date themselves; (b) B hides the countdown from the first screen they see.
