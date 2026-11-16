@@ -435,3 +435,18 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - (a) Are the nine category buttons, the 12 new tasks and the license wording right? *Recommended: yes, as written.* The couple can rename or move any task afterwards. **Answer (2026-11-13): "yes approve and start building".**
 **Decision:** points 1–5 as written.
 **Rejected because:** adding all 42 would put most of them on the list twice; letting the AI sort the couple's own and old AI tasks into categories would mean guessing.
+
+## PD-022 — Vendor tiles fold down to name and status; Not selected ones start folded
+
+**Date:** 2026-11-16 · **Status:** ratified (by the owner, one of the couple, 2026-11-16: "a, yes")
+**Context:** Backlog B99. The owner, 2026-11-16: "when you choose \"not selected\" for a vendor I dont want to see all of the details, so can it automatically be minimized? and have the ability to minimize/maximize vendors (only show name and status)". Today (PD-012, follow-up 2) a Not selected tile is faded and moved to the bottom of its section, but still shows everything: website, contact, email, phone, notes and any pasted reply. Whole sections already fold, with Expand all / Collapse all at the top; single vendors don't.
+**Proposed:**
+1. Every vendor tile gets a small **Minimise / Expand** button. Minimised, it shows only the vendor's name and status badge, keeping its colour. Expanded, it shows everything, as today.
+2. A vendor marked **Not selected** minimises itself as soon as it's saved, and Not selected vendors show minimised when the page opens. The faded look and place at the bottom of the section stay.
+3. Other vendors start expanded.
+4. Nothing is deleted or hidden from the record; Edit is still there once a tile is expanded. Viewers, including family, can minimise and expand too, since it changes only their own view. No database change.
+5. The section summary at the top, and Expand all / Collapse all for sections, stay as they are. *(decided-by-agent; reversible)*
+**Couple's call:**
+- (a) **Remembering what you opened.** *Recommended:* the app remembers which tiles you minimised or expanded on that phone or computer, the same way the "Move money" panel on the Budget page does (B95). Each person's choice is their own, and nothing else changes. Alternative: every tile goes back to its default (Not selected minimised, others expanded) each time the page opens. **Answer: "a, yes".**
+**Decision:** points 1–5 as written, and each tile's minimised or expanded state is remembered per device (a display preference only, not shared data, so rule 11 doesn't apply). Marking a vendor Not selected always minimises it, even if it was expanded before.
+**Rejected because:** B would make the couple re-open or re-close the same tiles every visit.

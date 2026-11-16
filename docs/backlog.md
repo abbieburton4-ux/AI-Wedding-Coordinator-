@@ -8,16 +8,15 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 ## Next up
 
-*Updated 2026-11-13 by the product lane. Re-rank if this date is more than 14 days old.*
+*Updated 2026-11-16 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B98** — checklist category buttons, plus the owner's Chicago list merged in (12 new tasks, Cook County license wording) (PD-021, ratified). `in review` (#123; merge #122 first or together, then Pull and Publish on Replit; check the screen once published)
+1. **B99** — vendor tiles fold down to name and status; Not selected ones start folded (PD-022, ratified). `in review` (#125; merge #124 first or together, then Pull and Publish on Replit)
 2. **B90** — check the workspace catches up by itself after a Pull (seen failing on the first publish after #105). `waiting` (can only be checked on the next Pull that brings a database change; #112 and #114 had none)
 3. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
 4. **B89** — send the budget straight to Google Sheets (PD-019 option C). `on hold` (owner: "maybe c later"; needs its own PD)
 5. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
 6. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
-7. **B40** — remove past sales prospects' first names from `docs/runway.md`, `scripts/build_tracker.py` and `runway-tracker.xlsx` (PD-005, extended again). `in progress`
 8. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
 9. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `owner step` (#116 merged; the owner turns on "Email enumeration protection" in the Firebase console)
 10. **B8** — record missing token counts as empty, not 0. `ready`
@@ -70,10 +69,11 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B98 — Checklist categories and the owner's Chicago list (PD-021).** The owner, 2026-11-13, asked for category buttons on the checklist, alongside Not done and Overdue, and for her pasted Chicago list to be added where it isn't already there, with dates for 23 Oct 2027. *Fix:* nine category buttons with counts, combined with the status filter; a category on every task (set from PD-021's item-id list; old AI-planner and couple-added tasks show as Other until the couple picks); category picked when adding or editing a task; the 12 new tasks C1–C12 added once; the license task reworded only if unchanged. Database migration needed (rule 6); nothing already ticked or edited by the couple changes. *Depends on:* PD-021 (ratified 2026-11-13).
 
+- **B99 — Vendor tiles fold down to name and status (PD-022).** The owner, 2026-11-16, doesn't want to see a Not selected vendor's details, and wants to minimise or expand any vendor. *Fix:* a Minimise / Expand button on each tile on the Vendors screen; minimised shows only name and status badge; Not selected vendors minimise on saving and open minimised; each tile's state remembered per device; no database change. *Depends on:* PD-022 (ratified 2026-11-16).
+
 ### Housekeeping
 
 - **B13 — Stale material from the XPRIZE.** The prototype and both sales lists are gone (B6, PR #15; B37, PR #20). Left: the `.xlsx` trackers and the XPRIZE framing in `README.md`, `docs/runway.md`, `docs/strategic-memo.md` and `docs/reviews/`. *Fix:* archive or delete them (owner's call). See B40 for the prospects' first names.
-- **B40 — Past sales prospects' first names remain.** Found in PR #20. Four first names, one linked to a business, in `docs/runway.md`, `scripts/build_tracker.py` and probably `runway-tracker.xlsx` (rule 3). *Fix:* remove or replace them with roles. *Depends on:* PD-005, extended again 2026-11-05 (ratified).
 - **B41 — Small follow-ups from the B39 review (PR #23).** The independent review found nothing blocking, plus three should-fix items: (1) `manage_access.py` flags access-list rows that contain look-alike letters but can't remove them, because `remove` refuses non-ASCII input; let `remove` take a row id. (2) No test proves an existing, linked member keeps access if their sign-in address has a look-alike letter (`auth.py:141-143`). (3) The refusal in wedding creation (`weddings.py:58-61`) is untested. Copy (decided-by-agent, reversible): the refusal message should tell people to ask the couple to add a different address, not to "type in plain letters". *Depends on:* PD-002 note, 2026-11-05 (ratified).
 - **B52 — Node 20 is past upstream support.** Found in PR #42 (B47): Replit and CI run Node 20. *Fix:* move both to Node 22, then run the verify gate and a build on Replit. *Depends on:* nothing; low priority.
 - **B50 — Incoming supplier emails can't be read.** Found in PR #34 (B46): the inbound-email path fails on `main` too, so vendor replies never reach the app. *Why it matters:* only if the couple want vendor replies in the app; today they send and read inquiries from their own email. *Fix:* engineering, once the couple want the feature. Vendor emails may name guests, so B49 applies. *Depends on:* the couple wanting it. *Since #44 (B49):* emails that reach the app inbox are skipped, not stored or sent to the AI; vendor replies are pasted on the Vendors screen instead.
@@ -104,6 +104,8 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-16 | **B98** — checklist category buttons and the owner's Chicago list merged in (PD-021) | #123 (record #122) |
+| 2026-11-16 | **B40** — past sales prospects' first names removed (PD-005) | #121 |
 | 2026-11-13 | **B96** — Budget page refusals show under the button that was pressed, not at the top of the page; typed text kept; one message at a time. No database change. Follow-ups in B97 | #118 |
 | 2026-11-13 | **B95** — "Move money between categories" at the bottom of Categories, folded by default, remembered per device; stays open after a move. No database change | #117 |
 | 2026-11-13 | **B33** — the backend no longer accepts calls from the original VenueFlow author's website. No database change | #116 |
