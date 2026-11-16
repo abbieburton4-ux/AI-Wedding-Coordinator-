@@ -464,3 +464,9 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 - (b) **Where the countdown shows.** *Recommended:* on the Checklist date box and on the home page, so it's the first thing you see when you open the app. Alternative: on the Checklist only, as you asked. **Answer: A.**
 **Decision:** points 1–3; a quiet "Need to change the date?" link at the bottom of the Checklist page, for owners and editors only, opening the date form and the confirmed switch; and the countdown on both the Checklist date box and the home page.
 **Rejected because:** (a) B leaves the couple unable to fix the date themselves; (b) B hides the countdown from the first screen they see.
+
+## PD-024 — Checklist moves to second in the menu, after Overview
+
+**Date:** 2026-11-16 · **Status:** ratified (by the owner, one of the couple, 2026-11-16: "after this, move the checklist menu item to #2, after overview")
+**Context:** Backlog B101. The menu runs Overview, Vendors, Budget, Guests & Seating, Seating Plan, Checklist; on phones the bottom bar runs Home, Vendors, Budget, Guests, Checklist.
+**Decision:** the menu becomes Overview, Checklist, Vendors, Budget, Guests & Seating, Seating Plan (then "Who has access" for owners, as now). The phone bar follows the same order: Home, Checklist, Vendors, Budget, Guests. *[ASSUMPTION, decided-by-agent, reversible:* the owner said "menu item", read as both the desktop menu and the phone bar.*]* Nothing else changes. Built after B100.

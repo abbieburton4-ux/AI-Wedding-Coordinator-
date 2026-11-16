@@ -12,6 +12,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B100** — a confirmed date shows a countdown instead of the date controls (PD-023, ratified). `in progress`
+1. **B101** — Checklist moves to second in the menu and phone bar, after Overview (PD-024, ratified). `ready` (after B100)
 2. **B90** — check the workspace catches up by itself after a Pull (seen failing on the first publish after #105). `waiting` (can only be checked on the next Pull that brings a database change; #112 and #114 had none)
 3. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
 4. **B89** — send the budget straight to Google Sheets (PD-019 option C). `on hold` (owner: "maybe c later"; needs its own PD)
@@ -66,6 +67,8 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 - **B73 — A test fails now and then.** Found in #78 (B68): one existing check fails at random when a generated id contains "555" (it looks like a phone number to the privacy filter). Not caused by #78. *Fix:* make the test ids fixed, or teach the check to ignore ids. *Depends on:* nothing; small.
 
 - **B100 — A confirmed date shows a countdown instead of the date controls (PD-023).** The owner, 2026-11-16, wants the confirmed-date sentence, the switch and "Change the date" hidden now the date is set, and a countdown of days to the wedding. *Fix:* on the Checklist date box, once confirmed, show only the date and "N days to go" (Chicago today); a quiet "Need to change the date?" link at the bottom of the Checklist for owners and editors; the countdown also on the home page; no database change. *Depends on:* PD-023 (ratified 2026-11-16).
+
+- **B101 — Checklist second in the menu (PD-024).** The owner, 2026-11-16, wants Checklist right after Overview. *Fix:* reorder the menu and the phone bar to Overview/Home, Checklist, Vendors, Budget, Guests & Seating, Seating Plan. No database change. *Depends on:* PD-024 (ratified 2026-11-16).
 
 ### Housekeeping
 
