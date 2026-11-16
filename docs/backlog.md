@@ -11,7 +11,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-16 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B99** — vendor tiles fold down to name and status; Not selected ones start folded (PD-022, ratified). `in progress`
+1. **B99** — vendor tiles fold down to name and status; Not selected ones start folded (PD-022, ratified). `in review` (#125; merge #124 first or together, then Pull and Publish on Replit)
 2. **B90** — check the workspace catches up by itself after a Pull (seen failing on the first publish after #105). `waiting` (can only be checked on the next Pull that brings a database change; #112 and #114 had none)
 3. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
 4. **B89** — send the budget straight to Google Sheets (PD-019 option C). `on hold` (owner: "maybe c later"; needs its own PD)
