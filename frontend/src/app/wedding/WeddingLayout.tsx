@@ -9,11 +9,11 @@ import { AURELIA_ENABLED } from "./features";
 
 const NAV_ITEMS = [
   { path: "/wedding", label: "Overview", deskIcon: "dashboard", mobileLabel: "Home", mobileIcon: "home", end: true, mobile: true },
+  { path: "/wedding/checklist", label: "Checklist", deskIcon: "checklist", mobileLabel: "Checklist", mobileIcon: "checklist", mobile: true },
   { path: "/wedding/vendors", label: "Vendors", deskIcon: "storefront", mobileLabel: "Vendors", mobileIcon: "favorite", mobile: true },
   { path: "/wedding/budget", label: "Budget", deskIcon: "payments", mobileLabel: "Budget", mobileIcon: "account_balance_wallet", mobile: true },
   { path: "/wedding/guests", label: "Guests & Seating", deskIcon: "group", mobileLabel: "Guests", mobileIcon: "people", mobile: true },
   { path: "/wedding/seating", label: "Seating Plan", deskIcon: "table_restaurant", mobileLabel: "Seating", mobileIcon: "table_restaurant", mobile: false },
-  { path: "/wedding/checklist", label: "Checklist", deskIcon: "checklist", mobileLabel: "Checklist", mobileIcon: "checklist", mobile: true },
 ];
 
 const ACCESS_PATH = "/wedding/access";
