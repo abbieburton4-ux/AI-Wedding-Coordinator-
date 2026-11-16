@@ -6,6 +6,7 @@ import { POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from "../../api/config";
 import { useActiveWedding } from "../WeddingProvider";
 import { useReviewedRequest } from "../../api/review";
 import { AMOUNT_HINT, centsToInput, formatCents, parseDollars } from "./budget/money";
+import { withCountdown } from "../countdown";
 
 interface IntakeLog {
   id: string;
@@ -36,7 +37,8 @@ export function Dashboard() {
 
   // The "what do I do next?" answer: the first unfinished checklist tasks, from the
   // groups open by default ("Catch up" and the current stage), else from the top.
-  const groups = data.checklist?.groups ?? [];
+  const checklist = data.checklist;
+  const groups = checklist?.groups ?? [];
   const current = groups.filter((g) => g.current);
   const nextSteps = (current.length ? current : groups)
     .flatMap((g) => g.tasks.filter((t) => !t.done).map((t) => ({ ...t, group: g })))
@@ -378,6 +380,12 @@ export function Dashboard() {
               <h2 className="font-headline-sm text-headline-sm text-on-surface">
                 {wedding.region} • {wedding.ceremony_type}
               </h2>
+              {checklist?.wedding_date && checklist.date_confirmed && (
+                <p className="font-button-text text-on-surface mt-1 flex items-center gap-1">
+                  <Icon name="event_available" size={18} className="text-primary-text" />
+                  {withCountdown(formatDay(checklist.wedding_date), checklist.wedding_date, checklist.today)}
+                </p>
+              )}
               <p className="text-sm text-on-surface-variant mt-1">
                 {wedding.guest_count_estimate} guests •{" "}
                 {wedding.budget_total_cents != null
