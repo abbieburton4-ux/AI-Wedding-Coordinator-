@@ -5,12 +5,18 @@ import { useReviewedRequest } from "../../api/review";
 import { useActiveWedding } from "../WeddingProvider";
 import { dangerLink, inputClass, linkButton, primaryButton } from "./budget/parts";
 import { tapArea } from "./budget/sections";
-import { FoldChevron, scrollToElement, useRememberedFolds, type Folds } from "./folds";
+import {
+  FoldChevron, scrollToElement, useRememberedChoices, useRememberedFolds, type FoldChoices, type Folds,
+} from "./folds";
 
 /**
  * The couple's own vendors, by section (PD-012, B62). Everyone on the access list can
  * see them; owners and editors add, edit and remove them, and the API refuses anyone
  * else. The status is only what the couple set: the app never marks anything booked.
+ *
+ * Each tile minimises to its name and status (PD-022). Not selected vendors start
+ * minimised, the rest expanded, and each device remembers what its person chose. It
+ * changes only that person's view, so viewers can do it too.
  */
 
 type VendorStatus = "looking" | "contacted" | "booked" | "not_selected";
@@ -377,23 +383,39 @@ function PasteReply({
 
 // ---- One vendor ----------------------------------------------------------------------
 
+/** With nothing remembered on this device, only Not selected vendors start minimised. */
+function isMinimised(tiles: FoldChoices, v: Vendor): boolean {
+  return tiles.chosen(v.id) ?? v.status === "not_selected";
+}
+
 function VendorCard({
-  base, vendor, canEdit, reload, request,
+  base, vendor, canEdit, reload, request, tiles,
 }: {
   base: string;
   vendor: Vendor;
   canEdit: boolean;
   reload: () => Promise<Vendor[] | null>;
   request: ReturnType<typeof useApi>["request"];
+  tiles: FoldChoices;
 }) {
   const [mode, setMode] = useState<"view" | "edit" | "reply" | "confirm">("view");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const href = safeHref(vendor.website);
+  const minimised = isMinimised(tiles, vendor);
+  const detailsId = `vendor-${vendor.id}-details`;
+
+  // Minimising drops an unanswered "Remove?" so it isn't waiting when the tile reopens.
+  function toggleMinimised() {
+    if (!minimised && mode === "confirm" && !busy) setMode("view");
+    tiles.set(vendor.id, !minimised);
+  }
 
   async function save(d: Draft): Promise<string | null> {
     try {
       await request(`${base}/${vendor.id}`, { method: "PATCH", body: JSON.stringify(d) });
+      // Ruling a vendor out always minimises it; any other change leaves the tile as it is.
+      if (d.status === "not_selected" && vendor.status !== "not_selected") tiles.set(vendor.id, true);
       await reload();
       setMode("view");
       return null;
@@ -407,6 +429,7 @@ function VendorCard({
     setError(null);
     try {
       await request(`${base}/${vendor.id}`, { method: "DELETE" });
+      tiles.forget(vendor.id);
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "That didn't work. Please try again.");
@@ -430,65 +453,81 @@ function VendorCard({
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="font-title-lg text-title-lg text-on-surface leading-tight break-words min-w-0">{vendor.name}</p>
-        <StatusBadge status={vendor.status} />
+        <span className="flex shrink-0 items-center gap-1">
+          <StatusBadge status={vendor.status} />
+          <button
+            type="button"
+            aria-expanded={!minimised}
+            aria-controls={detailsId}
+            onClick={toggleMinimised}
+            className="inline-flex items-center justify-center gap-0.5 rounded-md px-1 text-xs text-on-surface-variant hover:text-primary-text max-sm:min-h-11 max-sm:min-w-11 sm:min-h-8 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          >
+            {minimised ? "Expand" : "Minimise"}<span className="sr-only"> {vendor.name}</span>
+            <FoldChevron folded={minimised} />
+          </button>
+        </span>
       </div>
-      {href && (
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex max-sm:min-h-11 items-center gap-1 self-start text-sm font-button-text text-primary-text underline underline-offset-2 hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary rounded-sm"
-        >
-          {shortUrl(vendor.website ?? "")}
-          <Icon name="open_in_new" size={14} />
-          <span className="sr-only">(opens in a new tab)</span>
-        </a>
-      )}
-      {(vendor.contact_name || vendor.email || vendor.phone) && (
-        <dl className="text-sm text-on-surface-variant grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 max-sm:items-center max-sm:auto-rows-[minmax(2.75rem,auto)]">
-          {vendor.contact_name && (<><dt>Contact</dt><dd className="text-on-surface break-words">{vendor.contact_name}</dd></>)}
-          {vendor.email && (
-            <>
-              <dt>Email</dt>
-              <dd className="break-all max-sm:flex"><a href={`mailto:${encodeURI(vendor.email)}`} className={`text-primary-text underline underline-offset-2 ${phoneTallLink}`}>{vendor.email}</a></dd>
-            </>
-          )}
-          {vendor.phone && (
-            <>
-              <dt>Phone</dt>
-              <dd className="max-sm:flex"><a href={telHref(vendor.phone)} className={`text-primary-text underline underline-offset-2 ${phoneTallLink}`}>{vendor.phone}</a></dd>
-            </>
-          )}
-        </dl>
-      )}
-      {vendor.notes && <p className="text-sm text-on-surface-variant whitespace-pre-line break-words">{vendor.notes}</p>}
-      {vendor.latest_reply && <ReplyPanel reply={vendor.latest_reply} />}
+      {/* Kept mounted while minimised, so a half-pasted reply survives. */}
+      <div id={detailsId} hidden={minimised} className="flex flex-col gap-2">
+        {href && (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex max-sm:min-h-11 items-center gap-1 self-start text-sm font-button-text text-primary-text underline underline-offset-2 hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary rounded-sm"
+          >
+            {shortUrl(vendor.website ?? "")}
+            <Icon name="open_in_new" size={14} />
+            <span className="sr-only">(opens in a new tab)</span>
+          </a>
+        )}
+        {(vendor.contact_name || vendor.email || vendor.phone) && (
+          <dl className="text-sm text-on-surface-variant grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 max-sm:items-center max-sm:auto-rows-[minmax(2.75rem,auto)]">
+            {vendor.contact_name && (<><dt>Contact</dt><dd className="text-on-surface break-words">{vendor.contact_name}</dd></>)}
+            {vendor.email && (
+              <>
+                <dt>Email</dt>
+                <dd className="break-all max-sm:flex"><a href={`mailto:${encodeURI(vendor.email)}`} className={`text-primary-text underline underline-offset-2 ${phoneTallLink}`}>{vendor.email}</a></dd>
+              </>
+            )}
+            {vendor.phone && (
+              <>
+                <dt>Phone</dt>
+                <dd className="max-sm:flex"><a href={telHref(vendor.phone)} className={`text-primary-text underline underline-offset-2 ${phoneTallLink}`}>{vendor.phone}</a></dd>
+              </>
+            )}
+          </dl>
+        )}
+        {vendor.notes && <p className="text-sm text-on-surface-variant whitespace-pre-line break-words">{vendor.notes}</p>}
+        {vendor.latest_reply && <ReplyPanel reply={vendor.latest_reply} />}
+        {canEdit && mode === "reply" && (
+          <PasteReply base={base} vendor={vendor} reload={reload} onClose={() => setMode("view")} />
+        )}
+        {canEdit && mode === "confirm" && (
+          <p className="flex flex-wrap items-center gap-3 max-sm:gap-y-6 text-sm">
+            <span>Remove {vendor.name}{vendor.latest_reply ? " and what the AI read from their reply" : ""}?</span>
+            <button type="button" autoFocus disabled={busy} onClick={remove} className={`text-error font-bold underline-offset-4 hover:underline ${tapArea}`}>
+              Yes, remove
+            </button>
+            <button type="button" disabled={busy} onClick={() => setMode("view")} className={linkButton}>Cancel</button>
+          </p>
+        )}
+        {canEdit && mode === "view" && (
+          <div className="flex flex-wrap items-center gap-4">
+            <button type="button" onClick={() => setMode("edit")} className={linkButton}>
+              Edit<span className="sr-only"> {vendor.name}</span>
+            </button>
+            <button type="button" onClick={() => setMode("reply")} className={linkButton}>
+              Paste a reply<span className="sr-only"> from {vendor.name}</span>
+            </button>
+            <button type="button" onClick={() => setMode("confirm")} className={dangerLink}>
+              Remove<span className="sr-only"> {vendor.name}</span>
+            </button>
+          </div>
+        )}
+      </div>
+      {/* Outside the details, so a failed removal shows even on a minimised tile. */}
       {error && <p role="alert" className="text-sm text-error">{error}</p>}
-      {canEdit && mode === "reply" && (
-        <PasteReply base={base} vendor={vendor} reload={reload} onClose={() => setMode("view")} />
-      )}
-      {canEdit && mode === "confirm" && (
-        <p className="flex flex-wrap items-center gap-3 max-sm:gap-y-6 text-sm">
-          <span>Remove {vendor.name}{vendor.latest_reply ? " and what the AI read from their reply" : ""}?</span>
-          <button type="button" autoFocus disabled={busy} onClick={remove} className={`text-error font-bold underline-offset-4 hover:underline ${tapArea}`}>
-            Yes, remove
-          </button>
-          <button type="button" disabled={busy} onClick={() => setMode("view")} className={linkButton}>Cancel</button>
-        </p>
-      )}
-      {canEdit && mode === "view" && (
-        <div className="flex flex-wrap items-center gap-4">
-          <button type="button" onClick={() => setMode("edit")} className={linkButton}>
-            Edit<span className="sr-only"> {vendor.name}</span>
-          </button>
-          <button type="button" onClick={() => setMode("reply")} className={linkButton}>
-            Paste a reply<span className="sr-only"> from {vendor.name}</span>
-          </button>
-          <button type="button" onClick={() => setMode("confirm")} className={dangerLink}>
-            Remove<span className="sr-only"> {vendor.name}</span>
-          </button>
-        </div>
-      )}
     </li>
   );
 }
@@ -496,7 +535,7 @@ function VendorCard({
 // ---- One section ---------------------------------------------------------------------
 
 function SectionCard({
-  section, vendors, status, base, canEdit, reload, request, folded, onToggle,
+  section, vendors, status, base, canEdit, reload, request, folded, onToggle, tiles,
 }: {
   section: (typeof SECTIONS)[number];
   vendors: Vendor[];
@@ -507,6 +546,7 @@ function SectionCard({
   request: ReturnType<typeof useApi>["request"];
   folded: boolean;
   onToggle: () => void;
+  tiles: FoldChoices;
 }) {
   const [adding, setAdding] = useState(false);
   const headingId = `vendor-section-${section.key}`;
@@ -556,7 +596,8 @@ function SectionCard({
       {vendors.length > 0 ? (
         <ul className="flex flex-col gap-4">
           {inPlayFirst(vendors).map((v) => (
-            <VendorCard key={v.id} base={base} vendor={v} canEdit={canEdit} reload={reload} request={request} />
+            <VendorCard key={v.id} base={base} vendor={v} canEdit={canEdit} reload={reload} request={request}
+              tiles={tiles} />
           ))}
         </ul>
       ) : (
@@ -656,6 +697,7 @@ export function Vendors() {
   const [sectionStatus, setSectionStatus] = useState<Record<string, CategoryStatus>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const folds = useRememberedFolds(weddingId ? `venueflow.vendorFolds.${weddingId}` : null, SECTION_KEYS);
+  const tiles = useRememberedChoices(weddingId ? `venueflow.vendorTiles.${weddingId}` : null);
 
   const reload = useCallback(async (): Promise<Vendor[] | null> => {
     if (!weddingId || !USE_FASTAPI_BACKEND) return null;
@@ -708,7 +750,7 @@ export function Vendors() {
               <SectionCard key={s.key} section={s} vendors={vendors.filter((v) => v.section === s.key)}
                 status={sectionStatus[s.key] ?? "todo"}
                 base={base} canEdit={canEdit} reload={reload} request={request}
-                folded={folds.folded(s.key)} onToggle={() => folds.toggle(s.key)} />
+                folded={folds.folded(s.key)} onToggle={() => folds.toggle(s.key)} tiles={tiles} />
             ))}
           </div>
         </>

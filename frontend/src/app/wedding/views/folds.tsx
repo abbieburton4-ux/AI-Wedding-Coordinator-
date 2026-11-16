@@ -61,6 +61,65 @@ export function useRememberedFolds<K extends string>(storageKey: string | null, 
   }), [folded]);
 }
 
+function readChoices(storageKey: string | null): Record<string, boolean> {
+  if (!storageKey) return {};
+  try {
+    const raw: unknown = JSON.parse(window.localStorage.getItem(storageKey) ?? "{}");
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out: Record<string, boolean> = {};
+    for (const [id, folded] of Object.entries(raw)) if (typeof folded === "boolean") out[id] = folded;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export type FoldChoices = {
+  /** The remembered choice, or undefined when nobody has chosen on this device. */
+  chosen: (id: string) => boolean | undefined;
+  set: (id: string, folded: boolean) => void;
+  forget: (id: string) => void;
+};
+
+/**
+ * Open-or-folded choices for items that come and go (like single vendors), remembered on
+ * this device per wedding (PD-022). An item is listed only once someone has chosen for it;
+ * otherwise the screen uses its own default. `true` means folded. Entries for items that
+ * no longer exist are ignored. Without a wedding id nothing is remembered.
+ */
+export function useRememberedChoices(storageKey: string | null): FoldChoices {
+  const [choices, setChoices] = useState<Record<string, boolean>>(() => readChoices(storageKey));
+  const loadedFor = useRef(storageKey);
+
+  // As in useRememberedFolds: keep this read before the save effect.
+  useEffect(() => {
+    if (loadedFor.current === storageKey) return;
+    loadedFor.current = storageKey;
+    setChoices(readChoices(storageKey));
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!storageKey || loadedFor.current !== storageKey) return;
+    try {
+      if (Object.keys(choices).length) window.localStorage.setItem(storageKey, JSON.stringify(choices));
+      else window.localStorage.removeItem(storageKey);
+    } catch {
+      // Private browsing or a full store: folding still works, it just isn't remembered.
+    }
+  }, [storageKey, choices]);
+
+  return useMemo<FoldChoices>(() => ({
+    chosen: (id) => (Object.prototype.hasOwnProperty.call(choices, id) ? choices[id] : undefined),
+    set: (id, folded) => setChoices((prev) => (prev[id] === folded ? prev : { ...prev, [id]: folded })),
+    forget: (id) => setChoices((prev) => {
+      if (!Object.prototype.hasOwnProperty.call(prev, id)) return prev;
+      const rest = { ...prev };
+      delete rest[id];
+      return rest;
+    }),
+  }), [choices]);
+}
+
 /** Scrolls a section into view (instantly if the person prefers less motion) and focuses it. */
 export function scrollToElement(el: HTMLElement) {
   const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
