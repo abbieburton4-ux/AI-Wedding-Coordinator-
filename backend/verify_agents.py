@@ -1216,6 +1216,67 @@ async def run_async_verification():
             assert len(sent) == calls_before
             print("   * Outside an approved agent run, nothing is sent")
 
+    # B105: the generic phone pattern catches every phone format it caught before, and
+    # never a piece of a uuid. All numbers here are fictional.
+    print("\nTEST 12e: Phone numbers are caught, uuids are left whole (B105)...")
+    import random
+    no_terms = privacy.PersonalTerms()
+    phone_formats = [
+        "(312) 555-0123", "312-555-0123", "312.555.0123", "312 555 0123", "3125550123",
+        "+1 312 555 0123", "+1 (312) 555-0123", "+1-312-555-0123", "+13125550123",
+        "1-312-555-0123", "087 123 4567", "0871234567", "087-123-4567", "087.123.4567",
+        "(087) 123 4567", "+353 87 123 4567", "+353871234567", "+353 (0)87 123 4567",
+        "00353 87 123 4567", "(01) 555 0142", "01 555 0142", "01-555-0142",
+        "021 455 0123", "+353 1 555 0142", "+44 20 7946 0958", "020 7946 0958",
+        "07700 900123", "+1 (555) 201-3344", "(555) 201-3344", "555-201-3344",
+        "087 555 0142", "+353 87 555 0142", "087-1234567", "0035387 1234567",
+    ]
+    phone_settings = [
+        "{}", "call:{}", "Call {}.", "tel:{}", "Tel.{}", "phone={}", "({})", "[{}]",
+        "<{}>", "'{}'", "\"{}\"", "{},", "{};", "ring {} after 6", "mob:{}!", "x {} y",
+        '{{"phone": "{}"}}', '{{"note": "call me on {} thanks"}}', "Call me on {}, ok?",
+        "{}\n", "\t{}", "phone-{}", "tel-{}", "#{}", "{}/x", "{}-home", "id-{}-x",
+        "{}-ext2", "{}-x1234", "{}-after6pm", "Table12-{}", "mob2-{}", "quote-v2-{}.pdf",
+        "contact-{}-v2.pdf", "IE-{}-a1", "{}-" + "a1b2" * 20,
+    ]
+    for number in phone_formats:
+        for setting in phone_settings:
+            text = setting.format(number)
+            for cleaned in (privacy.redact(text, no_terms),
+                            json.dumps(privacy.scrub({"note": text}, no_terms))):
+                assert "[phone]" in cleaned, (text, cleaned)
+                assert privacy._digits(number)[-7:] not in privacy._digits(cleaned), \
+                    (text, cleaned)
+            assert privacy.find_personal(text, no_terms) == ["phone"], text
+    print(f"   * {len(phone_formats)} phone formats in {len(phone_settings)} settings, "
+          "each caught")
+
+    for example in ["daae8c74-0813-4010-980a-e7d4b61a394c",
+                    "DAAE8C74-0813-4010-980A-E7D4B61A394C",
+                    "abcdefab-0813-4010-9801-012345678912",
+                    "08134567-1234-4567-8901-234567890123",
+                    "0813456712344567a901234567890123"]:
+        for text in (example, f'{{"id": "{example}"}}', f"booking {example}.",
+                     f"booking_{example}", f"wedding-{example}-photo"):
+            assert privacy.redact(text, no_terms) == text, (text, privacy.redact(text, no_terms))
+            assert privacy.find_personal(text, no_terms) == [], text
+    rng = random.Random(105)
+    for _ in range(20_000):
+        value = str(uuid.UUID(int=rng.getrandbits(128), version=4))
+        payload = {"wedding_id": value, "ids": [value.upper(), value.replace("-", "")]}
+        assert privacy.scrub(payload, no_terms) == payload, value
+    u_test = "daae8c74-0813-4010-980a-e7d4b61a394c"
+    for text, cleaned in [
+        ("daae8c74-0813 call 087 123 4567", "daae8c74-0813 call [phone]"),
+        (f"{u_test}-0871234567", f"{u_test}-[phone]"),
+        (f"0871234567-{u_test}", f"[phone]-{u_test}"),
+        (f"{u_test} call 087-123-4567", f"{u_test} call [phone]"),
+    ]:
+        assert privacy.redact(text, no_terms) == cleaned, ("a number beside a uuid is "
+                                                           "still caught", text)
+    print("   * uuids, with or without hyphens or a prefix, are never partly replaced "
+          "(20,000 random)")
+
     # Every model call goes through the guardrail: nothing else uses the Gemini client.
     app_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "app")
     allowed_files = {os.path.join("agents", "privacy.py"), os.path.join("agents", "base.py")}

@@ -12,7 +12,8 @@ call it removes, from the prompt text:
   case (name parts that are also everyday words, like "Will", only as written);
 - guests' dietary notes, word for word (punctuation aside), unless the note is one
   of the plain categories in ``DIETARY_CATEGORIES`` ("vegan", "gluten free");
-- anything shaped like an email address or a phone number.
+- anything shaped like an email address or a phone number (but not a piece of a
+  uuid, B105).
 
 Only names the app knows can be removed. A name that isn't on the guest list or the
 access list (say, a vendor mentioning someone new) can't be reliably spotted. So
@@ -47,6 +48,14 @@ PHONE_RE = re.compile(
     r"|\b[2-9]\d{9}\b"
 )
 MIN_PHONE_DIGITS = 9
+# The app's IDs are uuids. A phone-shaped piece of one isn't a phone (B105), so a match
+# of only digits and hyphens inside a uuid-shaped token (dashed or 32 hex digits) is
+# left alone. Nothing else is exempt: a number glued to "ext2" or a filename is still
+# caught, and the numbers the app holds are removed by their own patterns anyway.
+ID_PIECE_RE = re.compile(r"[\d-]+")
+UUID_RE = re.compile(r"(?<![0-9A-Za-z])(?:[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"
+                     r"|[0-9a-fA-F]{32})(?![0-9A-Za-z])")
+UUID_LEN = 36
 # A JSON escape such as á would hide an accented name from the checks.
 UNICODE_ESCAPE_RE = re.compile(r"\\u[0-9a-fA-F]{4}")
 # Dietary notes that are only a category may be sent; anything else describes
@@ -199,10 +208,26 @@ def _dietary_pattern(note: str) -> re.Pattern:
                       re.IGNORECASE)
 
 
+def _inside_id(match: re.Match) -> bool:
+    """Whether a generic phone match is only a piece of a uuid."""
+    if not ID_PIECE_RE.fullmatch(match.group(0)):
+        return False
+    text, start, end = match.string, match.start(), match.end()
+    # A uuid holding the match starts at most a uuid's length before its end, so this
+    # costs the same however long the text is.
+    for i in range(max(0, end - UUID_LEN), start + 1):
+        found = UUID_RE.match(text, i)
+        if found and found.end() >= end:
+            return True
+    return False
+
+
 def _counts(kind: str, match: re.Match) -> bool:
-    # Generic phone-shaped runs only count as phones with enough digits.
-    return kind != "phone" or len(_digits(match.group(0))) >= MIN_PHONE_DIGITS \
-        or match.re is not PHONE_RE
+    # Generic phone-shaped runs only count as phones with enough digits, and not when
+    # they're a piece of an ID.
+    if kind != "phone" or match.re is not PHONE_RE:
+        return True
+    return len(_digits(match.group(0))) >= MIN_PHONE_DIGITS and not _inside_id(match)
 
 
 def redact(text: str, terms: PersonalTerms, generic: bool = True) -> str:
