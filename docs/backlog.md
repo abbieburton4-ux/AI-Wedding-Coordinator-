@@ -11,7 +11,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-18 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-2. **B90** — check the workspace catches up by itself after a Pull (seen failing on the first publish after #105). `waiting` (can only be checked on the next Pull that brings a database change; #112 and #114 had none)
+2. **B104** — make the Shell step in the Replit publish guide optional: only needed if Publish shows a DROP (B90 confirmed the catch-up works). `ready` (small, docs in `replit.md`)
 3. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
 4. **B89** — send the budget straight to Google Sheets (PD-019 option C). `on hold` (owner: "maybe c later"; needs its own PD)
 5. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
@@ -60,7 +60,7 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B91 — Remove the "Download CSV" button.** Owner, 2026-11-12: "we can remove the download .csv button when we have the download excel" (PD-019 follow-up, ratified). *Fix:* remove the button and the CSV route, unless something else uses it; keep "Print / save as PDF". *Depends on:* B88 merged.
 - **B89 — Send the budget straight to Google Sheets.** PD-019 option C, "maybe c later" (owner, 2026-11-12). Needs its own PD: the app getting permission to write to the couple's Google Drive is an access and data-location call. *Depends on:* the owner asking for it.
-- **B90 — The workspace didn't catch up by itself after a Pull.** Found on the first publish after #105 (2026-11-12): Publish still offered the who-paid DROP. The owner had to run `python db_status.py upgrade` in the Shell, which took the workspace from 0011 to 0013; Publish then showed only the four tip additions. #105 said the running workspace would catch up within about ten seconds of a Pull. `[ASSUMPTION]` the running app started before #105's code arrived, so it had no catch-up yet. *Fix:* check whether the catch-up works on the next Pull that brings a new migration; if not, fix it or drop the claim from `replit.md`. Until then, the one Shell command before every publish stays in the steps. *Depends on:* nothing.
+- **B104 — The publish guide still makes the Shell step compulsory.** B90 is resolved: on 2026-11-18 the owner pulled #134 and published without the Shell step, and Publish showed only the expected `ADD COLUMN "title"` (owner: "did not run the shell"). *Fix:* in `replit.md`, step 2 becomes "only if Publish shows a DROP: Cancel, run this, then Publish again"; keep the DROP check in step 3 as the safety net. *Depends on:* nothing.
 - **B77 — An older test fails by chance.** Found while building B76 (#89): a check looks for the text "555" in output that is full of random IDs, so now and then a random ID contains "555" and the run fails. The test was left as it is (rule 8). *Fix:* make the check look for the number where it's meant to be, not anywhere in the output. Seen again in #110 (`verify_endpoints.py`, around line 824) and #128 (line 866; passed on re-run). *Depends on:* nothing; small.
 
 - **B73 — A test fails now and then.** Found in #78 (B68): one existing check fails at random when a generated id contains "555" (it looks like a phone number to the privacy filter). Not caused by #78. *Fix:* make the test ids fixed, or teach the check to ignore ids. *Depends on:* nothing; small.
@@ -97,6 +97,7 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-18 | **B90** — the workspace catches up by itself after a Pull: #134's publish showed only `ADD COLUMN "title"` with no Shell step run (owner, 2026-11-18). Guide follow-up is B104 | owner check on #134's publish |
 | 2026-11-18 | **B102** — optional title on each budget payment, shown in lists, upcoming payments, print view and Excel (PD-025). One added database field (`budget_payments.title`) | #134 (record #132) |
 | 2026-11-18 | **B41** — remove access-list rows by id; tests for look-alike sign-in addresses and the wedding-creation refusal; clearer refusal message. No change to who can sign in | #133 |
 | 2026-11-16 | **B101** — Checklist second in the menu and phone bar, after Overview (PD-024). No database change. Duplicate #130 closed | #129 (record #127) |
