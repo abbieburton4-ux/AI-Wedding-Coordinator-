@@ -470,3 +470,18 @@ Settled and proposed product decisions, one entry per decision, newest at the bo
 **Date:** 2026-11-16 · **Status:** ratified (by the owner, one of the couple, 2026-11-16: "after this, move the checklist menu item to #2, after overview")
 **Context:** Backlog B101. The menu runs Overview, Vendors, Budget, Guests & Seating, Seating Plan, Checklist; on phones the bottom bar runs Home, Vendors, Budget, Guests, Checklist.
 **Decision:** the menu becomes Overview, Checklist, Vendors, Budget, Guests & Seating, Seating Plan (then "Who has access" for owners, as now). The phone bar follows the same order: Home, Checklist, Vendors, Budget, Guests. The phone bar too (owner, 2026-11-16: "yes, phone bar too"). Nothing else changes. Built after B100.
+
+## PD-025 — Payments get their own title
+
+**Date:** 2026-11-18 · **Status:** ratified (by the owner, one of the couple, 2026-11-18: "its optional")
+**Context:** Backlog B102. The owner, 2026-11-18: "when adding a payment in an expense category, there is no title option". Inspected 2026-11-18: a payment has a type (deposit or payment), amount, due date, who paid, how it was paid, a reference, notes, a link and a refundable mark, but no name. In lists it shows only as "Deposit" or "Payment", so a second deposit or a mid-way installment can't be told apart at a glance.
+**Proposed:**
+1. An optional **Title** box on the Add payment and Edit payment forms, and on the first payment in the Add expense form (PD-016), for example "Second installment" or "Final balance".
+2. Where a payment has a title, it shows in place of "Deposit"/"Payment", with the type still shown small beside it. Without a title, it shows as today. *(decided-by-agent; reversible)*
+3. The title also shows in "Next payments due" and in the Excel download (Payments and Upcoming tabs, PD-019).
+4. Existing payments start with no title; nothing is renamed or guessed.
+**Technical choices settled by the team:** a small database change that only adds things (one optional text field), so the next publish shows additions only. Nothing is sent to anyone (rule 1) and nothing is marked paid (rule 4).
+**Couple's calls:**
+- (a) **Title required or optional.** *Recommended:* optional, so a quick single payment needs no extra typing. Alternative: required on every new payment. **Answer: optional.**
+**Decision:** points 1–4, with the title optional.
+**Out of scope:** titles on expenses (they already have a line item name).

@@ -8,7 +8,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 
 ## Next up
 
-*Updated 2026-11-16 by the product lane. Re-rank if this date is more than 14 days old.*
+*Updated 2026-11-18 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
 1. **B100** — a confirmed date shows a countdown instead of the date controls (PD-023, ratified). `in review` (#128; merge #127 first or together, then Pull and Publish on Replit)
@@ -18,6 +18,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 4. **B89** — send the budget straight to Google Sheets (PD-019 option C). `on hold` (owner: "maybe c later"; needs its own PD)
 5. **B55** — the Wildman BT contract: questions for the venue before signing; the $6,000 deposit is due Wed 11 Nov 2026. The owner is handling the contract herself: "dont worry about #1" (2026-11-09). `owner-handling`
 6. **B41** — small follow-ups from the B39 review (one tool fix, two tests, one message). `ready`
+7. **B102** — an optional title for each payment (PD-025, ratified). `ready` (after B41)
 8. **B14** — host the app on Replit (PD-008, ratified: free AI tier, $50 spending alert, US data location, free `.replit.app` address). `ready` (after B46 and B47).
 9. **B35** — add Firebase's email-enumeration protection to the sign-in setup guide. `owner step` (#116 merged; the owner turns on "Email enumeration protection" in the Firebase console)
 10. **B8** — record missing token counts as empty, not 0. `ready`
@@ -59,6 +60,7 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B58 — The RUNBOOK backup step doesn't work on Replit.** Found while writing the B53 steps (2026-11-09): the RUNBOOK's checklist-import backup uses `SYNC_DATABASE_URL`, which Replit's Shell doesn't set; there `DATABASE_URL` works, and the Shell always reaches the development database, not the published app's production one. *Fix:* update RUNBOOK for Replit. *Also for B14:* when the app is published, Replit offers to copy development data into production; that is when the imported checklist would carry over, and the publishing plan should cover it. If the wedding is already in production, the Shell can't reach it without pasting a secret, so a safe import route is needed first. *Depends on:* nothing. *#58 (B59):* the backup command now works in Replit's Shell; the publishing note remains.
 
+- **B102 — Payments have no title.** Owner, 2026-11-18: "when adding a payment in an expense category, there is no title option". A payment shows only as "Deposit" or "Payment", so several payments on one expense look alike. *Fix:* an optional title on each payment (one additive database field and its migration), shown in lists, "Next payments due" and the Excel download. *Depends on:* PD-025 (ratified 2026-11-18).
 - **B91 — Remove the "Download CSV" button.** Owner, 2026-11-12: "we can remove the download .csv button when we have the download excel" (PD-019 follow-up, ratified). *Fix:* remove the button and the CSV route, unless something else uses it; keep "Print / save as PDF". *Depends on:* B88 merged.
 - **B89 — Send the budget straight to Google Sheets.** PD-019 option C, "maybe c later" (owner, 2026-11-12). Needs its own PD: the app getting permission to write to the couple's Google Drive is an access and data-location call. *Depends on:* the owner asking for it.
 - **B90 — The workspace didn't catch up by itself after a Pull.** Found on the first publish after #105 (2026-11-12): Publish still offered the who-paid DROP. The owner had to run `python db_status.py upgrade` in the Shell, which took the workspace from 0011 to 0013; Publish then showed only the four tip additions. #105 said the running workspace would catch up within about ten seconds of a Pull. `[ASSUMPTION]` the running app started before #105's code arrived, so it had no catch-up yet. *Fix:* check whether the catch-up works on the next Pull that brings a new migration; if not, fix it or drop the claim from `replit.md`. Until then, the one Shell command before every publish stays in the steps. *Depends on:* nothing.
