@@ -12,8 +12,9 @@ call it removes, from the prompt text:
   case (name parts that are also everyday words, like "Will", only as written);
 - guests' dietary notes, word for word (punctuation aside), unless the note is one
   of the plain categories in ``DIETARY_CATEGORIES`` ("vegan", "gluten free");
-- anything shaped like an email address or a phone number (but not a piece of a
-  uuid, B105).
+- anything shaped like an email address or a phone number, including one written
+  straight after or before letters ("ph0871234567", B106), but not a piece of one of
+  the app's IDs or of a long hex code (B105).
 
 Only names the app knows can be removed. A name that isn't on the guest list or the
 access list (say, a vendor mentioning someone new) can't be reliably spotted. So
@@ -47,15 +48,35 @@ PHONE_RE = re.compile(
     r"|\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b"
     r"|\b[2-9]\d{9}\b"
 )
+# The same shapes where a letter, not only a space or symbol, may touch the number
+# ("ph0871234567", "call3125550123", "Phone(312)555-0123", "3125550123ext", B106).
+# Applied after PHONE_RE, so whatever that catches is caught exactly as before. A digit
+# or "_" still bounds a number, so "IMG_20271023_093012345" keeps its time.
+GLUED_PHONE_RE = re.compile(
+    r"(?:\+|\(?(?<![\d_])0)\d[\d\s().-]{6,}\d"
+    r"|\(?(?<![\d_])\d{3}(?:\)[\s.-]?|[\s.-])\d{3}[\s.-]\d{4}(?![\d_])"
+    r"|(?<![\d_])[2-9]\d{9}(?![\d_])"
+)
+GENERIC_PHONE_RES = (PHONE_RE, GLUED_PHONE_RE)
 MIN_PHONE_DIGITS = 9
-# The app's IDs are uuids. A phone-shaped piece of one isn't a phone (B105), so a match
-# of only digits and hyphens inside a uuid-shaped token (dashed or 32 hex digits) is
-# left alone. Nothing else is exempt: a number glued to "ext2" or a filename is still
-# caught, and the numbers the app holds are removed by their own patterns anyway.
+# The app's IDs are uuids, plus "q_", "bkv_" and "bks_" with 10 hex digits. A
+# phone-shaped piece of one isn't a phone (B105, B106), so a match of only digits and
+# hyphens inside an ID-shaped token (dashed, 32 hex digits, or prefixed) is left alone.
+# Apart from hex codes (below), nothing else is exempt: a number glued to "ext2" or a
+# filename is still caught, and the numbers the app holds are removed by their own
+# patterns anyway.
 ID_PIECE_RE = re.compile(r"[\d-]+")
 UUID_RE = re.compile(r"(?<![0-9A-Za-z])(?:[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"
-                     r"|[0-9a-fA-F]{32})(?![0-9A-Za-z])")
+                     r"|[0-9a-fA-F]{32}|(?:q|bkv|bks)_[0-9a-fA-F]{10})(?![0-9A-Za-z])")
 UUID_LEN = 36
+# Hex codes (hashes, ids) are mostly digits, so a phone-shaped run of digits between hex
+# letters is common in them. A number glued to letters is only a phone when it isn't
+# part of an unbroken run of at least this many hex characters whose letters, as in a
+# hash, are scattered in three or more groups. Labels and numbers pasted together
+# ("Dad0871234567", "Mam0871234567Dad0861234567", "ph08712345670861234567") have fewer.
+HEX_RUN = 20
+HEX_CHARS = frozenset("0123456789abcdefABCDEF")
+HEX_LETTER_RUN_RE = re.compile(r"[a-fA-F]+")
 # A JSON escape such as á would hide an accented name from the checks.
 UNICODE_ESCAPE_RE = re.compile(r"\\u[0-9a-fA-F]{4}")
 # Dietary notes that are only a category may be sent; anything else describes
@@ -120,6 +141,7 @@ class PersonalTerms:
                     out.append(("phone", PHONE_MARK, re.compile(
                         r"(?<!\d)" + r"[\s().-]*".join(tail) + r"(?!\d)")))
             out.append(("phone", PHONE_MARK, PHONE_RE))
+            out.append(("phone", PHONE_MARK, GLUED_PHONE_RE))
             # Longest first, so a full name goes before its parts.
             for name in sorted(self.names, key=lambda n: (-len(n), n)):
                 out.append(("name", NAME_MARK, _name_pattern(name)))
@@ -209,10 +231,13 @@ def _dietary_pattern(note: str) -> re.Pattern:
 
 
 def _inside_id(match: re.Match) -> bool:
-    """Whether a generic phone match is only a piece of a uuid."""
-    if not ID_PIECE_RE.fullmatch(match.group(0)):
+    """Whether a generic phone match is only a piece of a uuid (an opening bracket the
+    pattern took with it aside, so "(<uuid>)" is left whole)."""
+    piece = match.group(0)
+    start = match.start() + (1 if piece.startswith("(") else 0)
+    if not ID_PIECE_RE.fullmatch(piece.removeprefix("(")):
         return False
-    text, start, end = match.string, match.start(), match.end()
+    text, end = match.string, match.end()
     # A uuid holding the match starts at most a uuid's length before its end, so this
     # costs the same however long the text is.
     for i in range(max(0, end - UUID_LEN), start + 1):
@@ -222,12 +247,30 @@ def _inside_id(match: re.Match) -> bool:
     return False
 
 
+def _inside_hex(match: re.Match) -> bool:
+    """Whether a run of digits sits in a run of at least ``HEX_RUN`` hex characters,
+    its letters in at least three separate groups. Looks at most ``HEX_RUN`` characters
+    each side, so long text stays linear."""
+    if not match.group(0).isdigit():
+        return False
+    text, start, end = match.string, match.start(), match.end()
+    left = start
+    while left > max(0, start - HEX_RUN) and text[left - 1] in HEX_CHARS:
+        left -= 1
+    right = end
+    while right < min(len(text), end + HEX_RUN) and text[right] in HEX_CHARS:
+        right += 1
+    return right - left >= HEX_RUN and len(HEX_LETTER_RUN_RE.findall(text, left, right)) >= 3
+
+
 def _counts(kind: str, match: re.Match) -> bool:
     # Generic phone-shaped runs only count as phones with enough digits, and not when
-    # they're a piece of an ID.
-    if kind != "phone" or match.re is not PHONE_RE:
+    # they're a piece of an ID (or, glued to letters, of a hex code).
+    if kind != "phone" or match.re not in GENERIC_PHONE_RES:
         return True
-    return len(_digits(match.group(0))) >= MIN_PHONE_DIGITS and not _inside_id(match)
+    if len(_digits(match.group(0))) < MIN_PHONE_DIGITS or _inside_id(match):
+        return False
+    return match.re is PHONE_RE or not _inside_hex(match)
 
 
 def redact(text: str, terms: PersonalTerms, generic: bool = True) -> str:
@@ -237,7 +280,7 @@ def redact(text: str, terms: PersonalTerms, generic: bool = True) -> str:
         return text
     text = normalise(text)
     for kind, mark, pattern in terms.patterns():
-        if not generic and pattern in (EMAIL_RE, PHONE_RE):
+        if not generic and (pattern is EMAIL_RE or pattern in GENERIC_PHONE_RES):
             continue
         text = pattern.sub(lambda m: mark if _counts(kind, m) else m.group(0), text)
     return text
