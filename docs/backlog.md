@@ -11,8 +11,6 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 *Updated 2026-11-16 by the product lane. Re-rank if this date is more than 14 days old.*
 
 0. **B32** — two Claude reply bots and an automatic PR review. Owner, 2026-11-05: "yes, turn off the extra reply bot and Turn off the automatic review on every PR". Done 2026-11-05: both workflows are disabled in the Actions tab, at the owner's request. Their files stay in `.github/workflows/`; deleting them needs a session the owner runs.
-1. **B100** — a confirmed date shows a countdown instead of the date controls (PD-023, ratified). `in review` (#128; merge #127 first or together, then Pull and Publish on Replit)
-1. **B101** — Checklist moves to second in the menu and phone bar, after Overview (PD-024, ratified). `in review` (#129; then Pull and Publish on Replit)
 2. **B90** — check the workspace catches up by itself after a Pull (seen failing on the first publish after #105). `waiting` (can only be checked on the next Pull that brings a database change; #112 and #114 had none)
 3. **B19** — guest planning: list, food, seating (must-have 3). `on hold` (owner, 2026-11-12: "no need to start on guest planning yet")
 4. **B89** — send the budget straight to Google Sheets (PD-019 option C). `on hold` (owner: "maybe c later"; needs its own PD)
@@ -66,10 +64,6 @@ Within each tier, how a must-have gets built is still to be decided. Each one ne
 
 - **B73 — A test fails now and then.** Found in #78 (B68): one existing check fails at random when a generated id contains "555" (it looks like a phone number to the privacy filter). Not caused by #78. *Fix:* make the test ids fixed, or teach the check to ignore ids. *Depends on:* nothing; small.
 
-- **B100 — A confirmed date shows a countdown instead of the date controls (PD-023).** The owner, 2026-11-16, wants the confirmed-date sentence, the switch and "Change the date" hidden now the date is set, and a countdown of days to the wedding. *Fix:* on the Checklist date box, once confirmed, show only the date and "N days to go" (Chicago today); a quiet "Need to change the date?" link at the bottom of the Checklist for owners and editors; the countdown also on the home page; no database change. *Depends on:* PD-023 (ratified 2026-11-16).
-
-- **B101 — Checklist second in the menu (PD-024).** The owner, 2026-11-16, wants Checklist right after Overview. *Fix:* reorder the menu and the phone bar to Overview/Home, Checklist, Vendors, Budget, Guests & Seating, Seating Plan. No database change. *Depends on:* PD-024 (ratified 2026-11-16).
-
 ### Housekeeping
 
 - **B13 — Stale material from the XPRIZE.** The prototype and both sales lists are gone (B6, PR #15; B37, PR #20). Left: the `.xlsx` trackers and the XPRIZE framing in `README.md`, `docs/runway.md`, `docs/strategic-memo.md` and `docs/reviews/`. *Fix:* archive or delete them (owner's call). See B40 for the prospects' first names.
@@ -103,6 +97,8 @@ Not carried over from the audit, because the restored backend already covers the
 
 | Closed | Item | Resolved by |
 |---|---|---|
+| 2026-11-16 | **B101** — Checklist second in the menu and phone bar, after Overview (PD-024). No database change. Duplicate #130 closed | #129 (record #127) |
+| 2026-11-16 | **B100** — a confirmed date shows the date and a days-to-go countdown on the Checklist and home page; "Need to change the date?" link for owners and editors (PD-023). No database change | #128 (record #127) |
 | 2026-11-16 | **B99** — vendor tiles minimise to name and status; Not selected ones start minimised; remembered per device (PD-022). No database change | #125 (record #124) |
 | 2026-11-16 | **B98** — checklist category buttons and the owner's Chicago list merged in (PD-021) | #123 (record #122) |
 | 2026-11-16 | **B40** — past sales prospects' first names removed (PD-005) | #121 |
