@@ -7,6 +7,10 @@ has asked for the change. It never contacts anyone; tell the person yourself.
     python manage_access.py list   --wedding <id>
     python manage_access.py set    --wedding <id> --email <email> --level viewer|editor|owner
     python manage_access.py remove --wedding <id> --email <email>
+    python manage_access.py remove --wedding <id> --id <row id from list>
+
+Remove by row id for a row whose email can't be typed back safely, such as one with
+a look-alike letter from another alphabet.
 """
 import argparse
 import os
@@ -21,11 +25,18 @@ from app.db.session import sync_engine  # noqa: E402
 from app.utils.email_match import UnsafeEmailError, is_safe_email, normalise_email  # noqa: E402
 
 
+def _shown(email: str) -> str:
+    # Escaped when it isn't ASCII, so a look-alike letter shows up as an escape
+    # code rather than passing for a plain one on screen.
+    return email if is_safe_email(email) else ascii(email)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("action", choices=["list", "set", "remove"])
     parser.add_argument("--wedding", required=True)
     parser.add_argument("--email")
+    parser.add_argument("--id", dest="row_id", help="a row id from list; remove only")
     parser.add_argument("--level", choices=ACCESS_LEVELS)
     args = parser.parse_args()
 
@@ -41,23 +52,35 @@ def main() -> None:
                 state = "signed in" if row.user_id else "not signed in yet"
                 if not is_safe_email(row.email):
                     state += "; has non-ASCII characters, so it can't match a new sign-in"
-                print(f"{row.level:7}  {row.email}  ({state})")
+                print(f"{row.id}  {row.level:7}  {_shown(row.email)}  ({state})")
             return
 
-        if not args.email:
-            raise SystemExit("--email is required")
-        try:
-            email = normalise_email(args.email)
-        except UnsafeEmailError:
-            raise SystemExit(
-                "That address has non-ASCII characters (for example, a look-alike letter "
-                "from another alphabet), so it can't be matched safely. Type it in plain letters."
-            )
-        row = session.exec(
-            select(WeddingMember).where(
-                WeddingMember.wedding_id == args.wedding, WeddingMember.email == email
-            )
-        ).first()
+        if args.row_id:
+            if args.action != "remove":
+                raise SystemExit("--id works with remove only; use --email to set a level")
+            if args.email:
+                raise SystemExit("Give --id or --email, not both")
+            row = session.get(WeddingMember, args.row_id)
+            if row is None or row.wedding_id != args.wedding:
+                raise SystemExit(f"No row {args.row_id} on this wedding's list")
+            label = _shown(row.email)
+        else:
+            if not args.email:
+                raise SystemExit("--email or --id is required")
+            try:
+                email = normalise_email(args.email)
+            except UnsafeEmailError:
+                raise SystemExit(
+                    "That address has non-ASCII characters (for example, a look-alike letter "
+                    "from another alphabet), so it can't be matched safely. Type it in plain "
+                    "letters, or remove an existing row by the id that list shows (--id)."
+                )
+            row = session.exec(
+                select(WeddingMember).where(
+                    WeddingMember.wedding_id == args.wedding, WeddingMember.email == email
+                )
+            ).first()
+            label = email
 
         owners = session.exec(
             select(WeddingMember).where(
@@ -68,12 +91,12 @@ def main() -> None:
 
         if args.action == "remove":
             if not row:
-                raise SystemExit(f"{email} isn't on this wedding's list")
+                raise SystemExit(f"{label} isn't on this wedding's list")
             if is_last_owner:
                 raise SystemExit("Refusing to remove the last owner")
             session.delete(row)
             session.commit()
-            print(f"Removed {email}")
+            print(f"Removed {label}")
             return
 
         if not args.level:
