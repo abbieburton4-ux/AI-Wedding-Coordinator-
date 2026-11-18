@@ -1,5 +1,6 @@
 import os
 import hashlib
+from typing import Optional
 from google import genai
 from app.config import settings
 
@@ -36,3 +37,18 @@ def get_prompt_version(system_instruction: str) -> str:
     """Generates a prompt version hash from the instruction content."""
     sha = hashlib.sha256(system_instruction.encode("utf-8")).hexdigest()[:8]
     return f"v1.0-{sha}"
+
+
+def token_counts(response) -> tuple[Optional[int], Optional[int]]:
+    """(input, output) token counts as the response reports them.
+
+    A count the response doesn't supply stays None, so an unmeasured call never
+    reads as a free one (AGENTS.md rule 10).
+    """
+    usage = getattr(response, "usage_metadata", None)
+
+    def count(name: str) -> Optional[int]:
+        value = getattr(usage, name, None) if usage is not None else None
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+    return count("prompt_token_count"), count("candidates_token_count")

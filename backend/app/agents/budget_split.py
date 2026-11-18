@@ -14,7 +14,7 @@ from google.genai import types
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.base import get_client, get_prompt_version, model_for
+from app.agents.base import get_client, get_prompt_version, model_for, token_counts
 from app.agents.privacy import load_personal_terms, redact, send_prompt
 from app.agents.orchestrator import run_agent
 from app.utils.constants import ALLOWED_BUDGET_CATEGORIES, normalize_category
@@ -124,11 +124,6 @@ def split_cents(total_cents: int, weights: list) -> list:
     return base
 
 
-def _token_count(usage, name: str) -> Optional[int]:
-    value = getattr(usage, name, None) if usage is not None else None
-    return value if isinstance(value, int) else None
-
-
 @run_agent(AGENT_ID, "budget_split")
 async def run_budget_splitter(
     db: AsyncSession,
@@ -175,9 +170,7 @@ async def run_budget_splitter(
             temperature=0.2,
         ),
     )
-    usage = getattr(response, "usage_metadata", None)
-    tokens = (_token_count(usage, "prompt_token_count"),
-              _token_count(usage, "candidates_token_count"))
+    tokens = token_counts(response)
     api_calls = [{"provider": "google", "model": model,
                   "tokens": {"input": tokens[0], "output": tokens[1]}}]
 
