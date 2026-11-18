@@ -46,6 +46,7 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 endpoints_test.db*
+backend/*_test.db*
 ~$*
 
 # Claude Code
