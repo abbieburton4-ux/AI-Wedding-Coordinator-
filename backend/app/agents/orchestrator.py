@@ -95,9 +95,9 @@ def run_agent(agent_name: str, decision_type: str):
                     prompt_version = result[3] if len(result) > 3 else "v1.0"
                     api_calls = result[4] if len(result) > 4 else []
                     follow_ups = result[5] if len(result) > 5 else []
-                    # Optional (input, output) token counts, measured from the response;
-                    # agents that don't pass them leave both columns empty.
-                    tokens = result[6] if len(result) > 6 else (None, None)
+                    # Optional (input, output) token counts, measured from the response.
+                    # Agents that don't pass them get the counts their api_calls record.
+                    tokens = result[6] if len(result) > 6 else _call_tokens(api_calls)
                 else:
                     result_dict = result
                     confidence_score = result_dict.get("confidence_score")
@@ -156,6 +156,26 @@ def run_agent(agent_name: str, decision_type: str):
                 
         return wrapper
     return decorator
+
+
+def _call_tokens(api_calls) -> tuple:
+    """(input, output) token totals across the model calls an agent recorded.
+
+    Each count is the sum of the measured counts, or None if any call didn't report
+    one (or none were made), so a partly measured run never reads as cheaper than it
+    was (AGENTS.md rule 10).
+    """
+    def total(key: str):
+        counts = []
+        for call in api_calls or []:
+            tokens = call.get("tokens") if isinstance(call, dict) else None
+            value = tokens.get(key) if isinstance(tokens, dict) else None
+            if not isinstance(value, int) or isinstance(value, bool):
+                return None
+            counts.append(value)
+        return sum(counts) if counts else None
+
+    return total("input"), total("output")
 
 
 async def _preview(func, db: AsyncSession, wedding_id: str, *args, **kwargs) -> dict:

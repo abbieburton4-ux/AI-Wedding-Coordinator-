@@ -1373,7 +1373,8 @@ async def run_async_verification():
         ("budget_splitter", run_budget_splitter, (),
          {"total_cents": 1_000_000, "category_names": ["Venue"]}),
     ]
-    # These two also fill the tokens_input/tokens_output columns.
+    # These two pass their counts to run_agent directly; the other five have them
+    # copied from their api_calls (B103). All seven fill the columns.
     fills_columns = {"vendor_reply_reader", "budget_splitter"}
     cases = [
         ("no usage data", None, (None, None)),
@@ -1405,7 +1406,46 @@ async def run_async_verification():
                     if name in fills_columns:
                         assert (log.tokens_input, log.tokens_output) == expected, \
                             (label, name, log.tokens_input, log.tokens_output)
-                print(f"   * {label}: every agent logs tokens {expected}")
+                    # B103: every agent's main columns match what Gemini reported.
+                    assert (log.tokens_input, log.tokens_output) == expected, \
+                        ("B103 columns", label, name, log.tokens_input, log.tokens_output)
+                print(f"   * {label}: every agent logs tokens {expected}, in its columns too")
+
+            # A guardrail block still made a measured call, so its columns are filled.
+            usage_now["meta"] = MockUsageMetadata(5, 9)
+            unrealistic = {"is_budget_realistic": False, "guardrail_warning": "Too low.",
+                           "budget_lines": [], "rationale_summary": "No.",
+                           "confidence_score": 0.9}
+
+            async def block(*args, **kwargs):
+                response = MockResponse(json.dumps(unrealistic))
+                response.usage_metadata = usage_now["meta"]
+                return response
+
+            token_client.aio.models.generate_content = block
+            before = {log.id for log in (await db.exec(select(AgentDecisionLog))).all()}
+            await approved(run_intake_planner, db, wid)
+            new = [log for log in (await db.exec(select(AgentDecisionLog))).all()
+                   if log.id not in before]
+            assert len(new) == 1 and new[0].status == "blocked_by_guardrail", \
+                [(log.status, log.error_message) for log in new]
+            assert (new[0].tokens_input, new[0].tokens_output) == (5, 9), \
+                (new[0].tokens_input, new[0].tokens_output)
+            token_client.aio.models.generate_content = respond
+            print("   * Guardrail block: the measured call's tokens fill the columns (B103)")
+
+    # B103: totals across several recorded calls stay empty if any call is unmeasured.
+    from app.agents.orchestrator import _call_tokens
+    def calls(*pairs):
+        return [{"provider": "google", "tokens": {"input": i, "output": o}} for i, o in pairs]
+    assert _call_tokens([]) == (None, None), "no call, no count"
+    assert _call_tokens(None) == (None, None)
+    assert _call_tokens([{"provider": "google"}]) == (None, None), "no tokens recorded"
+    assert _call_tokens(calls((3, 4), (5, 6))) == (8, 10), "measured calls add up"
+    assert _call_tokens(calls((3, 4), (None, 6))) == (None, 10), "one unmeasured input"
+    assert _call_tokens(calls((3, True), (5, 6))) == (8, None), "a bool isn't a count"
+    assert _call_tokens(calls((0, 0))) == (0, 0), "a measured zero stays zero"
+    print("   * Several calls: summed when all measured, empty when any isn't (B103)")
     print("\n--- ASYNC AGENT Logic VERIFICATION SUCCESS ---")
 
 def main():
