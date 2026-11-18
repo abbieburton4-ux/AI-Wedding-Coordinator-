@@ -74,8 +74,15 @@ async def has_level_anywhere(db: AsyncSession, user: User, minimum: str) -> bool
 
 UNSAFE_EMAIL = (
     "This email address has letters we can't check safely, such as a letter from another "
-    "alphabet that looks like an English one. Use the address the couple added, typed in "
-    "plain letters."
+    "alphabet that looks like an English one. Ask the couple to add a different address "
+    "for you, then sign in with that one."
+)
+
+# Wedding creation is for the couple, so they can't be told to ask themselves.
+UNSAFE_COUPLE_EMAIL = (
+    "This email address has letters we can't check safely, such as a letter from another "
+    "alphabet that looks like an English one. Ask the team to set the wedding up with a "
+    "different address for you."
 )
 
 

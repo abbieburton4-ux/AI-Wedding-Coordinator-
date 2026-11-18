@@ -22,7 +22,7 @@ from app.api.v1.endpoints.budget import MAX_CENTS
 from app.utils.budget_compare import compare_quote
 from app.utils import checklist as checklist_rules
 from app.api.v1.access import (
-    UNSAFE_EMAIL, bootstrap_emails, require_wedding_access, weddings_for_member,
+    UNSAFE_COUPLE_EMAIL, bootstrap_emails, require_wedding_access, weddings_for_member,
 )
 from app.api.v1.assistant import require_assistant_enabled
 from app.api.v1.endpoints.auth import get_current_user
@@ -85,7 +85,7 @@ async def create_wedding(
     try:
         creator_email = normalise_email(current_user.email)
     except UnsafeEmailError:
-        raise HTTPException(status_code=403, detail=UNSAFE_EMAIL)
+        raise HTTPException(status_code=403, detail=UNSAFE_COUPLE_EMAIL)
     couple_emails = bootstrap_emails()
     if not settings.DEVELOPMENT_MODE and creator_email not in couple_emails:
         raise HTTPException(status_code=403, detail="Only the couple can set up the wedding.")

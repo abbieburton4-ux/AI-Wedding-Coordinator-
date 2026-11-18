@@ -1,3 +1,5 @@
+import contextlib
+import io
 import os
 import sys
 from fastapi.testclient import TestClient
@@ -521,6 +523,55 @@ def test_api_suite():
         _team("remove", "--email", "partner@example.test")
         with Session(sync_engine) as s:
             assert s.get(WeddingMember, partner_id) is None
+        # A row with a look-alike letter (from before B39) can't be typed back, so the
+        # team removes it by the row id that list shows (B41).
+        with Session(sync_engine) as s:
+            odd = WeddingMember(wedding_id=wedding_id, email="c\u0430rol@example.test",
+                                level="viewer")
+            s.add(odd)
+            s.commit()
+            odd_id = odd.id
+        listed = io.StringIO()
+        with contextlib.redirect_stdout(listed):
+            _team("list")
+        odd_line = next(line for line in listed.getvalue().splitlines() if odd_id in line)
+        assert "c\\u0430rol@example.test" in odd_line and "non-ASCII" in odd_line, odd_line
+        assert owner_member["id"] in listed.getvalue(), "every row shows its id"
+        for argv, expected in (
+            (("remove", "--email", "c\u0430rol@example.test"), "can't be matched safely"),
+            (("remove", "--id", "no-such-row"), "No row"),
+            (("set", "--id", odd_id, "--level", "editor"), "remove only"),
+            (("remove", "--id", odd_id, "--email", "carol@example.test"), "not both"),
+            (("remove", "--id", owner_member["id"]), "last owner"),
+        ):
+            try:
+                _team(*argv)
+                raise AssertionError(f"manage_access accepted {argv}")
+            except SystemExit as exc:
+                assert expected in str(exc), (argv, exc)
+        with Session(sync_engine) as s:
+            other = Wedding(couple_user_id="couple_test", guest_count_estimate=1, region="Dublin",
+                            ceremony_type="civil")
+            s.add(other)
+            s.commit()
+            other_row = WeddingMember(wedding_id=other.id, email="dana@example.test",
+                                      level="viewer")
+            s.add(other_row)
+            s.commit()
+            other_row_id, other_id = other_row.id, other.id
+        try:
+            _team("remove", "--id", other_row_id)
+            raise AssertionError("manage_access removed a row from another wedding")
+        except SystemExit as exc:
+            assert "No row" in str(exc), exc
+        _team("remove", "--id", odd_id)
+        with Session(sync_engine) as s:
+            assert s.get(WeddingMember, odd_id) is None
+            assert s.get(WeddingMember, other_row_id) is not None
+            assert s.get(WeddingMember, owner_member["id"]) is not None
+            s.delete(s.get(WeddingMember, other_row_id))
+            s.delete(s.get(Wedding, other_id))
+            s.commit()
         # Everyone else can still be changed and removed.
         assert c.patch(f"{members_url}/{editor_member['id']}", json={"level": "viewer"},
                        headers=headers).json()["level"] == "viewer"
@@ -3188,6 +3239,50 @@ def test_api_suite():
             assert c.patch(f"/api/v1/weddings/{wedding_id}", json={"guest_count_estimate": 1},
                            headers=fam).status_code == 403
             print("   * Firebase: unlisted, unconfirmed and look-alike emails refused; a listed viewer links and reads only")
+
+            # The PD-002 guard (B41): someone already linked keeps their access when
+            # their sign-in address comes back with a look-alike letter, and picks up
+            # nothing new from it.
+            with Session(sync_engine) as s:
+                s.add(WeddingMember(wedding_id=wedding_id, email="f\u0430m@example.test",
+                                    level="editor"))
+                s.commit()
+            fam_odd = firebase_headers("fb_fam", "f\u0430m@example.test", True)
+            res = c.get("/api/v1/auth/me", headers=fam_odd)
+            assert res.status_code == 200, res.text
+            assert c.get(f"/api/v1/weddings/{wedding_id}", headers=fam_odd).status_code == 200
+            assert c.patch(f"/api/v1/weddings/{wedding_id}", json={"guest_count_estimate": 1},
+                           headers=fam_odd).status_code == 403, "still a viewer, not an editor"
+            with Session(sync_engine) as s:
+                odd_row = s.exec(sync_select(WeddingMember).where(
+                    WeddingMember.email == "f\u0430m@example.test")).one()
+                assert odd_row.user_id is None, "a look-alike address never links"
+                s.delete(odd_row)
+                s.commit()
+            print("   * Firebase: a linked member keeps access when their address has a look-alike letter")
+
+            # Wedding creation refuses an account whose stored address can't be compared
+            # safely, even one that lower() would turn into a couple's address (B41).
+            with Session(sync_engine) as s:
+                s.add(UserModel(id="fb_kelvin", role="couple", name="k",
+                                email="\u212aate@example.test"))
+                s.commit()
+            settings.ACCESS_BOOTSTRAP_EMAILS = "newcouple@example.test, kate@example.test"
+            try:
+                kelvin = firebase_headers("fb_kelvin", "kate.other@example.test", True)
+                res = c.post("/api/v1/weddings/", json=wedding_payload, headers=kelvin)
+            finally:
+                settings.ACCESS_BOOTSTRAP_EMAILS = "newcouple@example.test"
+            assert res.status_code == 403, res.text
+            detail = res.json()["detail"]
+            assert "can't check safely" in detail and "ask the team" in detail.lower(), detail
+            assert "plain letters" not in detail
+            with Session(sync_engine) as s:
+                assert s.exec(sync_select(WeddingMember).where(
+                    WeddingMember.user_id == "fb_kelvin")).first() is None
+                s.delete(s.get(UserModel, "fb_kelvin"))
+                s.commit()
+            print("   * Weddings: an account with a look-alike address can't create the wedding")
 
             assert c.post("/api/v1/weddings/", json=wedding_payload, headers=fam).status_code == 403
             couple = firebase_headers("fb_newcouple", "newcouple@example.test", True)
