@@ -3,7 +3,7 @@
 # the autopilot and people all run the same thing. Run from anywhere.
 set -uo pipefail
 
-cd "$(dirname "$0")/../backend"
+cd "$(dirname "$0")/../backend" || exit 1
 
 PY="python"
 if [ -x .venv/bin/python ]; then PY=".venv/bin/python"; fi
@@ -64,8 +64,8 @@ if command -v node >/dev/null 2>&1 && ! node --test ../frontend/src/app/wedding/
   status=1
 fi
 
-# The scripts rewrite tracked test databases and leave SQLite side files (backlog B17).
-git restore endpoints_test.db endpoints_test.db-shm endpoints_test.db-wal 2>/dev/null || true
-rm -f verify_agents_test.db-shm verify_agents_test.db-wal verify_test.db-shm verify_test.db-wal
+# The scripts create their own throwaway SQLite databases, which git ignores (B17).
+# Remove any left behind, including the -shm/-wal side files.
+rm -f ./*_test.db ./*_test.db-shm ./*_test.db-wal
 
 exit $status

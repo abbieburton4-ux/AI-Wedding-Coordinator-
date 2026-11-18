@@ -30,7 +30,7 @@ export WORKER_BASE_URL=http://localhost:8000   # non-Docker: loop async agent ta
 uvicorn app.main:app --reload      # opens http://localhost:8000
 ```
 
-The server automatically initializes and seeds the SQLite database (`endpoints_test.db` or configured local db) on startup if it does not exist.
+The server automatically initializes and seeds the configured local database (for example the SQLite `venueflow.db` from `.env.example`) on startup if it does not exist.
 
 > **Non-Docker gotcha:** agent work runs via Cloud Tasks → a separate worker. Outside
 > Docker there's no `worker` host, so `WORKER_BASE_URL` **must** point at this same

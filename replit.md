@@ -335,7 +335,7 @@ Run `bash scripts/verify-backend.sh`: the five backend verify scripts
 (`node --test frontend/src/app/auth/sessionProfile.test.js`), as CI does.
 These mock Gemini and Firebase and use temporary SQLite databases, not real data.
 From `frontend/`, run `VITE_BASE=/ VITE_API_URL= npm run build`.
-Restore the tracked test DB artifacts after verification.
+The test databases are created fresh on each run and ignored by git.
 
 The old `scripts/replit-demo.sh` remains available only for disposable sample-data
 work, with Firebase configuration unset. It uses Git-ignored `backend/venueflow.db`;
