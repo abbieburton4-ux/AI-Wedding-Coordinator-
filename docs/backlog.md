@@ -22,7 +22,7 @@ Convention: also drop a `# TODO(name, YYYY-MM-DD):` comment at the code site for
 14. **B77** (same as B73) — an older test fails by chance (looks for "555" among random IDs). `in review` (#141)
 16. **B105** — the privacy filter blanks part of about 1 in 215 random IDs in the AI decision log (found in #141). `in review` (#142; only uuid-shaped IDs are exempt, narrower than planned, because a wider rule let real numbers through)
 17. **B106** — the privacy filter misses phone numbers glued to letters, e.g. "ph0871234567" (found in #142). `ready` (after #142 merges)
-15. **B103** — most AI features leave the decision log's two token-count columns empty (found in #135). `in progress` (low priority)
+15. **B103** — most AI features leave the decision log's two token-count columns empty (found in #135). `in review` (#143)
 
 ## Open
 
