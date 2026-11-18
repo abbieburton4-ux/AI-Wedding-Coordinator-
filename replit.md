@@ -113,8 +113,14 @@ The check reads what `db_status.py` last recorded, so it can't catch a workspace
 whose *code* is older than the published app's (for example after rolling the
 workspace back to an earlier checkpoint, which restores its files and database
 together), or a workspace database changed afterwards by something other than the
-migrations (by hand, or by Replit's Agent). Always Pull first, and run step 2 just
-before Publish.
+migrations (by hand, or by Replit's Agent). Always Pull first, and read every line
+Publish shows: the DROP check in step 3 is the safety net for those cases.
+
+**Since B86, a Pull then Publish has worked without the Shell step once.** On
+2026-11-18 the owner pulled `0015` (B102) and published straight away, without
+running `db_status.py upgrade` by hand, and Publish listed only the expected
+`ADD COLUMN "title"` (B90). That's one confirmed publish, so the Shell step is now
+the fix for a DROP or a stopped build, not a step before every publish.
 
 **A publish that brings a new migration will list additions.** Run puts the
 development database at the new migration while production is still one behind,
@@ -265,8 +271,7 @@ publish should list **no** database changes.
   the same publish, its line is listed too. There should be no `DROP`, no
   `ALTER COLUMN`, no new constraint and no new table. Every payment already entered
   keeps its type, amount, dates and paid tick, and starts with no title.
-  [ASSUMPTION] This is what Alembic's PostgreSQL SQL looks like; Replit's own
-  screen hasn't been seen for it.
+  Seen on Replit's screen on 2026-11-18 (B90): only `ADD COLUMN "title"`.
 
 **When you publish** (plain steps for the owner):
 
@@ -275,15 +280,16 @@ publish should list **no** database changes.
 > (B59) and the couple's vendors (B70) on 2026-11-09, and the "People who pay"
 > list on 2026-11-12
 > (`DROP TABLE "budget_payers" CASCADE;`, B86). If you see any **DROP**, choose
-> **Cancel**, then do step 2 again before trying once more.
+> **Cancel**, then do step 2 before trying once more.
 
 1. In the workspace, **Pull** the latest code.
-2. Open a new **Shell** tab and type `cd backend && python db_status.py upgrade`.
-   This one command brings the workspace database up to date and confirms it. It
-   must say `Database is up to date (migration ...)`. If it says anything else,
-   stop and tell the team. Do this just before pressing Publish. You don't need
-   to Stop and Run to publish; do it only if you want the workspace preview to
-   show the new code.
+2. **Only if step 3 or 4 sends you here.** Otherwise go straight to step 3. Open
+   a new **Shell** tab and type `cd backend && python db_status.py upgrade`. This
+   one command brings the workspace database up to date and confirms it. It must
+   say `Database is up to date (migration ...)`. If it says anything else, stop
+   and tell the team. Then press **Publish** again (step 3). You don't need to
+   Stop and Run to publish; do it only if you want the workspace preview to show
+   the new code.
 3. Press **Publish**. Replit compares the development database with production and
    may list changes it will make to production. Read every line of the SQL it
    shows, even if the pane isn't orange.
@@ -293,8 +299,8 @@ publish should list **no** database changes.
      required column, index or constraint; that's expected when the list says so.
      Choose **Approve and publish**. The published app then finishes the job when
      it starts.
-   - If any line says **DROP**, choose **Cancel** (don't approve). Do step 2
-     again, then press Publish again.
+   - If any line says **DROP**, choose **Cancel** (don't approve). Do step 2,
+     then press Publish again.
    - **Stop and tell the team** if anything else appears, or still appears: any
      line with **DROP** or **RENAME**, any `ALTER COLUMN`, a question asking
      whether something was renamed, a question about a unique constraint offering
@@ -303,7 +309,9 @@ publish should list **no** database changes.
      database schema & data to production**, and don't ask Replit's Agent to fix
      it.
 4. **If Publish fails** and its log says `Publish stopped: the workspace database
-   is behind` or `hasn't recorded where its database is`, nothing in the
+   is behind`, `hasn't recorded where its database is` or `caught up with the
+   code by itself` (which happens if you press Publish within 15 minutes of a
+   Pull while the app was running), nothing in the
    published app has changed: Replit stopped before applying any database
    change. Do step 2, then press Publish again. If it says anything else, or the
    same message comes back after step 2 said `Database is up to date`, tell the
@@ -339,8 +347,9 @@ Patched `websocket-driver` and `tar` overrides unblock the imported dependencies
 the remaining npm audit findings are backlog B47.
 
 Run `bash scripts/verify-backend.sh`: the five backend verify scripts
-(including `verify_production.py`) and the sign-in test
-(`node --test frontend/src/app/auth/sessionProfile.test.js`), as CI does.
+(including `verify_production.py`) and the frontend's `node --test` unit tests
+(sign-in, budget and countdown). CI's backend job runs this same script, and its
+frontend job runs only `npm ci` and `npm run build`.
 These mock Gemini and Firebase and use temporary SQLite databases, not real data.
 From `frontend/`, run `VITE_BASE=/ VITE_API_URL= npm run build`.
 The test databases are created fresh on each run and ignored by git.
