@@ -1,7 +1,7 @@
 # Vite dev-server container for the VenueFlow frontend (local orchestration only).
 # Production builds go to GitHub Pages via `npm run build`; this image exists so
 # `docker compose up` brings up the full stack offline.
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
