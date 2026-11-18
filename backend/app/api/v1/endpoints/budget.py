@@ -95,6 +95,7 @@ def Link(default=None):
 class FirstPaymentIn(BaseModel):
     """The expense's first payment, saved with it in one go (PD-016 step 1)."""
     kind: Literal["deposit", "payment"] = "payment"
+    title: Optional[str] = Short()
     amount_cents: int = Field(ge=1, le=MAX_CENTS)
     due_on: Optional[datetime.date] = None
     payer_id: Optional[str] = None
@@ -157,6 +158,7 @@ TipChoice = Literal["remove", "keep"]
 
 class PaymentIn(BaseModel):
     kind: Literal["deposit", "payment"] = "payment"
+    title: Optional[str] = Short()
     amount_cents: int = Field(ge=1, le=MAX_CENTS)
     due_on: Optional[datetime.date] = None
     refundable: bool = False
@@ -169,6 +171,8 @@ class PaymentIn(BaseModel):
 
 class PaymentPatch(BaseModel):
     kind: Optional[Literal["deposit", "payment"]] = None
+    # Blank or null clears it.
+    title: Optional[str] = Short()
     amount_cents: Optional[int] = Field(default=None, ge=1, le=MAX_CENTS)
     due_on: Optional[datetime.date] = None
     refundable: Optional[bool] = None
@@ -247,6 +251,8 @@ class PaymentOut(BaseModel):
     id: str
     cost_id: str
     kind: str
+    # The couple's name for it (PD-025); None shows as "Deposit"/"Payment".
+    title: Optional[str]
     amount_cents: int
     due_on: Optional[datetime.date]
     paid: bool
@@ -362,6 +368,7 @@ class DueOut(BaseModel):
     category_name: str
     vendor_name: str
     kind: str
+    title: Optional[str]
     amount_cents: int
     due_on: Optional[datetime.date]
     overdue: bool
@@ -452,7 +459,7 @@ def _clean(text: str) -> str:
 
 
 def _short(text: Optional[str]) -> Optional[str]:
-    """A one-line field (method, reference): spaces tidied, blank means none."""
+    """A one-line field (method, reference, title): spaces tidied, blank means none."""
     if text is None:
         return None
     return " ".join(text.split()) or None
@@ -604,7 +611,8 @@ async def _check_unique_name(db: AsyncSession, wedding_id: str, name: str,
 def _payment_out(row: BudgetPayment, paid_by_name: Optional[str], figures,
                  today: datetime.date, payer_names: dict) -> PaymentOut:
     return PaymentOut(
-        id=row.id, cost_id=row.cost_id, kind=row.kind, amount_cents=row.amount_cents,
+        id=row.id, cost_id=row.cost_id, kind=row.kind, title=row.title,
+        amount_cents=row.amount_cents,
         due_on=row.due_on, paid=row.paid, paid_at=row.paid_at,
         paid_by_name=paid_by_name if row.paid else None,
         paid_on=row.paid_on if row.paid else None, refundable=row.refundable,
@@ -737,7 +745,8 @@ async def _overview(db: AsyncSession, wedding) -> Overview:
     unpaid.sort(key=lambda p: (p.due_on is None, p.due_on or today, p.created_at))
     next_due = [DueOut(
         payment_id=p.id, cost_id=p.cost_id, category_name=names[p.cost_id][0],
-        vendor_name=names[p.cost_id][1], kind=p.kind, amount_cents=p.amount_cents,
+        vendor_name=names[p.cost_id][1], kind=p.kind, title=p.title,
+        amount_cents=p.amount_cents,
         due_on=p.due_on, overdue=is_overdue(p, today), refundable=p.refundable,
     ) for p in unpaid]
 
@@ -1235,7 +1244,8 @@ async def add_cost(
         await db.flush()
         db.add(BudgetPayment(
             wedding_id=wedding_id, cost_id=row.id, kind=first.kind,
-            amount_cents=first.amount_cents, due_on=first.due_on, payer_id=first_payer,
+            title=_short(first.title), amount_cents=first.amount_cents, due_on=first.due_on,
+            payer_id=first_payer,
         ))
     await db.commit()
     await db.refresh(row)
@@ -1487,7 +1497,8 @@ async def add_payment(
     await _row(db, BudgetCost, cost_id, wedding_id, "vendor cost")
     row = BudgetPayment(
         wedding_id=wedding_id, cost_id=cost_id, kind=payload.kind,
-        amount_cents=payload.amount_cents, due_on=payload.due_on,
+        title=_short(payload.title), amount_cents=payload.amount_cents,
+        due_on=payload.due_on,
         refundable=payload.refundable, method=_short(payload.method),
         reference=_short(payload.reference), notes=_notes(payload.notes),
         link_url=_link(payload.link_url),
@@ -1522,7 +1533,7 @@ async def edit_payment(
         row.due_on = updates["due_on"]
     if updates.get("refundable") is not None:
         row.refundable = updates["refundable"]
-    for field in ("method", "reference"):
+    for field in ("title", "method", "reference"):
         if field in updates:
             setattr(row, field, _short(updates[field]))
     if "notes" in updates:

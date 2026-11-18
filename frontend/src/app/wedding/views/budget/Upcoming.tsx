@@ -118,6 +118,7 @@ function GroupList({
                 </span>
               </span>
               <span className="flex flex-wrap items-center gap-2 sm:justify-end">
+                {item.title && <span className="text-sm text-on-surface">{item.title}</span>}
                 <span className="rounded-full px-2.5 py-0.5 text-xs font-bold bg-surface-container-low text-on-surface-variant border border-outline-variant/40">
                   {TAG_LABEL[item.tag]}
                 </span>

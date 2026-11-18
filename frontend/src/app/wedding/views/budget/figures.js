@@ -76,6 +76,7 @@ export function upcomingPayments(categories, today) {
           vendorName: cost.vendor ? cost.vendor.name : null,
           amountCents: p.amount_cents,
           dueOn: p.due_on,
+          title: p.title ?? null,
           tag: paymentTag(p, owed),
         });
         g.totalCents += p.amount_cents;

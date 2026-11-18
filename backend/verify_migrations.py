@@ -496,6 +496,37 @@ def check_publish_safety(real_head: str, new_revisions: list) -> None:
     assert refs["12m-1"] == (True, "budget"), "the data step runs after Publish added the column"
     assert len(refs) == 13 and refs["C12"] == (False, "day_of"), refs
 
+    print("6a8. Real migrations: 0014 already published, then 0015 on its own (B102)...")
+    dev15, prod14 = url("dev15"), url("prod14")
+    command.upgrade(config_for(dev15), "0015")
+    command.upgrade(config_for(prod14), LAST_UNGUARDED)
+    seed_wedding(prod14)
+    command.upgrade(config_for(prod14), "0014")
+    with create_engine(prod14).begin() as conn:
+        conn.execute(text(
+            "INSERT INTO budget_categories (id, wedding_id, name, created_at, updated_at) "
+            "VALUES ('cat1', 'w1', 'Hall', '2026-01-01', '2026-01-01')"))
+        conn.execute(text(
+            "INSERT INTO budget_costs (id, wedding_id, category_id, vendor_name, "
+            "created_at, updated_at) VALUES ('cost1', 'w1', 'cat1', 'Sample Hall', "
+            "'2026-01-01', '2026-01-01')"))
+        conn.execute(text(
+            "INSERT INTO budget_payments (id, wedding_id, cost_id, kind, amount_cents, "
+            "paid, created_at) VALUES ('pay1', 'w1', 'cost1', 'deposit', 2500, 1, "
+            "'2026-01-01')"))
+    added = publish_like_replit(dev15, prod14)
+    assert added == ["ADD COLUMN budget_payments.title"], \
+        f"0015 adds one column, nothing else: {added}"
+    command.upgrade(config_for(prod14), "head")
+    with create_engine(prod14).connect() as conn:
+        diff = compare_metadata(MigrationContext.configure(conn), SQLModel.metadata)
+        pays = conn.execute(text(
+            "SELECT id, kind, amount_cents, paid, title FROM budget_payments")).fetchall()
+    assert not diff, diff
+    assert ("pay1", "deposit", 2500, 1, None) in [tuple(r) for r in pays], \
+        f"an existing payment keeps its type, amount and tick, with no title: {pays}"
+    assert all(r[4] is None for r in pays), f"no payment gets a title: {pays}"
+
     fixture_dir = os.path.join(work, "fixture_versions")
     os.makedirs(fixture_dir)
     with open(os.path.join(fixture_dir, "zz_fixture.py"), "w") as fh:

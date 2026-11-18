@@ -531,6 +531,9 @@ class BudgetPayment(SQLModel, table=True):
     wedding_id: str = Field(foreign_key="weddings.id", index=True, ondelete="CASCADE")
     cost_id: str = Field(foreign_key="budget_costs.id", index=True, ondelete="CASCADE")
     kind: str = Field(default="payment", description="deposit or payment")
+    # The couple's own name for it, such as "Second installment" (PD-025); shown in
+    # place of "Deposit"/"Payment". Blank until they type one.
+    title: Optional[str] = None
     amount_cents: int
     due_on: Optional[datetime.date] = Field(default=None, sa_column=Column(Date))
     paid: bool = Field(default=False)

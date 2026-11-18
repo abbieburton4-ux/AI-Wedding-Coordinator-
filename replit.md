@@ -259,6 +259,14 @@ publish should list **no** database changes.
   changes.
   [ASSUMPTION] This is what Alembic's PostgreSQL SQL looks like; Replit's own
   screen hasn't been seen for it.
+- `0015` (B102, a title on each payment): one new column on an existing table.
+  Expect one line, `ADD COLUMN title` on `budget_payments`, optional text (no
+  `NOT NULL`, no default), so the pane shouldn't turn orange. If `0014` goes out in
+  the same publish, its line is listed too. There should be no `DROP`, no
+  `ALTER COLUMN`, no new constraint and no new table. Every payment already entered
+  keeps its type, amount, dates and paid tick, and starts with no title.
+  [ASSUMPTION] This is what Alembic's PostgreSQL SQL looks like; Replit's own
+  screen hasn't been seen for it.
 
 **When you publish** (plain steps for the owner):
 

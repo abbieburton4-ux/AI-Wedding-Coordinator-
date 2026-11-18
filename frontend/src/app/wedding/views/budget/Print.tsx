@@ -172,6 +172,7 @@ export function BudgetPrint() {
                     <td className="py-1.5 px-2">{p.vendor_name}</td>
                     <td className="py-1.5 px-2">{p.category_name}</td>
                     <td className="py-1.5 px-2">
+                      {p.title && <>{p.title} · </>}
                       {p.kind === "deposit" ? "Deposit" : "Payment"}{p.refundable ? " (refundable)" : ""}
                     </td>
                     <td className="py-1.5 px-2 text-right">{formatCents(p.amount_cents)}</td>
@@ -253,6 +254,7 @@ function ExpenseBlock({ cost, vendor }: { cost: Cost; vendor?: VendorInfo }) {
             {cost.payments.map((p) => (
               <tr key={p.id} className="border-t border-outline-variant/30">
                 <td className="py-1 pr-2">
+                  {p.title && <>{p.title} · </>}
                   {p.kind === "deposit" ? "Deposit" : "Payment"}{p.refundable ? " (refundable)" : ""}
                 </td>
                 <td className="py-1 px-2 text-right">{formatCents(p.amount_cents)}</td>
