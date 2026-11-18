@@ -64,7 +64,7 @@ Description of columns
 - input_payload: JSON string with the agent's input context
 - output_payload: JSON string with the agent's outputs and `rationale`
 - confidence_score: numeric 0..1
-- external_api_calls: JSON array of calls made and their results
+- external_api_calls: JSON array of calls made and their results. A Gemini call's entry carries `tokens: {input, output}`; a count the response doesn't report is `null`, never `0` (B8).
 - follow_up_actions: JSON array of scheduled actions
 - request_id: trace id
 - latency_ms: decision latency

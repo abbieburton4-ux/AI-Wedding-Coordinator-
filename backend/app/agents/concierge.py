@@ -12,7 +12,7 @@ from app.db.models import (
 from app.utils.budget_math import add_up, expense_figures, format_cents, is_overdue
 from app.utils.checklist import STAGE_BY_KEY, STAGE_KEYS, stage_due, wedding_today
 from app.agents.orchestrator import run_agent
-from app.agents.base import get_client, model_for, get_prompt_version
+from app.agents.base import get_client, model_for, get_prompt_version, token_counts
 from app.agents.privacy import send_prompt
 
 logger = logging.getLogger(__name__)
@@ -221,14 +221,11 @@ async def run_concierge(db: AsyncSession, wedding_id: str, message: str):
             raise
 
     result_dict = json.loads(response.text)
-    usage = response.usage_metadata
+    tokens_in, tokens_out = token_counts(response)
     api_calls = [{
         "provider": "google",
         "model": model,
-        "tokens": {
-            "input": usage.prompt_token_count if usage else 0,
-            "output": usage.candidates_token_count if usage else 0,
-        },
+        "tokens": {"input": tokens_in, "output": tokens_out},
     }]
 
     reply = result_dict.get("reply", "")

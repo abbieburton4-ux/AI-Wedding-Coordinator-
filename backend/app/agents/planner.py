@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from google.genai import types
 from app.db.models import Wedding
 from app.agents.orchestrator import run_agent
-from app.agents.base import get_client, model_for, get_prompt_version
+from app.agents.base import get_client, model_for, get_prompt_version, token_counts
 from app.agents.privacy import send_prompt
 from app.utils.constants import ALLOWED_BUDGET_CATEGORIES, normalize_category
 
@@ -135,14 +135,11 @@ async def run_intake_planner(db: AsyncSession, wedding_id: str, force: bool = Fa
     result_dict = json.loads(response.text)
     
     # Track API call for XPRIZE logging
-    usage = response.usage_metadata
+    tokens_in, tokens_out = token_counts(response)
     api_calls = [{
         "provider": "google",
         "model": model,
-        "tokens": {
-            "input": usage.prompt_token_count if usage else 0,
-            "output": usage.candidates_token_count if usage else 0
-        }
+        "tokens": {"input": tokens_in, "output": tokens_out},
     }]
     
     # 3. Check budget realism guardrail

@@ -10,7 +10,7 @@ from app.agents.budget_split import category_key
 from app.agents.orchestrator import run_agent
 from app.utils.budget_compare import BUDGET_CURRENCY, to_cents
 from app.utils.budget_math import format_cents
-from app.agents.base import get_client, model_for, get_prompt_version
+from app.agents.base import get_client, model_for, get_prompt_version, token_counts
 from app.agents.privacy import send_prompt
 from app.utils.constants import region_matches
 
@@ -184,14 +184,11 @@ async def run_venue_matcher(db: AsyncSession, wedding_id: str):
     result_dict = json.loads(response.text)
     
     # Track API metrics
-    usage = response.usage_metadata
+    tokens_in, tokens_out = token_counts(response)
     api_calls = [{
         "provider": "google",
         "model": model,
-        "tokens": {
-            "input": usage.prompt_token_count if usage else 0,
-            "output": usage.candidates_token_count if usage else 0
-        }
+        "tokens": {"input": tokens_in, "output": tokens_out},
     }]
     
     # 4. Check for hallucinated IDs
@@ -315,14 +312,11 @@ async def run_supplier_matcher(db: AsyncSession, wedding_id: str, category: str)
     result_dict = json.loads(response.text)
     
     # Track API metrics
-    usage = response.usage_metadata
+    tokens_in, tokens_out = token_counts(response)
     api_calls = [{
         "provider": "google",
         "model": model,
-        "tokens": {
-            "input": usage.prompt_token_count if usage else 0,
-            "output": usage.candidates_token_count if usage else 0
-        }
+        "tokens": {"input": tokens_in, "output": tokens_out},
     }]
     
     # 4. Check for hallucinated IDs

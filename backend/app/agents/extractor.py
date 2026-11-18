@@ -13,7 +13,7 @@ from app.db.models import (
     Venue,
 )
 from app.agents.orchestrator import run_agent
-from app.agents.base import get_client, model_for, get_prompt_version
+from app.agents.base import get_client, model_for, get_prompt_version, token_counts
 from app.agents.privacy import send_prompt
 from app.utils.budget_compare import compare_quote
 from app.utils.budget_math import format_cents
@@ -130,14 +130,11 @@ async def run_quote_extractor(db: AsyncSession, wedding_id: str, booking_id: str
     result_dict = json.loads(response.text)
     
     # Track API metrics
-    usage = response.usage_metadata
+    tokens_in, tokens_out = token_counts(response)
     api_calls = [{
         "provider": "google",
         "model": model,
-        "tokens": {
-            "input": usage.prompt_token_count if usage else 0,
-            "output": usage.candidates_token_count if usage else 0
-        }
+        "tokens": {"input": tokens_in, "output": tokens_out},
     }]
     
     total_amount = result_dict.get("total_amount", 0.0)
@@ -305,9 +302,7 @@ async def run_vendor_reply_reader(db: AsyncSession, wedding_id: str, email_body:
     reply = json.loads(response.text)
     if not isinstance(reply, dict):
         reply = {}
-    usage = response.usage_metadata
-    tokens = ((usage.prompt_token_count, usage.candidates_token_count) if usage
-              else (None, None))
+    tokens = token_counts(response)
     api_calls = [{"provider": "google", "model": model,
                   "tokens": {"input": tokens[0], "output": tokens[1]}}]
     confidence = reply.get("confidence_score")

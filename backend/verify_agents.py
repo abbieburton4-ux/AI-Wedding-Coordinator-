@@ -1272,6 +1272,79 @@ async def run_async_verification():
     finally:
         settings.DIRECT_AGENT_EXECUTION = previous
     print("   * Real dispatch reaches the agent; provider failures are logged and returned")
+
+    # B8: a token count Gemini doesn't report is logged empty, never as 0 (rule 10).
+    print("\nTEST 14: Unreported token counts are logged as empty, not 0 (B8)...")
+    usage_now = {"meta": None}
+
+    async def respond(*args, **kwargs):
+        contents = kwargs.get("contents") or ""
+        if "COUPLE'S QUESTION" in contents:
+            body = {"reply": "Yes, that works.", "confidence_score": 0.8}
+        elif "Suggest a starting split" in contents:
+            body = {"lines": [{"category": "Venue", "percent": 100, "rationale": "Main cost."}],
+                    "rationale_summary": "One line."}
+        elif "Create a wedding plan" in contents:
+            body = {"is_budget_realistic": True, "guardrail_warning": "", "budget_lines": [],
+                    "rationale_summary": "Fine.", "confidence_score": 0.9}
+        elif "Match " in contents:
+            body = {"shortlist": [], "rationale_summary": "None.", "confidence_score": 0.5}
+        else:
+            body = {"is_available": True, "line_items": [], "total_amount": 3200.0,
+                    "currency": "EUR", "rationale_text": "Per-head menu.",
+                    "confidence_score": 0.9}
+        response = MockResponse(json.dumps(body))
+        response.usage_metadata = usage_now["meta"]
+        return response
+
+    token_client = MagicMock()
+    token_client.aio.models.generate_content = respond
+    wid = "wedding_planning_test"
+    token_runs = [
+        ("concierge", run_concierge, (), {"message": "Is a June date sensible?"}),
+        ("quote_extractor", run_quote_extractor,
+         ("booking_photo_test", "Available, total €3,200 for the day."), {}),
+        ("vendor_reply_reader", run_vendor_reply_reader,
+         ("Available, total €3,200 for the day.",), {"vendor_id": "cv_test"}),
+        ("intake_planner", run_intake_planner, (), {"force": True}),
+        ("venue_matcher", run_venue_matcher, (), {}),
+        ("supplier_matcher", run_supplier_matcher, ("photography",), {}),
+        ("budget_splitter", run_budget_splitter, (),
+         {"total_cents": 1_000_000, "category_names": ["Venue"]}),
+    ]
+    # These two also fill the tokens_input/tokens_output columns.
+    fills_columns = {"vendor_reply_reader", "budget_splitter"}
+    cases = [
+        ("no usage data", None, (None, None)),
+        ("usage without counts", MockUsageMetadata(None, None), (None, None)),
+        ("input count missing", MockUsageMetadata(None, 7), (None, 7)),
+        ("output count missing", MockUsageMetadata(7, None), (7, None)),
+        ("counts that aren't numbers", MockUsageMetadata(True, "12"), (None, None)),
+        ("measured", MockUsageMetadata(11, 22), (11, 22)),
+    ]
+    with patch("app.agents.planner.get_client", return_value=token_client), \
+         patch("app.agents.matcher.get_client", return_value=token_client), \
+         patch("app.agents.extractor.get_client", return_value=token_client), \
+         patch("app.agents.concierge.get_client", return_value=token_client), \
+         patch("app.agents.budget_split.get_client", return_value=token_client):
+        async with async_session_maker() as db:
+            for label, meta, expected in cases:
+                usage_now["meta"] = meta
+                for name, agent, args, kwargs in token_runs:
+                    before = {log.id for log in (await db.exec(select(AgentDecisionLog))).all()}
+                    await approved(agent, db, wid, *args, **kwargs)
+                    new = [log for log in (await db.exec(select(AgentDecisionLog))).all()
+                           if log.id not in before]
+                    assert len(new) == 1 and new[0].status == "success", \
+                        (label, name, [(log.status, log.error_message) for log in new])
+                    log = new[0]
+                    got = log.external_api_calls[0]["tokens"]
+                    assert got == {"input": expected[0], "output": expected[1]}, \
+                        (label, name, got)
+                    if name in fills_columns:
+                        assert (log.tokens_input, log.tokens_output) == expected, \
+                            (label, name, log.tokens_input, log.tokens_output)
+                print(f"   * {label}: every agent logs tokens {expected}")
     print("\n--- ASYNC AGENT Logic VERIFICATION SUCCESS ---")
 
 def main():
