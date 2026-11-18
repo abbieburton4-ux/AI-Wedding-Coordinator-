@@ -1,6 +1,8 @@
 import contextlib
 import io
+import json
 import os
+import re
 import sys
 from fastapi.testclient import TestClient
 
@@ -20,6 +22,34 @@ from app.db.session import sync_engine
 from sqlmodel import SQLModel
 
 client = TestClient(app)
+
+
+def contact_leaks(value, email: str, phone: str) -> list:
+    """The vendor contact details found anywhere in a response: the email, the phone
+    number with any punctuation or spacing between its digits (or only its last seven),
+    or a contact field. Matching the whole number rather than a fragment like "555"
+    keeps random ids and timestamps from looking like a leak."""
+    text = json.dumps(value, default=str, ensure_ascii=False)
+    found = [email] if email.lower() in text.lower() else []
+    digits = re.sub(r"\D", "", phone)
+    # The whole number counts even inside a longer run ("+1555..."); its last seven
+    # digits only on their own, so a larger figure doesn't look like a phone.
+    for run, alone in ((digits, False), (digits[-7:], True)):
+        pattern = r"[\W_]*".join(run)
+        if re.search(r"(?<!\d)" + pattern + r"(?!\d)" if alone else pattern, text):
+            found.append(run)
+
+    def keys(v):
+        if isinstance(v, dict):
+            for k, inner in v.items():
+                yield k
+                yield from keys(inner)
+        elif isinstance(v, list):
+            for inner in v:
+                yield from keys(inner)
+    found += sorted({k for k in keys(value) if k in ("email", "phone", "contact_name")})
+    return found
+
 
 def test_api_suite():
     print("--- STARTING API ROUTE VERIFICATION SUITE ---")
@@ -914,7 +944,8 @@ def test_api_suite():
             assert ov["today"] == "2026-11-20", "overdue is measured against Chicago's date"
             assert cost["vendor"] == {"id": vendor_id, "name": "Sample Loft",
                                       "section": "venue"}, "name and section, no contacts"
-            assert "loft@example.test" not in str(ov) and "555" not in str(ov)
+            leaked = contact_leaks(ov, "loft@example.test", "(555) 010-0199")
+            assert not leaked, f"vendor contact details in the overview: {leaked}"
             assert (cost["committed_cents"], cost["committed_basis"], cost["status"]) == (
                 1_000_000, "estimate", "unpaid")
             # The cost is the final cost, else the quote, else the estimate.
