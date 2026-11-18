@@ -14,6 +14,8 @@ export interface UpcomingItem {
   vendorName: string | null;
   amountCents: number;
   dueOn: string | null;
+  /** The payment's own title (PD-025), shown with the tag beside it; null if none. */
+  title: string | null;
   tag: PaymentTag;
 }
 

@@ -22,6 +22,8 @@ export interface Payment {
   id: string;
   cost_id: string;
   kind: "deposit" | "payment";
+  /** The couple's own name for it, like "Second installment" (PD-025); null if none. */
+  title: string | null;
   amount_cents: number;
   due_on: string | null;
   paid: boolean;
@@ -173,6 +175,7 @@ export interface DuePayment {
   category_name: string;
   vendor_name: string;
   kind: "deposit" | "payment";
+  title: string | null;
   amount_cents: number;
   due_on: string | null;
   overdue: boolean;

@@ -1929,6 +1929,89 @@ def test_api_suite():
                        headers=viewer_headers).status_code == 403
         print("   * Who paid on payments: chosen, changed and cleared; paid ticks untouched")
 
+        # Payment titles (PD-025, B102): optional, tidied, cleared by a blank.
+        res = c.post(f"{b_url}/categories/{pay_cat}/costs", headers=editor_headers, json={
+            "vendor_name": "Sample Choir", "quoted_cents": 90_000,
+            "first_payment": {"kind": "deposit", "amount_cents": 30_000,
+                              "due_on": "2027-01-05", "title": "  Booking \t deposit "}})
+        assert res.status_code == 201, res.text
+        choir = res.json()["id"]
+        [booking] = next(k for k in costs_in(pay_cat) if k["id"] == choir)["payments"]
+        assert (booking["title"], booking["kind"]) == ("Booking deposit", "deposit"), booking
+        res = c.post(f"{b_url}/costs/{choir}/payments", headers=headers,
+                     json={"amount_cents": 30_000, "due_on": "2027-03-01", "title": "   "})
+        assert res.status_code == 201 and res.json()["title"] is None, "blank is no title"
+        untitled = res.json()["id"]
+        res = c.post(f"{b_url}/costs/{choir}/payments", headers=headers, json={
+            "amount_cents": 30_000, "due_on": "2027-02-01", "title": "Second installment"})
+        assert res.status_code == 201 and res.json()["title"] == "Second installment", res.text
+        installment = res.json()["id"]
+        assert c.post(f"{b_url}/costs/{choir}/payments", headers=headers,
+                      json={"amount_cents": 1, "title": "x" * 121}).status_code == 422
+        assert c.post(f"{b_url}/categories/{pay_cat}/costs", headers=headers, json={
+            "vendor_name": "Half Titled",
+            "first_payment": {"amount_cents": 1, "title": "x" * 121}}).status_code == 422
+        assert c.post(f"{b_url}/costs/{choir}/payments", headers=headers, json={
+            "amount_cents": 1, "title": "x" * 120}).status_code == 201, "120 is the limit"
+        long_one = next(p for p in next(k for k in costs_in(pay_cat)
+                                        if k["id"] == choir)["payments"]
+                        if p["amount_cents"] == 1)
+        assert c.delete(f"{b_url}/payments/{long_one['id']}",
+                        headers=headers).status_code == 204
+        figures = ("committed_cents", "scheduled_cents", "paid_cents", "remaining_cents",
+                   "status")
+
+        def choir_figures():
+            cost = next(k for k in costs_in(pay_cat) if k["id"] == choir)
+            return tuple(cost[f] for f in figures), {p["id"]: (p["amount_cents"], p["paid"])
+                                                     for p in cost["payments"]}
+
+        before = choir_figures()
+        res = c.patch(f"{b_url}/payments/{installment}", json={"title": " Final  balance "},
+                      headers=editor_headers)
+        assert res.status_code == 200 and res.json()["title"] == "Final balance", res.text
+        assert c.patch(f"{b_url}/payments/{installment}", json={"title": "Second installment"},
+                       headers=viewer_headers).status_code == 403, "viewers can't rename"
+        assert c.patch(f"{b_url}/payments/{installment}", json={"title": "x" * 121},
+                       headers=headers).status_code == 422
+        res = c.patch(f"{b_url}/payments/{installment}", json={"amount_cents": 30_000},
+                      headers=headers)
+        assert res.json()["title"] == "Final balance", "leaving the title out keeps it"
+        assert choir_figures() == before, "a title never changes an amount, total or tick"
+        res = c.patch(f"{b_url}/payments/{booking['id']}", json={"title": ""}, headers=headers)
+        assert res.status_code == 200 and res.json()["title"] is None, "a blank clears it"
+        res = c.patch(f"{b_url}/payments/{untitled}", json={"title": "=Placeholder Total"},
+                      headers=headers)
+        assert res.json()["title"] == "=Placeholder Total"
+        res = c.patch(f"{b_url}/payments/{untitled}", json={"title": None}, headers=headers)
+        assert res.json()["title"] is None, "null clears it too"
+        assert c.patch(f"{b_url}/payments/{untitled}", json={"title": "=Placeholder Total"},
+                       headers=headers).status_code == 200
+        assert choir_figures() == before
+        ov = c.get(f"{b_url}/overview", headers=viewer_headers).json()
+        assert [(d["title"], d["kind"]) for d in ov["next_due"] if d["cost_id"] == choir] == [
+            (None, "deposit"), ("Final balance", "payment"), ("=Placeholder Total", "payment")], \
+            "next payments due carry the title, soonest first"
+        book = _xl.load_workbook(_io.BytesIO(xlsx().content))
+        assert "Title" in next(book["Payments"].iter_rows(values_only=True))
+        assert "Title" in next(book["Upcoming"].iter_rows(values_only=True))
+        choir_pays = [(r["Type"], r["Title"]) for r in tab(book, "Payments")
+                      if r["Expense"] == "Sample Choir"]
+        assert sorted(choir_pays, key=str) == sorted([
+            ("Deposit", None), ("Payment", "Final balance"),
+            ("Payment", "=Placeholder Total")], key=str), choir_pays
+        assert sorted((r["Title"] for r in tab(book, "Upcoming")
+                       if r["Expense"] == "Sample Choir"), key=str) == sorted(
+            [None, "Final balance", "=Placeholder Total"], key=str)
+        for sheet in ("Payments", "Upcoming"):
+            cell = next(x for row in book[sheet].iter_rows() for x in row
+                        if x.value == "=Placeholder Total")
+            assert cell.data_type == "s" and cell.quotePrefix, \
+                f"a formula-looking title stays text on {sheet}"
+        assert c.delete(f"{b_url}/costs/{choir}", headers=headers).status_code == 204
+        print("   * Payment titles: saved, tidied, edited, cleared, shown in next due and "
+              "the Excel download; amounts and ticks untouched; viewers can't edit")
+
         res = c.delete(f"{p_url}/{payer_a}", headers=headers)
         assert res.status_code == 409 and "1 payment" in res.json()["detail"], res.text
         cost = next(k for k in costs_in(pay_cat) if k["id"] == band)

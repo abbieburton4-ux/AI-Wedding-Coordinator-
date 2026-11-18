@@ -321,13 +321,14 @@ def build_xlsx(overview, vendors: dict, now: datetime.datetime,
     ], expenses, footer, empty="No expenses yet.")
 
     payments = [[
-        cost.vendor_name, cat.name, KIND_LABELS.get(p.kind, p.kind), Money(p.amount_cents),
-        p.due_on, _yes(p.paid), p.paid_on, p.payer_name or "Not set", p.method,
+        cost.vendor_name, cat.name, KIND_LABELS.get(p.kind, p.kind), p.title,
+        Money(p.amount_cents), p.due_on, _yes(p.paid), p.paid_on, p.payer_name or "Not set",
+        p.method,
         p.reference, _yes(p.refundable), payment_status(p), p.notes, p.link_url,
     ] for cat, cost in shown for p in cost.payments]
     _sheet(wb, "Payments", [
         ("Expense", 28, True), ("Category", 22, True), ("Type", 10, False),
-        ("Amount", 14, False), ("Due", 14, False), ("Paid", 8, False),
+        ("Title", 24, True), ("Amount", 14, False), ("Due", 14, False), ("Paid", 8, False),
         ("Date paid", 14, False), ("Who paid", 20, True), ("How it was paid", 18, True),
         ("Reference", 18, True), ("Refundable", 11, False), ("Status", 10, False),
         ("Notes", 44, True), ("Link", 36, True),
@@ -335,12 +336,13 @@ def build_xlsx(overview, vendors: dict, now: datetime.datetime,
 
     upcoming = [[
         GROUP_LABELS[g], due.due_on, due.vendor_name, due.category_name,
-        KIND_LABELS.get(due.kind, due.kind), Money(due.amount_cents), _yes(due.refundable),
+        KIND_LABELS.get(due.kind, due.kind), due.title, Money(due.amount_cents),
+        _yes(due.refundable),
     ] for g in GROUPS for due in groups[g]]
     _sheet(wb, "Upcoming", [
         ("When", 26, False), ("Due", 14, False), ("Expense", 28, True),
-        ("Category", 22, True), ("Type", 10, False), ("Amount", 14, False),
-        ("Refundable", 11, False),
+        ("Category", 22, True), ("Type", 10, False), ("Title", 24, True),
+        ("Amount", 14, False), ("Refundable", 11, False),
     ], upcoming, footer, empty="Nothing left to pay.")
 
     payers = [[r["name"], Money(r["paid"]), Money(r["to_come"]),

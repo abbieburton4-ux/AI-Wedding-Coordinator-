@@ -73,6 +73,23 @@ test("upcoming payments skip paid ones and archived expenses, and add up each gr
   assert.equal(groups.week.items[0].vendorName, null);
 });
 
+test("upcoming payments carry their title, which changes no tag or total", () => {
+  const untitled = upcomingPayments([cat("Music", [cost("Band", [
+    pay("b1", "2026-11-22", { kind: "deposit", amount_cents: 30000 }),
+    pay("b2", "2027-01-05", { amount_cents: 70000 }),
+  ])])], today);
+  const titled = upcomingPayments([cat("Music", [cost("Band", [
+    pay("b1", "2026-11-22", { kind: "deposit", amount_cents: 30000, title: "Booking deposit" }),
+    pay("b2", "2027-01-05", { amount_cents: 70000 }),
+  ])])], today);
+  assert.equal(titled.week.items[0].title, "Booking deposit");
+  assert.equal(titled.later.items[0].title, null, "no title stays empty");
+  for (const g of ["week", "later"]) {
+    assert.deepEqual(titled[g].items.map((i) => i.tag), untitled[g].items.map((i) => i.tag));
+    assert.equal(titled[g].totalCents, untitled[g].totalCents);
+  }
+});
+
 test("each category keeps its colour; past eight, the rest share one slice", () => {
   const cats = Array.from({ length: 10 }, (_, i) =>
     cat(`c${i}`, [], { committed_cents: i === 2 ? 0 : 100 * (i + 1), paid_cents: i === 0 ? 50 : 0 }));

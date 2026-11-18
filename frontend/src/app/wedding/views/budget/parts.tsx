@@ -1370,6 +1370,7 @@ function AddCostForm({
   const [vendorId, setVendorId] = useState("");
   const [figure, setFigure] = useState("");
   const [kind, setKind] = useState<"deposit" | "payment">("payment");
+  const [title, setTitle] = useState("");
   // The amount follows the estimate or quote until the couple type their own.
   const [typedAmount, setTypedAmount] = useState<string | null>(null);
   const amount = typedAmount ?? figure;
@@ -1379,7 +1380,7 @@ function AddCostForm({
   const [error, setError] = useState<string | null>(null);
   useReportDirty(
     `expense:${categoryId}`,
-    !!(vendor || vendorId || figure || typedAmount || due || payer || notes) || kind !== "payment",
+    !!(vendor || vendorId || figure || typedAmount || due || payer || notes || title) || kind !== "payment",
   );
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -1388,8 +1389,8 @@ function AddCostForm({
     const amountCents = amountOrError(amount, setError);
     if (figureCents === undefined || amountCents === undefined) return;
     const payerId = payerOrNull(payers, payer);
-    if (!amountCents && (due || payerId)) {
-      setError("Please enter the amount of this payment, or clear its due date and who paid to add the expense without one.");
+    if (!amountCents && (due || payerId || title.trim())) {
+      setError("Please enter the amount of this payment, or clear its title, due date and who paid to add the expense without one.");
       return;
     }
     const ok = await run(() =>
@@ -1397,7 +1398,7 @@ function AddCostForm({
         vendor_name: vendor, estimated_cents: figureCents, couple_vendor_id: vendorId || null,
         notes: notes || null,
         first_payment: amountCents
-          ? { kind, amount_cents: amountCents, due_on: due || null, payer_id: payerId }
+          ? { kind, title: title.trim() || null, amount_cents: amountCents, due_on: due || null, payer_id: payerId }
           : null,
       })),
     );
@@ -1446,6 +1447,7 @@ function AddCostForm({
         <option value="payment">Payment</option>
         <option value="deposit">Deposit</option>
       </SelectInput>
+      <TextInput id={`new-title-${categoryId}`} label="Payment title (optional)" value={title} onChange={setTitle} placeholder="Like “Final balance”" required={false} />
       <MoneyInput
         id={`new-amount-${categoryId}`} label="Amount of this payment" value={amount}
         onChange={(v) => setTypedAmount(v)} placeholder="None yet"
@@ -1613,10 +1615,18 @@ function PaymentRow({
     ? `Paid${paidOn ? ` on ${paidOn}` : ""}${payment.paid_by_name ? `, ticked by ${payment.paid_by_name}` : ""}`
     : "Not paid yet";
   const details = [payment.method && `Paid with ${payment.method}`, payment.reference && `Ref. ${payment.reference}`].filter(Boolean);
+  const typeLabel = payment.refundable ? "Refundable deposit" : KIND_LABEL[payment.kind];
   return (
     <li className="py-2 flex flex-wrap items-center gap-3 text-sm">
       <span className="flex-grow">
-        {payment.refundable ? "Refundable deposit" : KIND_LABEL[payment.kind]} of{" "}
+        {payment.title ? (
+          <>
+            <span className="font-bold">{payment.title}</span>{" "}
+            <span className="text-xs text-on-surface-variant">({typeLabel})</span> of{" "}
+          </>
+        ) : (
+          <>{typeLabel} of{" "}</>
+        )}
         <span className="font-button-text">{formatCents(payment.amount_cents)}</span>, {due}
         {payment.overdue && (
           <span className="ml-2 inline-flex items-center gap-1 text-error font-bold">
@@ -1683,6 +1693,7 @@ function PaymentEditForm({
   base, payment, payers, run, request, busy, onDone,
 }: { base: string; payment: Payment; payers: Payer[]; run: Run; request: Req; busy: boolean; onDone: () => void }) {
   const [kind, setKind] = useState<"deposit" | "payment">(payment.kind);
+  const [title, setTitle] = useState(payment.title ?? "");
   const [payer, setPayer] = useState(payment.payer_id ?? "");
   const [amount, setAmount] = useState(centsToInput(payment.amount_cents));
   const [dueOn, setDueOn] = useState(payment.due_on ?? "");
@@ -1703,7 +1714,7 @@ function PaymentEditForm({
     if (!cents) { setError("Please enter how much this payment is."); return; }
     const ok = await run(() =>
       request(`${base}/payments/${id}`, json("PATCH", {
-        kind, amount_cents: cents, due_on: dueOn || null, refundable,
+        kind, title: title.trim() || null, amount_cents: cents, due_on: dueOn || null, refundable,
         method: method || null, reference: reference || null, link_url: link || null, notes: notes || null,
         payer_id: payerOrNull(payers, payer),
         ...(payment.paid ? { paid_on: paidOn || null } : {}),
@@ -1718,6 +1729,7 @@ function PaymentEditForm({
         <option value="deposit">Deposit</option>
         <option value="payment">Payment</option>
       </SelectInput>
+      <TextInput id={`edit-title-${id}`} label="Title (optional)" value={title} onChange={setTitle} placeholder="Like “Second installment”" required={false} />
       <MoneyInput id={`edit-amount-${id}`} label="Amount" value={amount} onChange={setAmount} required />
       <span className={fieldClass}>
         <label htmlFor={`edit-due-${id}`} className="text-xs text-on-surface-variant">Due date (optional)</label>
@@ -1755,6 +1767,7 @@ function AddPaymentForm({
   // A first payment is usually the deposit; later ones are payments.
   const [firstKind] = useState<"deposit" | "payment">(cost.payments.length > 0 ? "payment" : "deposit");
   const [kind, setKind] = useState(firstKind);
+  const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [due, setDue] = useState("");
   const [refundable, setRefundable] = useState(false);
@@ -1763,7 +1776,7 @@ function AddPaymentForm({
   const payer = pickedPayer ?? cost.last_payer_id ?? "";
   const [error, setError] = useState<string | null>(null);
   const costId = cost.id;
-  useReportDirty(`payment:${costId}`, !!(amount || due || pickedPayer !== null) || refundable || kind !== firstKind);
+  useReportDirty(`payment:${costId}`, !!(amount || due || title || pickedPayer !== null) || refundable || kind !== firstKind);
 
   // Shown before adding, never blocking: does this take the payments past the cost?
   const typed = parseDollars(amount);
@@ -1780,7 +1793,8 @@ function AddPaymentForm({
     if (!cents) { setError("Please enter how much this payment is."); return; }
     const ok = await run(() =>
       request(`${base}/costs/${costId}/payments`, json("POST", {
-        kind, amount_cents: cents, due_on: due || null, refundable, payer_id: payerOrNull(payers, payer),
+        kind, title: title.trim() || null, amount_cents: cents, due_on: due || null, refundable,
+        payer_id: payerOrNull(payers, payer),
       })),
     );
     if (ok) onDone();
@@ -1791,6 +1805,7 @@ function AddPaymentForm({
         <option value="deposit">Deposit</option>
         <option value="payment">Payment</option>
       </SelectInput>
+      <TextInput id={`pay-title-${costId}`} label="Title (optional)" value={title} onChange={setTitle} placeholder="Like “Second installment”" required={false} />
       <MoneyInput id={`pay-amount-${costId}`} label="Amount" value={amount} onChange={setAmount} required />
       <span className={fieldClass}>
         <label htmlFor={`pay-due-${costId}`} className="text-xs text-on-surface-variant">Due date (optional)</label>
