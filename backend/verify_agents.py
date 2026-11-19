@@ -1277,6 +1277,71 @@ async def run_async_verification():
     print("   * uuids, with or without hyphens or a prefix, are never partly replaced "
           "(20,000 random)")
 
+    # B106: a number glued to letters is caught too, in every format above, without
+    # touching the app's IDs, hex codes or ordinary numbers. All numbers are fictional.
+    print("\nTEST 12f: Phone numbers glued to letters are caught (B106)...")
+    import time
+    for text, cleaned in [
+        ("ph0871234567", "ph[phone]"), ("tel:+353871234567", "tel:[phone]"),
+        ("call3125550123", "call[phone]"), ("mob087-123-4567", "mob[phone]"),
+        ("Phone(312)555-0123", "Phone[phone]"), ("0871234567ext", "[phone]ext"),
+        ("3125550123ext", "[phone]ext"), ("(312)555-0123", "[phone]"),
+        ("Dad0871234567", "Dad[phone]"), ("Siobhán0871234567", "Siobhán[phone]"),
+        ('{"note": "ring Mob0871234567 after 6"}', '{"note": "ring Mob[phone] after 6"}'),
+    ]:
+        assert privacy.redact(text, no_terms) == cleaned, (text, privacy.redact(text, no_terms))
+        assert privacy.find_personal(text, no_terms) == ["phone"], text
+    glued_settings = ["ph{}", "mob{}", "Phone{}", "tel{}", "call{}", "{}ext", "{}x12",
+                      "Tel{}ext", "contact{}now", '{{"note": "ring ph{}"}}']
+    for number in phone_formats:
+        for setting in glued_settings:
+            text = setting.format(number)
+            for cleaned in (privacy.redact(text, no_terms),
+                            json.dumps(privacy.scrub({"note": text}, no_terms))):
+                assert "[phone]" in cleaned, (text, cleaned)
+                assert privacy._digits(number)[-7:] not in privacy._digits(cleaned), \
+                    (text, cleaned)
+            assert privacy.find_personal(text, no_terms) == ["phone"], text
+            assert privacy.redact(text, no_terms, generic=False) == text, text
+    print(f"   * {len(phone_formats)} phone formats glued to letters in "
+          f"{len(glued_settings)} ways, each caught (and left alone when generic=False)")
+
+    for text in ["$12,500.00", "€12,500.00", "EUR12500.00", "2027-10-23", "23/10/2027",
+                 "2027-10-23T14:30:00Z", "2027-10-23T09:30:00.123456+00:00",
+                 "20271023T093000Z", "Fri 2027-10-22T18:00", "ZIP 60601", "IL60601",
+                 "Chicago IL 60601-1234", "Order #10482", "INV20270042", "INV-2027-0042",
+                 "Ref: WED2027-118", "Reservation #R12345678", "Tracking 1Z999AA10123456784",
+                 "IBAN IE29AIBK93115212345678", "VAT IE1234567T", "IMG_20271023_093012.jpg",
+                 "PXL_20271023_093012345.jpg", "DSC00012345.JPG", "ms 1793232000123",
+                 "Budget 25000-30000", "wedding_planning_test", "Order No: 1234567890",
+                 "build20271023093", "batch2027-1023-0930"]:
+        assert privacy.redact(text, no_terms) == text, (text, privacy.redact(text, no_terms))
+        assert privacy.find_personal(text, no_terms) == [], text
+    for _ in range(20_000):
+        u = uuid.UUID(int=rng.getrandbits(128), version=4)
+        payload = {"quote_id": f"q_{u.hex[:10]}", "ids": [f"bkv_{u.hex[:10]}",
+                   f"bks_{u.hex[:10]}", f"x{u.hex}", f"({u})", f"({u.hex})"]}
+        assert privacy.scrub(payload, no_terms) == payload, payload
+    for text, cleaned in [
+        (f"{u_test} ph0871234567", f"{u_test} ph[phone]"),
+        ("q_0123456789 call0871234567", "q_0123456789 call[phone]"),
+        ("abcdef0871234567", "abcdef[phone]"),
+        ("ph08712345670861234567", "ph[phone]"),
+        ("Tel0871234567,0861234567", "Tel[phone],[phone]"),
+        ("Mam0871234567Dad0861234567", "Mam[phone]Dad[phone]"),
+        ("Dad0871234567Bea0861234567", "Dad[phone]Bea[phone]"),
+        ("Ada0871234567deadbeef", "Ada[phone]deadbeef"),
+        ("(08460086-38da-4051-b79e-4444ed6897d8)", "(08460086-38da-4051-b79e-4444ed6897d8)"),
+        ("(0846008638da4051b79e4444ed6897d8)", "(0846008638da4051b79e4444ed6897d8)"),
+    ]:
+        assert privacy.redact(text, no_terms) == cleaned, (text, privacy.redact(text, no_terms))
+    long_text = "ph0871234567 a0871234567 " * 4000
+    started = time.perf_counter()
+    assert "0871234567" not in privacy.redact(long_text, no_terms)
+    assert time.perf_counter() - started < 2.0, "the phone check must stay linear"
+    print("   * Prices, dates, timestamps, ZIPs, references, the app's IDs and hex codes "
+          "(20,000 random) are left whole; long text stays fast")
+
     # Every model call goes through the guardrail: nothing else uses the Gemini client.
     app_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "app")
     allowed_files = {os.path.join("agents", "privacy.py"), os.path.join("agents", "base.py")}
